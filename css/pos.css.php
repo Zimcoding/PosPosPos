@@ -447,23 +447,93 @@ div.paymentbordline
 }
 
 .div4{
-	height: 100%;
-	width: 34%;
+	height: 48px;
+	width: 100%;
 	float: left;
 	box-sizing: border-box;
-	font-size: 6px;
-	padding-top: 10px;
-	padding-bottom: 10px;
+	padding-top: 2px;
+	padding-bottom: 2px;
+	display: flex;
+	flex-direction: row;
+	align-items: stretch;
+	justify-content: flex-start;
+	overflow-x: auto;
+	overflow-y: hidden;
 }
 
 .div5{
-	height: 100%;
-	width: 66%;
+	height: calc(100% - 48px);
+	width: 100%;
 	float: left;
 	box-sizing: border-box;
 	font-size: 6px;
 	padding-top:10px;
 	padding-bottom:10px;
+}
+
+.div5.centpercent{
+	height: 100%;
+}
+
+/* Category tabs */
+.div4 .wrapper {
+	float: none;
+	width: auto;
+	min-width: 90px;
+	height: 100%;
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 2px 12px;
+	margin: 0 2px 0 0;
+	border: 1px solid #EEE;
+	border-bottom: 3px solid transparent;
+	border-radius: 4px 4px 0 0;
+	background-color: #fff;
+	white-space: nowrap;
+	overflow: hidden;
+	cursor: pointer;
+}
+
+.div4 .wrapper.divempty {
+	display: none;
+}
+
+.div4 .wrapper img.imgwrapper {
+	max-height: 70%;
+	max-width: 32px;
+	margin-right: 4px;
+}
+
+.div4 .wrapper .description {
+	position: static;
+	width: auto;
+	padding-top: 0;
+	background: none;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.div4 .wrapper .description_content {
+	font-size: 14px;
+	color: #222;
+}
+
+.div4 .wrapper.activetab {
+	border-bottom-color: var(--colorbackhmenu1, #0080c0);
+	font-weight: bold;
+}
+
+.div4 .wrapper .fa-chevron-left,
+.div4 .wrapper .fa-chevron-right {
+	font-size: 1.4em;
+	color: #333;
+	cursor: pointer;
+}
+
+.div4 .catwatermark {
+	display: none;
 }
 
 .div1, .div2, .div3, .div4, .div5 {
@@ -894,55 +964,52 @@ div#moreinfo, div#infowarehouse {
 	display: none;
 }
 
+#dialogforpopuptakepos {
+	display: none;
+	position: fixed;
+	top: 20px;
+	right: 20px;
+	background: #333;
+	color: #fff;
+	padding: 15px 20px;
+	border-radius: 8px;
+	box-shadow: 0 0 10px rgba(0,0,0,0.3);
+	z-index: 1000;
+	font-family: sans-serif;
+}
+
 
 @media screen and (max-width: 767px) {
 	.div4 {
-		height: auto;
+		height: 40px;
 		width: 100%;
 		float: left;
 		box-sizing: border-box;
-		font-size: 6px;
-		padding-top: 10px;
+		padding-top: 2px;
 		padding-bottom: 2px;
 		margin-left: 2px;
 	}
 
 	<?php $maxproductgrid = getDolGlobalInt('TAKEPOS_NB_MAXPRODUCT', 24); ?>
-	.div4 .wrapper.divempty, .div4 img, .div4 .wrapper:nth-last-child(1), .div4 .wrapper:nth-last-child(2), #prodiv<?php echo($maxproductgrid - 2); ?>, #prodiv<?php echo($maxproductgrid - 1); ?>, .catwatermark {
+	.div4 .wrapper.divempty, .div4 img, #prodiv<?php echo($maxproductgrid - 2); ?>, #prodiv<?php echo($maxproductgrid - 1); ?>, .catwatermark {
 		display: none!important;
 	}
 
-	.tab-category {
-		float: left;
-		position: relative;
-		width: 25%;
-		height: 33%;
-		margin: 0;
-		padding: 1px;
-		border: 2px solid #EEE;
-		text-align: center;
-		box-sizing: border-box;
-		background-color: #fff;
+	.div4 .wrapper {
+		min-width: 70px;
+		padding: 2px 8px;
 	}
 
-	.div4 .wrapper, .tab-category {
-		width: auto;
-		height: auto;
-		padding: 6px;
-		text-align: center;
-		cursor: pointer;
-		border: 1px solid #FFF!important;
-		border-top: 3px solid #FFF!important;
+	.div4 .wrapper .description_content {
+		font-size: 12px;
 	}
 
-	.div4 .tab-category.active {
-		border-right: 1px solid #CCC !important;
-		border-left: 1px solid #CCC !important;
-		border-top: 3px solid var(--colorbackhmenu1) !important;
+	.div4 .wrapper.activetab {
+		border-bottom-color: var(--colorbackhmenu1) !important;
 	}
 
 	.div5 {
-		height: 100%;
+		height: calc(100% - 40px);
 		width: 100%;
 		padding-top: 0px;
 	}
