@@ -894,24 +894,6 @@ div#moreinfo, div#infowarehouse {
 	display: none;
 }
 
-.takeposofflinestatus {
-	display: none;
-	position: fixed;
-	top: 5px;
-	right: 8px;
-	z-index: 1100;
-	padding: 4px 10px;
-	border-radius: 4px;
-	background-color: #e0533d;
-	color: #fff;
-	font-size: 13px;
-	font-weight: bold;
-}
-
-.takeposofflinestatus.offline {
-	display: block;
-}
-
 
 @media screen and (max-width: 767px) {
 	.div4 {

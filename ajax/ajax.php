@@ -71,48 +71,6 @@ $hookmanager->initHooks(array('takeposproductsearch')); // new context for produ
 $pricelevel = 1;	// default price level if PRODUIT_MULTIPRICES. TODO Get price level from thirdparty.
 
 
-/**
- * Return the products for sale of a category, trimmed to the fields used by the POS grid and search.
- * Used to build the catalog synchronized into IndexedDB by js/offline.js.
- *
- * @param  int $categid    ID of category
- * @param  int $pricelevel Price level to use for prices
- * @return array           Array of products
- */
-function getTakePosProductsForCategory($categid, $pricelevel)
-{
-	global $conf, $db, $langs;
-
-	$object = new Categorie($db);
-	$result = $object->fetch($categid);
-	if ($result <= 0) {
-		return array();
-	}
-
-	$prods = $object->getObjectsInCateg("product", 0, 0, 0, getDolGlobalString('TAKEPOS_SORTPRODUCTFIELD'), 'ASC', '(o.tosell:=:1)');
-
-	$res = array();
-	if (is_array($prods) && count($prods) > 0) {
-		foreach ($prods as $prod) {
-			'@phan-var-force Product $prod';
-			$res[] = array(
-				'id' => $prod->id,
-				'rowid' => $prod->id,
-				'ref' => $prod->ref,
-				'label' => $prod->label,
-				'barcode' => $prod->barcode,
-				'price' => $prod->price,
-				'price_ttc' => $prod->price_ttc,
-				'price_formated' => price(price2num(empty($prod->multiprices[$pricelevel]) ? $prod->price : $prod->multiprices[$pricelevel], 'MT'), 1, $langs, 1, -1, -1, $conf->currency),
-				'price_ttc_formated' => price(price2num(empty($prod->multiprices_ttc[$pricelevel]) ? $prod->price_ttc : $prod->multiprices_ttc[$pricelevel], 'MT'), 1, $langs, 1, -1, -1, $conf->currency)
-			);
-		}
-	}
-
-	return $res;
-}
-
-
 
 /*
  * View
@@ -456,66 +414,6 @@ if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
 	} else {
 		echo 'Failed to search product : '.$db->lasterror();
 	}
-} elseif ($action == 'getCatalog' && $user->hasRight('takepos', 'run')) {
-	top_httphead('application/json');
-
-	// Price level of the thirdparty (or default level)
-	if (GETPOSTINT('thirdpartyid') > 0) {
-		$result = $thirdparty->fetch(GETPOSTINT('thirdpartyid'));
-		if ($result > 0) {
-			$pricelevel = $thirdparty->price_level;
-		}
-	}
-
-	// Categories tree of the POS products (same split as index.php)
-	$object = new Categorie($db);
-	$fulltree = $object->get_full_arbo('product', getDolGlobalInt('TAKEPOS_ROOT_CATEGORY_ID'), 1);
-
-	$levelofrootcategory = 0;
-	if (getDolGlobalInt('TAKEPOS_ROOT_CATEGORY_ID') > 0) {
-		foreach ($fulltree as $key => $categorycursor) {
-			if ($categorycursor['id'] == getDolGlobalInt('TAKEPOS_ROOT_CATEGORY_ID')) {
-				$levelofrootcategory = $categorycursor['level'];
-				break;
-			}
-		}
-	}
-	$levelofmaincategories = $levelofrootcategory + 1;	// Main categories are categories just under the root categorie of POS products.
-
-	$maincategories = array();
-	$subcategories = array();
-	foreach ($fulltree as $key => $categorycursor) {
-		if ($categorycursor['level'] == $levelofmaincategories) {
-			$maincategories[$key] = $categorycursor;
-		} elseif ($categorycursor['level'] > $levelofmaincategories) {
-			$subcategories[$key] = $categorycursor;	// If category level 2 or 3 or ...
-		}
-	}
-	$maincategories = dol_sort_array($maincategories, 'label');
-	$subcategories = dol_sort_array($subcategories, 'label');
-
-	// Load the products for sale of each category (main, sub and the supplements category)
-	$products = array();
-	$categidstoload = array();
-	foreach ($maincategories as $categorycursor) {
-		$categidstoload[] = $categorycursor['id'];
-	}
-	foreach ($subcategories as $categorycursor) {
-		$categidstoload[] = $categorycursor['id'];
-	}
-	$supplementscategoryid = getDolGlobalInt('TAKEPOS_SUPPLEMENTS_CATEGORY');
-	if ($supplementscategoryid > 0) {
-		$categidstoload[] = $supplementscategoryid;
-	}
-
-	foreach ($categidstoload as $categid) {
-		$catalogkey = ($categid == $supplementscategoryid) ? 'supplements' : (string) $categid;
-		if (!isset($products[$catalogkey])) {
-			$products[$catalogkey] = getTakePosProductsForCategory($categid, $pricelevel);
-		}
-	}
-
-	echo json_encode(array('maincategories' => $maincategories, 'subcategories' => $subcategories, 'products' => $products));
 } elseif ($action == "opendrawer" && $term != '' && $user->hasRight('takepos', 'run')) {
 	top_httphead('application/html');
 
