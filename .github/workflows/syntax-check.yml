@@ -1,0 +1,34 @@
+# Syntax check of every PHP and JS file of the module.
+# Runs on push and on every pull request, so a compile error (like a stray quote
+# in a concatenation) fails the check before a release is tagged from main.
+name: PHP & JS syntax check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  syntax-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: php -l on all PHP files
+        run: |
+          php -v
+          git ls-files '*.php' | xargs -n1 php -l
+
+      - name: node --check on all JS files
+        run: |
+          for f in $(git ls-files '*.js'); do node --check "$f"; done

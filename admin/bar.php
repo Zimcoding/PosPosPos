@@ -97,7 +97,7 @@ $arrayofcss = array(dol_buildpath('/fluxpos/css/colorbox.css', 1));
 
 llxHeader('', $langs->trans("CashDeskSetup"), '', '', 0, 0, $arrayofjs, $arrayofcss, '', 'mod-fluxpos page-admin_bar');
 
-$linkback = '<a href="'.DOL_URL_ROOT.'/admin/modules.php?restore_lastsearch_values=1'">'.img_picto($langs->trans("BackToModuleList"), 'back', 'class="pictofixedwidth"').'<span class="hideonsmartphone">'.$langs->trans("BackToModuleList").'</span></a>';
+$linkback = '<a href="'.DOL_URL_ROOT.'/admin/modules.php?restore_lastsearch_values=1">'.img_picto($langs->trans("BackToModuleList"), 'back', 'class="pictofixedwidth"').'<span class="hideonsmartphone">'.$langs->trans("BackToModuleList").'</span></a>';
 
 print load_fiche_titre($langs->trans("CashDeskSetup").' (FluxPos)', $linkback, 'title_setup');
 $head = fluxpos_admin_prepare_head();
