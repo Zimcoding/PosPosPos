@@ -996,6 +996,50 @@ div#moreinfo, div#infowarehouse {
 	display: block;
 }
 
+.takeposofflinestatus.pending {
+	display: block;
+	background-color: #e8a33d;
+	cursor: pointer;
+}
+
+/* Local cart of a place, displayed while the terminal is offline, before the
+ * background synchronization replays it to the server. */
+.takeposofflinecart .takeposofflineqtybtn {
+	width: 26px;
+	height: 26px;
+	margin: 0 4px;
+	padding: 0;
+	border: none;
+	border-radius: 4px;
+	background-color: #2f5f8f;
+	color: #fff;
+	font-weight: bold;
+	font-size: 15px;
+	cursor: pointer;
+}
+
+.takeposofflinecart .takeposofflineqtybtn:active {
+	background-color: #244a70;
+}
+
+.takeposofflinecart .takeposofflineqtyval {
+	display: inline-block;
+	min-width: 28px;
+	font-weight: bold;
+}
+
+.takeposofflinecart .takeposofflinelabel {
+	white-space: normal;
+}
+
+.takeposofflinenotice {
+	margin: 4px 6px;
+	padding: 4px 8px;
+	border: 1px dashed #999999;
+	border-radius: 4px;
+	font-size: 12px;
+}
+
 
 @media screen and (max-width: 767px) {
 	.div4 {

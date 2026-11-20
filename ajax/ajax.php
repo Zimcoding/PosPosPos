@@ -112,6 +112,181 @@ function getTakePosProductsForCategory($categid, $pricelevel)
 	return $res;
 }
 
+/**
+ * Synchronize an offline order into the draft invoice of a place.
+ * The draft invoice of the place is created if it does not exist yet (same rules as
+ * invoice.php action=addline), then its product lines are reconciled with the line
+ * list captured on the terminal: products of the capture are added to the draft and
+ * quantities are raised to at least the captured quantity (the same product is never
+ * added twice, like invoice.php action=addline does). The capture of a terminal never
+ * mirrors the server lines (they are unknown while the terminal was offline), so this
+ * is done only by additions: no draft line is ever deleted and no quantity is ever
+ * lowered, so nothing captured by the server or by another terminal can be lost, and
+ * the operation is idempotent: it can be replayed at any time (retry after a failure,
+ * background synchronization) without duplicating lines.
+ *
+ * @param  string $place Place (table) of the order
+ * @param  array  $lines Array of captured lines: array('id' => product id, 'qty' => qty)
+ * @param  int    $socid Thirdparty id to use if the invoice must be created
+ * @return array         Result info: array('placeid', 'socid', 'total_ttc') or array('error' => ...)
+ */
+function takeposSyncOfflineOrder($place, $lines, $socid)
+{
+	global $conf, $db, $langs, $mysoc, $user;
+
+	require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
+	require_once DOL_DOCUMENT_ROOT.'/core/lib/functions2.lib.php';
+
+	$langs->loadLangs(array("bills", "errors"));
+
+	$takeposterminal = empty($_SESSION['takeposterminal']) ? 1 : $_SESSION['takeposterminal'];
+	$constforcompanyid = 'CASHDESK_ID_THIRDPARTY'.$takeposterminal;
+
+	$invoice = new Facture($db);
+
+	// Resolve the draft invoice of the place. An empty capture (order cleared while
+	// offline) must never create an empty draft invoice.
+	$haslines = false;
+	foreach ($lines as $linetarget) {
+		if ((int) $linetarget['id'] > 0 && (float) $linetarget['qty'] > 0) {
+			$haslines = true;
+			break;
+		}
+	}
+	$ret = $invoice->fetch(0, '(PROV-POS'.$takeposterminal.'-'.$place.')');
+	if ($ret <= 0) {
+		if (!$haslines) {
+			return array('place' => $place, 'socid' => 0, 'total_ttc' => 0, 'created' => 0);
+		}
+		$invoice->socid = ($socid > 0) ? $socid : getDolGlobalInt($constforcompanyid);
+		if ($invoice->socid <= 0) {
+			return array('error' => $langs->trans("ErrorModuleSetupNotComplete", "TakePOS"));
+		}
+
+		$dolnowtzuserrel = dol_now('tzuserrel');	// If user is 02 january 22:00, we want to store '02 january'
+		$monthuser = dol_print_date($dolnowtzuserrel, '%m', 'gmt');
+		$dayuser = dol_print_date($dolnowtzuserrel, '%d', 'gmt');
+		$yearuser = dol_print_date($dolnowtzuserrel, '%Y', 'gmt');
+		$invoice->date = dol_mktime(0, 0, 0, (int) $monthuser, (int) $dayuser, (int) $yearuser, 'tzserver');
+
+		$invoice->module_source = 'takepos';
+		$invoice->pos_source = $takeposterminal;
+		$invoice->entity = !empty($_SESSION["takeposinvoiceentity"]) ? $_SESSION["takeposinvoiceentity"] : $conf->entity;
+
+		$db->begin();
+		$placeid = $invoice->create($user);
+		if ($placeid < 0) {
+			$db->rollback();
+			return array('error' => $invoice->error);
+		}
+		$sql = "UPDATE ".MAIN_DB_PREFIX."facture";
+		$sql .= " SET ref='(PROV-POS".$takeposterminal."-".$place.")'";
+		$sql .= " WHERE rowid = ".((int) $placeid);
+		if (!$db->query($sql)) {
+			$db->rollback();
+			return array('error' => $db->lasterror());
+		}
+		$db->commit();
+
+		$invoice->fetch($placeid);
+	}
+
+	if ($invoice->status != $invoice::STATUS_DRAFT) {
+		return array('error' => 'Invoice of place '.$place.' is not a draft anymore');
+	}
+
+	$customer = new Societe($db);
+	$customer->fetch($invoice->socid);
+
+	// Reconcile the lines of the draft invoice with the target line list
+	$error = 0;
+	$db->begin();
+
+	foreach ($lines as $linetarget) {
+		$idproduct = (int) $linetarget['id'];
+		$qty = (float) $linetarget['qty'];
+		if ($idproduct <= 0 || $qty <= 0) {
+			continue;
+		}
+
+		$prod = new Product($db);
+		if ($prod->fetch($idproduct) <= 0) {
+			// Product does not exist anymore: keep the other lines instead of failing the whole capture
+			continue;
+		}
+
+		$datapriceofproduct = $prod->getSellPrice($mysoc, $customer, 0);
+		$price = $datapriceofproduct['pu_ht'];
+		$price_ttc = $datapriceofproduct['pu_ttc'];
+		$price_base_type = empty($datapriceofproduct['price_base_type']) ? 'HT' : $datapriceofproduct['price_base_type'];
+		$tva_tx = $datapriceofproduct['tva_tx'];
+		$tva_npr = (int) $datapriceofproduct['tva_npr'];
+		$localtax1_tx = get_localtax($tva_tx, 1, $customer, $mysoc, $tva_npr);
+		$localtax2_tx = get_localtax($tva_tx, 2, $customer, $mysoc, $tva_npr);
+
+		// Search an existing line for the same product, to update it instead of adding a duplicate
+		$existingline = null;
+		foreach ($invoice->lines as $line) {
+			if ($line->fk_product == $idproduct && $line->fk_parent_line <= 0 && $line->special_code != 4) {
+				$existingline = $line;
+				break;
+			}
+		}
+
+		if ($existingline !== null && $qty > $existingline->qty + 0.0001) {
+			$vatratecode = $existingline->tva_tx;
+			if ($existingline->vat_src_code) {
+				$vatratecode .= ' ('.$existingline->vat_src_code.')';
+			}
+			$result = $invoice->updateline($existingline->id, $existingline->desc, $existingline->subprice, $qty, $existingline->remise_percent, $existingline->date_start, $existingline->date_end, $vatratecode, $existingline->localtax1_tx, $existingline->localtax2_tx, 'HT', $existingline->info_bits, $existingline->product_type, $existingline->fk_parent_line, 0, $existingline->fk_fournprice, $existingline->pa_ht, $existingline->label, $existingline->special_code, $existingline->array_options, $existingline->situation_percent, $existingline->fk_unit);
+			if ($result < 0) {
+				$error++;
+				break;
+			}
+		} elseif ($existingline === null) {
+			$line = array('description' => $prod->description, 'price' => $price, 'tva_tx' => $tva_tx, 'localtax1_tx' => $localtax1_tx, 'localtax2_tx' => $localtax2_tx, 'remise_percent' => $customer->remise_percent, 'price_ttc' => $price_ttc, 'array_options' => array());
+
+			/* setup of margin calculation */
+			if (getDolGlobalString('MARGIN_TYPE')) {
+				if (getDolGlobalString('MARGIN_TYPE') == 'pmp' && !empty($prod->pmp)) {
+					$line['fk_fournprice'] = null;
+					$line['pa_ht'] = $prod->pmp;
+				} elseif (getDolGlobalString('MARGIN_TYPE') == 'costprice' && !empty($prod->cost_price)) {
+					$line['fk_fournprice'] = null;
+					$line['pa_ht'] = $prod->cost_price;
+				} else {
+					// default is fournprice
+					require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.product.class.php';
+					$pf = new ProductFournisseur($db);
+					if ($pf->find_min_price_product_fournisseur($idproduct, $qty) > 0) {
+						$line['fk_fournprice'] = $pf->product_fourn_price_id;
+						$line['pa_ht'] = $pf->fourn_unitprice_with_discount;
+						if (getDolGlobalString('PRODUCT_CHARGES') && $pf->fourn_charges > 0) {
+							$line['pa_ht'] += (float) $pf->fourn_charges / $pf->fourn_qty;
+						}
+					}
+				}
+			}
+
+			$idoflineadded = $invoice->addline($line['description'], $line['price'], $qty, $line['tva_tx'], $line['localtax1_tx'], $line['localtax2_tx'], $idproduct, (float) $line['remise_percent'], '', 0, 0, 0, 0, $price_base_type, $line['price_ttc'], $prod->type, -1, 0, '', 0, '', (empty($line['fk_fournprice']) ? 0 : $line['fk_fournprice']), (empty($line['pa_ht']) ? '' : $line['pa_ht']), '', $line['array_options'], 100, 0, $prod->fk_unit, 0);
+			if ($idoflineadded < 0) {
+				$error++;
+				break;
+			}
+		}
+	}
+
+	if ($error) {
+		$db->rollback();
+		return array('error' => $invoice->error ? $invoice->error : $db->lasterror());
+	}
+	$db->commit();
+
+	$invoice->fetch($invoice->id);
+
+	return array('placeid' => $invoice->id, 'place' => $place, 'socid' => $invoice->socid, 'total_ttc' => $invoice->total_ttc);
+}
+
 
 
 /*
@@ -516,6 +691,24 @@ if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
 	}
 
 	echo json_encode(array('maincategories' => $maincategories, 'subcategories' => $subcategories, 'products' => $products));
+} elseif ($action == 'syncOfflineOrder' && $user->hasRight('takepos', 'run')) {
+	top_httphead('application/json');
+
+	// Write operation: only POST is accepted
+	if ($_SERVER['REQUEST_METHOD'] != 'POST') {
+		http_response_code(405);
+		echo json_encode(array('error' => 'POST required'));
+		exit;
+	}
+
+	$input = json_decode(file_get_contents('php://input'), true);
+	if (!is_array($input) || empty($input['place']) || !isset($input['lines']) || !is_array($input['lines'])) {
+		echo json_encode(array('error' => 'Bad request: place and lines are required'));
+		exit;
+	}
+
+	$result = takeposSyncOfflineOrder((string) $input['place'], (array) $input['lines'], (!empty($input['thirdpartyid']) ? (int) $input['thirdpartyid'] : 0));
+	echo json_encode($result);
 } elseif ($action == "opendrawer" && $term != '' && $user->hasRight('takepos', 'run')) {
 	top_httphead('application/html');
 
