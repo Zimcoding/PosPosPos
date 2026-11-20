@@ -243,7 +243,6 @@ function PrintCategories(first) {
 			$("#catdivdesc"+i).hide();
 			$("#catdesc"+i).text("");
 			$("#catimg"+i).attr("src","genimg/empty.png");
-			$("#catwatermark"+i).hide();
 			$("#catdiv"+i).attr('class', 'wrapper divempty');
 			continue;
 		}
@@ -258,20 +257,19 @@ function PrintCategories(first) {
 		$("#catdiv"+i).data("rowid",categories[parseInt(i)+parseInt(first)]['rowid']);
 		$("#catdiv"+i).attr("data-rowid",categories[parseInt(i)+parseInt(first)]['rowid']);
 		$("#catdiv"+i).attr('class', 'wrapper');
-		$("#catwatermark"+i).show();
 	}
 }
 
 function MoreCategories(moreorless) {
 	console.log("MoreCategories moreorless="+moreorless+" pagecategories="+pagecategories);
 	if (moreorless == "more") {
-		$('#catimg15').animate({opacity: '0.5'}, 1);
-		$('#catimg15').animate({opacity: '1'}, 100);
+		$('#catimg'+<?php echo ($MAXCATEG - 1); ?>).animate({opacity: '0.5'}, 1);
+		$('#catimg'+<?php echo ($MAXCATEG - 1); ?>).animate({opacity: '1'}, 100);
 		pagecategories=pagecategories+1;
 	}
 	if (moreorless == "less") {
-		$('#catimg14').animate({opacity: '0.5'}, 1);
-		$('#catimg14').animate({opacity: '1'}, 100);
+		$('#catimg'+<?php echo ($MAXCATEG - 2); ?>).animate({opacity: '0.5'}, 1);
+		$('#catimg'+<?php echo ($MAXCATEG - 2); ?>).animate({opacity: '1'}, 100);
 		if (pagecategories==0) return; //Return if no less pages
 		pagecategories=pagecategories-1;
 	}
@@ -287,7 +285,6 @@ function MoreCategories(moreorless) {
 			$("#catdivdesc"+i).hide();
 			$("#catdesc"+i).text("");
 			$("#catimg"+i).attr("src","genimg/empty.png");
-			$("#catwatermark"+i).hide();
 			continue;
 		}
 		$("#catdivdesc"+i).show();
@@ -300,7 +297,6 @@ function MoreCategories(moreorless) {
 		$("#catimg"+i).attr("src","genimg/index.php?query=cat&id="+categories[i+(<?php echo($MAXCATEG - 2); ?> * pagecategories)]['rowid']);
 		$("#catdiv"+i).data("rowid",categories[i+(<?php echo($MAXCATEG - 2); ?> * pagecategories)]['rowid']);
 		$("#catdiv"+i).attr("data-rowid",categories[i+(<?php echo($MAXCATEG - 2); ?> * pagecategories)]['rowid']);
-		$("#catwatermark"+i).show();
 	}
 
 	ClearSearch(false);
@@ -348,6 +344,9 @@ function LoadProducts(position, issubcat) {
 			console.log('#catdiv'+position);
 			currentcat = $('#catdiv'+position).data('rowid');
 			console.log("currentcat="+currentcat);
+			// Highlight the selected category tab
+			jQuery(".div4 .wrapper").removeClass("activetab");
+			jQuery("#catdiv"+position).addClass("activetab");
 		}
 	}
 	if (currentcat == undefined) {
@@ -1646,22 +1645,6 @@ if ($reshook == 0) {  //add buttons
 ?>
 		<!-- Show buttons -->
 		<div id="dialogforpopuptakepos"></div>
-		<style>
-		/* Style de la popup */
-		#dialogforpopuptakepos {
-			display: none;
-			position: fixed;
-			top: 20px;
-			right: 20px;
-			background: #333;
-			color: #fff;
-			padding: 15px 20px;
-			border-radius: 8px;
-			box-shadow: 0 0 10px rgba(0,0,0,0.3);
-			z-index: 1000;
-			font-family: sans-serif;
-		}
-		</style>
 
 		<div class="div3">
 		<?php
@@ -1695,10 +1678,10 @@ if ($reshook == 0) {  //add buttons
 		print 'withhead';
 					} ?>">
 
-		<!--  Show categories -->
+		<!--  Show categories as a tab bar -->
 		<?php
 		if (getDolGlobalInt('TAKEPOS_HIDE_CATEGORIES') == 1) {
-			print '<div class="div4" style= "display: none;">';
+			print '<div class="div4" style="display: none;">';
 		} else {
 			print '<div class="div4">';
 		}
@@ -1715,25 +1698,22 @@ if ($reshook == 0) {  //add buttons
 								 } ?> id="catdiv<?php echo $count; ?>">
 				<?php
 				if ($count == ($MAXCATEG - 2)) {
-					//echo '<img class="imgwrapper" src="img/arrow-prev-top.png" height="100%" id="catimg'.$count.'" />';
-					echo '<span class="fa fa-chevron-left centerinmiddle" style="font-size: 5em; cursor: pointer;"></span>';
+					echo '<span class="fa fa-chevron-left"></span>';
 				} elseif ($count == ($MAXCATEG - 1)) {
-					//echo '<img class="imgwrapper" src="img/arrow-next-top.png" height="100%" id="catimg'.$count.'" />';
-					echo '<span class="fa fa-chevron-right centerinmiddle" style="font-size: 5em; cursor: pointer;"></span>';
+					echo '<span class="fa fa-chevron-right"></span>';
 				} else {
 					if (!getDolGlobalString('TAKEPOS_HIDE_CATEGORY_IMAGES')) {
 						echo '<img class="imgwrapper" id="catimg'.$count.'" />';
 					}
 				} ?>
-						<?php if ($count != $MAXCATEG - 2 && $count != $MAXCATEG - 1) { ?>
+				<?php if ($count != $MAXCATEG - 2 && $count != $MAXCATEG - 1) { ?>
 				<div class="description" id="catdivdesc<?php echo $count; ?>">
 					<div class="description_content" id="catdesc<?php echo $count; ?>"></div>
 				</div>
-						<?php } ?>
-				<div class="catwatermark" id='catwatermark<?php echo $count; ?>'>...</div>
+				<?php } ?>
 			</div>
-					<?php
-					$count++;
+			<?php
+			$count++;
 		}
 		?>
 		</div>
