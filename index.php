@@ -1760,7 +1760,10 @@ if (getDolGlobalString('FLUXPOS_BAR_RESTAURANT')) {
 }
 
 include_once DOL_DOCUMENT_ROOT.'/blockedlog/lib/blockedlog.lib.php';
-if (isALNERunningVersion()) {
+// isALNERunningVersion() exists only in Dolibarr 23+ (the function is defined in its blockedlog lib).
+// Calling it unconditionally on Dolibarr 22 or lower throws a "Call to undefined function" fatal
+// that kills the page between the numpad and the action buttons. Guard it to stay compatible.
+if (function_exists('isALNERunningVersion') && isALNERunningVersion()) {
 	// Custom printer may be allowed if mandatory information in template are guaranteed. For the moment, we prefer not allow this.
 	$customprinttemplateallowed = false;
 }
@@ -1778,7 +1781,12 @@ if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "takeposconnector") {		// depr
 	}
 } elseif ($customprinterallowed && $customprinttemplateallowed && (isModEnabled('receiptprinter') && getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term) > 0) || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "receiptprinter") {		// @phpstan-ignore-line
 	// Button Print Receipt on special custom printer using custom template
-	$nameOfPrinter = dol_getIdFromCode($db, getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term), 'printer_receipt', 'rowid', 'name', 1);
+	// Only query the printer table when the core receiptprinter module is enabled: since Dolibarr 22 a
+	// query on a missing table (llx_printer_receipt) throws instead of returning an error.
+	$nameOfPrinter = '';
+	if (isModEnabled('receiptprinter') && getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term) > 0) {
+		$nameOfPrinter = dol_getIdFromCode($db, getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term), 'printer_receipt', 'rowid', 'name', 1);
+	}
 	$menus[$r++] = array('title' => '<div title="'.dolPrintHTMLForAttribute($langs->trans("PrintOn", $nameOfPrinter)).'"><span class="fa fa-receipt paddingrightonly"></span><div class="trunc">'.$langs->trans("PrintTicket").'</div></div>', 'action' => 'PrintByESCPOS(placeid);');
 } else {
 	// Button Print Receipt on browser

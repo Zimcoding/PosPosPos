@@ -98,3 +98,33 @@ function fluxposUrlRoot()
 	return $url.'/';
 }
 
+// Compatibility helpers with Dolibarr versions lower than 23.0.
+// The ALNE (Archiving Legal Numbering Engine) helpers are only defined by Dolibarr 23+ and are
+// only meaningful there (they check whether the new French e-invoicing / certified archiving
+// layer is active). On Dolibarr 22 or lower these features do not exist, so the safe value is
+// false. Defining the shims here keeps pages using them (receipt.php, pay.php, admin pages, the
+// receipt printer class) from dying with a "Call to undefined function" fatal error.
+if (! function_exists('isALNERunningVersion')) {
+	/**
+	 * Say whether the Dolibarr ALNE e-invoicing layer is running.
+	 *
+	 * @return bool			False on Dolibarr versions lower than 23.0 (feature does not exist yet).
+	 */
+	function isALNERunningVersion()
+	{
+		return false;
+	}
+}
+
+if (! function_exists('isALNEQualifiedVersion')) {
+	/**
+	 * Say whether the Dolibarr ALNE e-invoicing layer is qualified.
+	 *
+	 * @return bool			False on Dolibarr versions lower than 23.0 (feature does not exist yet).
+	 */
+	function isALNEQualifiedVersion()
+	{
+		return false;
+	}
+}
+
