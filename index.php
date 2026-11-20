@@ -712,18 +712,18 @@ function deleteline() {
 
 function Customer() {
 	console.log("Open box to select the thirdparty place="+place);
-	$.colorbox({href:"../societe/list.php?type=t&contextpage=poslist&nomassaction=1&place="+place, width:"90%", height:"80%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("Customer"); ?>"});
+	$.colorbox({href:"<?php echo DOL_URL_ROOT ?>/societe/list.php?type=t&contextpage=poslist&nomassaction=1&place="+place, width:"90%", height:"80%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("Customer"); ?>"});
 }
 
 function Contact() {
 	console.log("Open box to select the contact place="+place);
-	$.colorbox({href:"../contact/list.php?type=c&contextpage=poslist&nomassaction=1&place="+place, width:"90%", height:"80%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("Contact"); ?>"});
+	$.colorbox({href:"<?php echo DOL_URL_ROOT ?>/contact/list.php?type=c&contextpage=poslist&nomassaction=1&place="+place, width:"90%", height:"80%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("Contact"); ?>"});
 }
 
 function History()
 {
 	console.log("Open box to select the history");
-	$.colorbox({href:"../compta/facture/list.php?contextpage=poslist&search_module_source=takepos%7Cfluxpos", width:"90%", height:"80%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("History"); ?>"});
+	$.colorbox({href:"<?php echo DOL_URL_ROOT ?>/compta/facture/list.php?contextpage=poslist&search_module_source=takepos%7Cfluxpos", width:"90%", height:"80%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("History"); ?>"});
 }
 
 function Reduction() {
@@ -1206,17 +1206,17 @@ function MoreActions(totalactions) {
 
 function ControlCashOpening()
 {
-	$.colorbox({href:"../compta/cashcontrol/cashcontrol_card.php?action=create&contextpage=fluxpos", width:"90%", height:"60%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("NewCashFence"); ?>"});
+	$.colorbox({href:"<?php echo DOL_URL_ROOT ?>/compta/cashcontrol/cashcontrol_card.php?action=create&contextpage=fluxpos", width:"90%", height:"60%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("NewCashFence"); ?>"});
 }
 
 function CloseCashFence(rowid)
 {
-	$.colorbox({href:"../compta/cashcontrol/cashcontrol_card.php?id="+rowid+"&contextpage=fluxpos", width:"90%", height:"90%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("NewCashFence"); ?>"});
+	$.colorbox({href:"<?php echo DOL_URL_ROOT ?>/compta/cashcontrol/cashcontrol_card.php?id="+rowid+"&contextpage=fluxpos", width:"90%", height:"90%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("NewCashFence"); ?>"});
 }
 
 function CashReport(rowid)
 {
-	$.colorbox({href:"../compta/cashcontrol/report.php?id="+rowid+"&contextpage=fluxpos", width:"60%", height:"90%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("CashReport"); ?>"});
+	$.colorbox({href:"<?php echo DOL_URL_ROOT ?>/compta/cashcontrol/report.php?id="+rowid+"&contextpage=fluxpos", width:"60%", height:"90%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("CashReport"); ?>"});
 }
 
 /*
