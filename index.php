@@ -193,6 +193,12 @@ var pageactions=0;
 var place="<?php echo $place; ?>";
 var takeposbaseuri = '<?php echo DOL_URL_ROOT ?>/takepos/';
 var takeposnewtoken = '<?php echo newToken(); ?>';
+var takeposcurrency = '<?php echo $conf->currency; ?>';
+var takeposlang = {
+	Qty: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("Qty")); ?>',
+	TotalTTCShort: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("TotalTTCShort")); ?>',
+	Empty: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("Empty")); ?>'
+};
 var editaction="qty";
 var editnumber="";
 var invoiceid=0;
@@ -644,6 +650,15 @@ function ClickProduct(position, qty = 1, qty_std = 0) {
 			return;
 		}
 
+		// Offline order entry: queue the product into the local cart of the place (it
+		// will be synchronized to the server in background). Only an order with no
+		// invoice created yet on the server can be captured while offline.
+		if (!navigator.onLine && ($('#invoiceid').val() || '') == '') {
+			TakePOSOffline.addProduct(idproduct, qty);
+			ClearSearch(false);
+			return;
+		}
+
 		addInvoiceLine = function(qty, qty_std_inner = 0) {
 			// Call page invoice.php to generate the section with product lines
 			  $("#poslines").load("invoice.php?action=addline&token=<?php echo currentToken(); ?>&place="+place+"&idproduct="+idproduct+"&selectedline="+selectedline+"&qty="+qty+"&invoiceid="+invoiceid+(qty_std_inner ? '&qty_std=1' : ''), function() {
@@ -769,6 +784,14 @@ function TakeposOrderNotes() {
 }
 
 function Refresh() {
+	if (!navigator.onLine && ($('#invoiceid').length == 0 || ($('#invoiceid').val() || '') == '')) {
+		// Offline: show the local cart of the place instead of asking the server.
+		// An order already registered on the server cannot be displayed until the
+		// connection is back.
+		console.log("Refresh offline with the local cart of place="+place);
+		TakePOSOffline.renderCart();
+		return;
+	}
 	console.log("Refresh by reloading place="+place+" invoiceid="+invoiceid);
 	$("#poslines").load("invoice.php?place="+place+"&invoiceid="+invoiceid, function() {
 		//$('#poslines').scrollTop($('#poslines')[0].scrollHeight);
@@ -778,6 +801,17 @@ function Refresh() {
 function New() {
 	// If we go here,it means $conf->global->TAKEPOS_BAR_RESTAURANT is not defined
 	invoiceid = $("#invoiceid").val();		// This is a hidden field added by invoice.php
+
+	if (!navigator.onLine) {
+		if ($('#offlinecart').val() == '1' && ($('#invoiceid').val() || '') == '') {
+			// Discard the local cart of the place (nothing was sent to the server yet)
+			TakePOSOffline.clearCart();
+		} else {
+			window.alert('An order already registered on the server cannot be deleted while the terminal is offline.');
+		}
+		ClearSearch(false);
+		return;
+	}
 
 	console.log("New with place = <?php echo $place; ?>, js place="+place+", invoiceid="+invoiceid);
 
@@ -1241,6 +1275,7 @@ $( document ).ready(function() {
 	TakePOSOffline.registerServiceWorker();
 	TakePOSOffline.initOfflineStatus();
 	TakePOSOffline.syncCatalog();
+	TakePOSOffline.syncOutbox();	// Replay the orders captured while offline, if any
 	<?php
 	// IF NO TERMINAL SELECTED
 	if (empty($_SESSION["takeposterminal"]) || $_SESSION["takeposterminal"] == "") {
