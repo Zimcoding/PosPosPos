@@ -1,5 +1,11 @@
 # CHANGELOG FLUXPOS FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.0.2
+
+- The module can be installed in any directory (`htdocs/fluxpos/`, `htdocs/custom/fluxpos/`, ...). A shared loader `mainenv.php` finds the Dolibarr environment instead of relative includes, which gave a blank page (HTTP 500) on every screen in the custom placement.
+- The module setup pages no longer call `dolBuildUrl()`, which only exists in recent Dolibarr versions.
+- CSS and JS files are linked with `dol_buildpath()`, so styles and scripts load in the custom placement too.
+
 ## 1.0.1
 
 - A sale paid offline is booked exactly once. Each paid sale gets its own id on the terminal; the server stores it with a unique key (new table `llx_fluxpos_sale`) in the same transaction as the invoice and payments. A sale sent again (lost answer, two tabs) returns the first invoice instead of a second one.
