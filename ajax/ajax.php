@@ -168,37 +168,323 @@ function fluxposPrintInvoiceTicket($id, $term, $user)
 }
 
 /**
- * Synchronize an offline order into the draft invoice of a place.
+ * Add the captured product lines to a draft invoice. A product already on the draft is
+ * not added twice: its quantity is only raised to the captured quantity, never lowered
+ * (same rule as invoice.php action=addline), so replaying the same capture is harmless.
+ * The caller owns the database transaction.
+ *
+ * @param  Facture $invoice  Draft invoice (with its lines loaded)
+ * @param  Societe $customer Customer of the invoice
+ * @param  array   $lines    Captured lines: array('id' => product id, 'qty' => qty)
+ * @return int               0 if OK, -1 if error (message in $invoice->error)
+ */
+function fluxposReconcileLines($invoice, $customer, $lines)
+{
+	global $db, $mysoc;
+
+	foreach ($lines as $linetarget) {
+		$idproduct = (int) $linetarget['id'];
+		$qty = (float) $linetarget['qty'];
+		if ($idproduct <= 0 || $qty <= 0) {
+			continue;
+		}
+
+		$prod = new Product($db);
+		if ($prod->fetch($idproduct) <= 0) {
+			// Product does not exist anymore: keep the other lines instead of failing the whole capture
+			continue;
+		}
+
+		$datapriceofproduct = $prod->getSellPrice($mysoc, $customer, 0);
+		$price = $datapriceofproduct['pu_ht'];
+		$price_ttc = $datapriceofproduct['pu_ttc'];
+		$price_base_type = empty($datapriceofproduct['price_base_type']) ? 'HT' : $datapriceofproduct['price_base_type'];
+		$tva_tx = $datapriceofproduct['tva_tx'];
+		$tva_npr = (int) $datapriceofproduct['tva_npr'];
+		$localtax1_tx = get_localtax($tva_tx, 1, $customer, $mysoc, $tva_npr);
+		$localtax2_tx = get_localtax($tva_tx, 2, $customer, $mysoc, $tva_npr);
+
+		// Search an existing line for the same product, to update it instead of adding a duplicate
+		$existingline = null;
+		foreach ($invoice->lines as $line) {
+			if ($line->fk_product == $idproduct && $line->fk_parent_line <= 0 && $line->special_code != 4) {
+				$existingline = $line;
+				break;
+			}
+		}
+
+		if ($existingline !== null && $qty > $existingline->qty + 0.0001) {
+			$vatratecode = $existingline->tva_tx;
+			if ($existingline->vat_src_code) {
+				$vatratecode .= ' ('.$existingline->vat_src_code.')';
+			}
+			$result = $invoice->updateline($existingline->id, $existingline->desc, $existingline->subprice, $qty, $existingline->remise_percent, $existingline->date_start, $existingline->date_end, $vatratecode, $existingline->localtax1_tx, $existingline->localtax2_tx, 'HT', $existingline->info_bits, $existingline->product_type, $existingline->fk_parent_line, 0, $existingline->fk_fournprice, $existingline->pa_ht, $existingline->label, $existingline->special_code, $existingline->array_options, $existingline->situation_percent, $existingline->fk_unit);
+			if ($result < 0) {
+				return -1;
+			}
+		} elseif ($existingline === null) {
+			$line = array('description' => $prod->description, 'price' => $price, 'tva_tx' => $tva_tx, 'localtax1_tx' => $localtax1_tx, 'localtax2_tx' => $localtax2_tx, 'remise_percent' => $customer->remise_percent, 'price_ttc' => $price_ttc, 'array_options' => array());
+
+			/* setup of margin calculation */
+			if (getDolGlobalString('MARGIN_TYPE')) {
+				if (getDolGlobalString('MARGIN_TYPE') == 'pmp' && !empty($prod->pmp)) {
+					$line['fk_fournprice'] = null;
+					$line['pa_ht'] = $prod->pmp;
+				} elseif (getDolGlobalString('MARGIN_TYPE') == 'costprice' && !empty($prod->cost_price)) {
+					$line['fk_fournprice'] = null;
+					$line['pa_ht'] = $prod->cost_price;
+				} else {
+					// default is fournprice
+					require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.product.class.php';
+					$pf = new ProductFournisseur($db);
+					if ($pf->find_min_price_product_fournisseur($idproduct, $qty) > 0) {
+						$line['fk_fournprice'] = $pf->product_fourn_price_id;
+						$line['pa_ht'] = $pf->fourn_unitprice_with_discount;
+						if (getDolGlobalString('PRODUCT_CHARGES') && $pf->fourn_charges > 0) {
+							$line['pa_ht'] += (float) $pf->fourn_charges / $pf->fourn_qty;
+						}
+					}
+				}
+			}
+
+			$idoflineadded = $invoice->addline($line['description'], $line['price'], $qty, $line['tva_tx'], $line['localtax1_tx'], $line['localtax2_tx'], $idproduct, (float) $line['remise_percent'], '', 0, 0, 0, 0, $price_base_type, $line['price_ttc'], $prod->type, -1, 0, '', 0, '', (empty($line['fk_fournprice']) ? 0 : $line['fk_fournprice']), (empty($line['pa_ht']) ? '' : $line['pa_ht']), '', $line['array_options'], 100, 0, $prod->fk_unit, 0);
+			if ($idoflineadded < 0) {
+				return -1;
+			}
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * Validate a draft invoice and record the payments captured on the terminal, exactly like
+ * invoice.php action=valid does (validation with or without stock move, cash fence check,
+ * payment recorded into the bank account of the terminal for its payment mode, credit
+ * note conversion of a negative sale, change given for cash). The invoice number is
+ * attributed here by the numbering module of Dolibarr.
+ * The caller owns the database transaction and must roll back when an error is returned.
+ *
+ * @param  Facture $invoice        Draft invoice with its lines
+ * @param  array   $payments       Payments: array('pay' => 'cash'|'card'|'cheque'|'LIQ'|..., 'amount', 'excess', 'accountid')
+ * @param  int     $fluxposterminal Terminal number
+ * @param  bool    $validatedhere  Set to true when the invoice was validated by this call
+ * @return string                  '' if OK, else the error message
+ */
+function fluxposValidateAndPay($invoice, $payments, $fluxposterminal, &$validatedhere)
+{
+	global $conf, $db, $langs, $user;
+
+	$validatedhere = false;
+
+	// Reload the invoice so its lines and totals include the lines just added
+	if ($invoice->fetch($invoice->id) <= 0) {
+		return ($invoice->error ? $invoice->error : 'Invoice not found');
+	}
+
+	// Test that the period is not close: a cash control closed for today on this
+	// terminal blocks any sale (same as invoice.php)
+	$tmpcurrentday = dol_getdate(dol_now());
+	$sql = "SELECT MIN(ref) as firstref FROM ".MAIN_DB_PREFIX."pos_cash_fence";
+	$sql .= " WHERE entity = ".((int) $conf->entity);
+	$sql .= " AND posnumber = ".((int) $fluxposterminal);
+	$sql .= " AND year_close = ".((int) $tmpcurrentday['year']);
+	$sql .= " AND (";
+	$sql .= " (month_close IS NULL AND day_close IS NULL)";
+	$sql .= " OR (month_close = ".((int) $tmpcurrentday['mon'])." AND day_close IS NULL)";
+	$sql .= " OR (month_close = ".((int) $tmpcurrentday['mon'])." AND day_close = ".((int) $tmpcurrentday['mday']).")";
+	$sql .= ")";
+	$sql .= " AND status = 1";
+	$resql = $db->query($sql);
+	if ($resql) {
+		$obj = $db->fetch_object($resql);
+		if ($obj && $obj->firstref) {
+			return $langs->trans("ACashControlHasBeenclosedForCurrentDay", $obj->firstref);
+		}
+	}
+
+	// Draft invoice with a negative total: transform into a credit note of the last
+	// validated invoice of the customer (same as invoice.php)
+	if ($invoice->status == Facture::STATUS_DRAFT && $invoice->total_ttc < 0) {
+		$invoice->type = $invoice::TYPE_CREDIT_NOTE;
+
+		$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."facture";
+		$sql .= " WHERE entity IN (".getEntity('invoice').")";
+		$sql .= " AND fk_soc = ".((int) $invoice->socid);
+		$sql .= " AND type <> ".Facture::TYPE_CREDIT_NOTE;
+		$sql .= " AND fk_statut >= ".$invoice::STATUS_VALIDATED;
+		$sql .= " ORDER BY rowid DESC";
+
+		$fk_source = 0;
+		$resql = $db->query($sql);
+		if ($resql) {
+			$obj = $db->fetch_object($resql);
+			if ($obj) {
+				$fk_source = $obj->rowid;
+			}
+		}
+		if ($fk_source == 0) {
+			return $langs->trans("NoPreviousBillForCustomer");
+		}
+		$invoice->fk_facture_source = $fk_source;
+		$invoice->update($user);
+	}
+
+	// Validation of the draft invoice: the invoice number is attributed here by the
+	// numbering module (same rules as invoice.php for the stock changes)
+	if ($invoice->status == Facture::STATUS_DRAFT) {
+		$constantforkey = 'FLUXPOS_NO_DECREASE_STOCK'.$fluxposterminal;
+		$allowstockchange = (getDolGlobalString($constantforkey) != "1");
+
+		if (isModEnabled('stock') && !isModEnabled('productbatch') && $allowstockchange) {
+			// Validation with a stock change into the warehouse of the terminal
+			$savconst = getDolGlobalString('STOCK_CALCULATE_ON_BILL');
+			$conf->global->STOCK_CALCULATE_ON_BILL = 1;	// To force the change of stock during invoice validation
+			$constantforkey = 'FLUXPOS_ID_WAREHOUSE'.$fluxposterminal;
+			$res = $invoice->validate($user, '', getDolGlobalInt($constantforkey), 0, 0);
+			$conf->global->STOCK_CALCULATE_ON_BILL = $savconst;
+		} else {
+			// Validation with no change into stock (same as invoice.php)
+			$res = $invoice->validate($user);
+		}
+		if ($res < 0) {
+			return ($invoice->error == 'NotConfigured' ? $langs->trans("NotConfigured").' (FluxPos numbering module)' : $invoice->error);
+		}
+		$validatedhere = true;
+	}
+
+	// Record the payments captured on the terminal (same rules as invoice.php)
+	if (is_array($payments) && count($payments) > 0) {
+		$now = dol_now();
+		require_once DOL_DOCUMENT_ROOT.'/compta/paiement/class/paiement.class.php';
+
+		$lastpaiementid = 0;
+		foreach ($payments as $paymentinfo) {
+			if (!is_array($paymentinfo)) {
+				continue;
+			}
+			$pay = isset($paymentinfo['pay']) ? (string) $paymentinfo['pay'] : '';
+			$paycode = $pay;
+			if ($pay == 'cash') {
+				$paycode = 'LIQ';	// For backward compatibility
+			}
+			if ($pay == 'card') {
+				$paycode = 'CB';	// For backward compatibility
+			}
+			if ($pay == 'cheque') {
+				$paycode = 'CHQ';	// For backward compatibility
+			}
+
+			if ($paycode == 'delayed') {
+				// Payment will be made outside the POS
+				if (getDolGlobalInt("FLUXPOS_DELAYED_TERMS")) {
+					$invoice->setPaymentTerms(getDolGlobalInt("FLUXPOS_DELAYED_TERMS"));
+				}
+				continue;
+			}
+
+			// Search the payment mode id from its code (same as invoice.php)
+			$paiementid = 0;
+			if ($paycode) {
+				$sql = "SELECT id, code FROM ".MAIN_DB_PREFIX."c_paiement";
+				$sql .= " WHERE active = 1 AND code = '".$db->escape($paycode)."'";
+				$resql = $db->query($sql);
+				if ($resql) {
+					$obj = $db->fetch_object($resql);
+					if ($obj) {
+						$paiementid = $obj->id;
+					}
+				}
+			}
+
+			// Bank account of the terminal for this payment mode (same as invoice.php)
+			$bankaccount = 0;
+			if (!empty($paymentinfo['accountid'])) {
+				$bankaccount = (int) $paymentinfo['accountid'];
+			} elseif ($paycode == 'LIQ') {
+				$bankaccount = getDolGlobalInt('FLUXPOS_ID_BANKACCOUNT_CASH'.$fluxposterminal);	// For backward compatibility
+			} elseif ($paycode == 'CHQ') {
+				$bankaccount = getDolGlobalInt('FLUXPOS_ID_BANKACCOUNT_CHEQUE'.$fluxposterminal);	// For backward compatibility
+			} else {
+				$bankaccount = getDolGlobalInt('FLUXPOS_ID_BANKACCOUNT_'.$paycode.$fluxposterminal);
+			}
+			if ($bankaccount <= 0 && isModEnabled("bank")) {
+				return $langs->trans("ErrorModuleSetupNotComplete", "FluxPos").' (bank account of terminal '.$fluxposterminal.' for payment mode '.$paycode.')';
+			}
+
+			$remaintopay = $invoice->getRemainToPay();
+			if (!(($remaintopay > 0 && $invoice->type != Facture::TYPE_CREDIT_NOTE) || ($remaintopay < 0 && $invoice->type == Facture::TYPE_CREDIT_NOTE))) {
+				continue;	// Nothing more to pay
+			}
+
+			$amountofpayment = (float) (isset($paymentinfo['amount']) ? $paymentinfo['amount'] : 0);
+			// Same rule as invoice.php: a missing amount, or an amount higher than the
+			// remain to pay (money received including the change), is capped to the remain to pay
+			if ($amountofpayment <= 0 || $amountofpayment > $remaintopay) {
+				$amountofpayment = $remaintopay;
+			}
+
+			$payment = new Paiement($db);
+			$payment->datepaye = $now;
+			$payment->fk_account = $bankaccount;
+			if ($paycode == 'LIQ') {
+				$payment->pos_change = !empty($paymentinfo['excess']) ? (float) $paymentinfo['excess'] : 0;
+			}
+			$payment->amounts[$invoice->id] = $amountofpayment;
+			// We do not set $payment->multicurrency_amounts because we want payment to be in main currency
+			$payment->paiementid = $paiementid;
+			$payment->paiementcode = $paycode;
+			$payment->num_payment = '';
+
+			$res = $payment->create($user);		// This record payment and regenerate the PDF
+			if ($res < 0) {
+				return ($payment->error ? $payment->error : $db->lasterror());
+			}
+			$res = $payment->addPaymentToBank($user, 'payment', '(CustomerInvoicePayment)', $bankaccount, '', '');
+			if ($res < 0) {
+				return ($payment->error ? $payment->error : $db->lasterror());
+			}
+			$lastpaiementid = $paiementid;
+		}
+
+		// Recalculate the remain to pay after the payments have been recorded
+		$remaintopay = $invoice->getRemainToPay();
+		if ($remaintopay == 0 && $lastpaiementid > 0) {
+			$result = $invoice->setPaid($user);
+			if ($result > 0) {
+				$invoice->paye = 1;
+				$invoice->status = $invoice::STATUS_CLOSED;
+				$invoice->close_code = '';
+			}
+			// set payment method
+			$invoice->setPaymentMethods($lastpaiementid);
+		}
+	}
+
+	return '';
+}
+
+/**
+ * Synchronize an offline order (not paid yet) into the draft invoice of a place.
  * The draft invoice of the place is created if it does not exist yet (same rules as
  * invoice.php action=addline), then its product lines are reconciled with the line
- * list captured on the terminal: products of the capture are added to the draft and
- * quantities are raised to at least the captured quantity (the same product is never
- * added twice, like invoice.php action=addline does). The capture of a terminal never
- * mirrors the server lines (they are unknown while the terminal was offline), so this
- * is done only by additions: no draft line is ever deleted and no quantity is ever
- * lowered, so nothing captured by the server or by another terminal can be lost, and
- * the operation is idempotent: it can be replayed at any time (retry after a failure,
- * background synchronization) without duplicating lines.
+ * list captured on the terminal (see fluxposReconcileLines()): nothing is ever deleted
+ * or lowered, so the call can be replayed at any time without duplicating lines.
  *
- * When a list of payments is provided, the sale is then validated and paid exactly
- * like invoice.php action=valid does (validation with or without stock move, cash
- * fence check, payment recorded into the bank account of the terminal for its
- * payment mode, credit note conversion of a negative sale, change given for cash).
- * The invoice number is attributed by the numbering module of Dolibarr at the
- * validation, so an order paid on a terminal while offline keeps a regular and
- * in-series invoice number. The receipt is printed automatically when the validation
- * is made by this call and a receipt printer is configured for the terminal.
+ * Paid sales are not sent here but to fluxposSyncOfflineSale(), which books each sale
+ * exactly once. The $valid mode is kept only for terminals still running an older
+ * offline.js that locks the cart of the place instead of creating a sale.
  *
  * @param  string $place    Place (table) of the order
  * @param  array  $lines    Array of captured lines: array('id' => product id, 'qty' => qty)
  * @param  int    $socid    Thirdparty id to use if the invoice must be created
- * @param  array  $payments Payments captured on the terminal: array('pay' => 'cash'|'card'|'cheque'|'LIQ'|..., 'amount', 'excess', 'accountid')
- * @param  bool   $valid    Validate the sale and record the payments
+ * @param  array  $payments Payments captured on the terminal (only with $valid)
+ * @param  bool   $valid    Validate the sale and record the payments (older terminals only)
  * @return array            Result info: array('placeid', 'socid', 'total_ttc', 'ref', 'paid') or array('error' => ...)
  */
 function fluxposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $valid = false)
 {
-	global $conf, $db, $langs, $mysoc, $user;
+	global $conf, $db, $langs, $user;
 
 	require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
 	require_once DOL_DOCUMENT_ROOT.'/core/lib/functions2.lib.php';
@@ -264,297 +550,202 @@ function fluxposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $v
 	$customer = new Societe($db);
 	$customer->fetch($invoice->socid);
 
-	// Reconcile the lines of the draft invoice with the target line list
-	$error = 0;
 	$db->begin();
 
-	foreach ($lines as $linetarget) {
-		$idproduct = (int) $linetarget['id'];
-		$qty = (float) $linetarget['qty'];
-		if ($idproduct <= 0 || $qty <= 0) {
-			continue;
-		}
-
-		$prod = new Product($db);
-		if ($prod->fetch($idproduct) <= 0) {
-			// Product does not exist anymore: keep the other lines instead of failing the whole capture
-			continue;
-		}
-
-		$datapriceofproduct = $prod->getSellPrice($mysoc, $customer, 0);
-		$price = $datapriceofproduct['pu_ht'];
-		$price_ttc = $datapriceofproduct['pu_ttc'];
-		$price_base_type = empty($datapriceofproduct['price_base_type']) ? 'HT' : $datapriceofproduct['price_base_type'];
-		$tva_tx = $datapriceofproduct['tva_tx'];
-		$tva_npr = (int) $datapriceofproduct['tva_npr'];
-		$localtax1_tx = get_localtax($tva_tx, 1, $customer, $mysoc, $tva_npr);
-		$localtax2_tx = get_localtax($tva_tx, 2, $customer, $mysoc, $tva_npr);
-
-		// Search an existing line for the same product, to update it instead of adding a duplicate
-		$existingline = null;
-		foreach ($invoice->lines as $line) {
-			if ($line->fk_product == $idproduct && $line->fk_parent_line <= 0 && $line->special_code != 4) {
-				$existingline = $line;
-				break;
-			}
-		}
-
-		if ($existingline !== null && $qty > $existingline->qty + 0.0001) {
-			$vatratecode = $existingline->tva_tx;
-			if ($existingline->vat_src_code) {
-				$vatratecode .= ' ('.$existingline->vat_src_code.')';
-			}
-			$result = $invoice->updateline($existingline->id, $existingline->desc, $existingline->subprice, $qty, $existingline->remise_percent, $existingline->date_start, $existingline->date_end, $vatratecode, $existingline->localtax1_tx, $existingline->localtax2_tx, 'HT', $existingline->info_bits, $existingline->product_type, $existingline->fk_parent_line, 0, $existingline->fk_fournprice, $existingline->pa_ht, $existingline->label, $existingline->special_code, $existingline->array_options, $existingline->situation_percent, $existingline->fk_unit);
-			if ($result < 0) {
-				$error++;
-				break;
-			}
-		} elseif ($existingline === null) {
-			$line = array('description' => $prod->description, 'price' => $price, 'tva_tx' => $tva_tx, 'localtax1_tx' => $localtax1_tx, 'localtax2_tx' => $localtax2_tx, 'remise_percent' => $customer->remise_percent, 'price_ttc' => $price_ttc, 'array_options' => array());
-
-			/* setup of margin calculation */
-			if (getDolGlobalString('MARGIN_TYPE')) {
-				if (getDolGlobalString('MARGIN_TYPE') == 'pmp' && !empty($prod->pmp)) {
-					$line['fk_fournprice'] = null;
-					$line['pa_ht'] = $prod->pmp;
-				} elseif (getDolGlobalString('MARGIN_TYPE') == 'costprice' && !empty($prod->cost_price)) {
-					$line['fk_fournprice'] = null;
-					$line['pa_ht'] = $prod->cost_price;
-				} else {
-					// default is fournprice
-					require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.product.class.php';
-					$pf = new ProductFournisseur($db);
-					if ($pf->find_min_price_product_fournisseur($idproduct, $qty) > 0) {
-						$line['fk_fournprice'] = $pf->product_fourn_price_id;
-						$line['pa_ht'] = $pf->fourn_unitprice_with_discount;
-						if (getDolGlobalString('PRODUCT_CHARGES') && $pf->fourn_charges > 0) {
-							$line['pa_ht'] += (float) $pf->fourn_charges / $pf->fourn_qty;
-						}
-					}
-				}
-			}
-
-			$idoflineadded = $invoice->addline($line['description'], $line['price'], $qty, $line['tva_tx'], $line['localtax1_tx'], $line['localtax2_tx'], $idproduct, (float) $line['remise_percent'], '', 0, 0, 0, 0, $price_base_type, $line['price_ttc'], $prod->type, -1, 0, '', 0, '', (empty($line['fk_fournprice']) ? 0 : $line['fk_fournprice']), (empty($line['pa_ht']) ? '' : $line['pa_ht']), '', $line['array_options'], 100, 0, $prod->fk_unit, 0);
-			if ($idoflineadded < 0) {
-				$error++;
-				break;
-			}
-		}
+	if (fluxposReconcileLines($invoice, $customer, $lines) < 0) {
+		$errmsg = ($invoice->error ? $invoice->error : $db->lasterror());
+		$db->rollback();
+		return array('error' => $errmsg);
 	}
 
+	$validatedhere = false;
 	if ($valid) {
 		if (!$haslines) {
 			$db->rollback();
 			return array('error' => $langs->trans("NoLinesToBill", "FluxPos"));
 		}
-
-		// Test that the period is not close: a cash control closed for today on this
-		// terminal blocks any sale (same as invoice.php)
-		$tmpcurrentday = dol_getdate(dol_now());
-		$sql = "SELECT MIN(ref) as firstref FROM ".MAIN_DB_PREFIX."pos_cash_fence";
-		$sql .= " WHERE entity = ".((int) $conf->entity);
-		$sql .= " AND posnumber = ".((int) $fluxposterminal);
-		$sql .= " AND year_close = ".((int) $tmpcurrentday['year']);
-		$sql .= " AND (";
-		$sql .= " (month_close IS NULL AND day_close IS NULL)";
-		$sql .= " OR (month_close = ".((int) $tmpcurrentday['mon'])." AND day_close IS NULL)";
-		$sql .= " OR (month_close = ".((int) $tmpcurrentday['mon'])." AND day_close = ".((int) $tmpcurrentday['mday']).")";
-		$sql .= ")";
-		$sql .= " AND status = 1";
-		$resql = $db->query($sql);
-		if ($resql) {
-			$obj = $db->fetch_object($resql);
-			if ($obj && $obj->firstref) {
-				$db->rollback();
-				return array('error' => $langs->trans("ACashControlHasBeenclosedForCurrentDay", $obj->firstref));
-			}
-		}
-
-		$invoicewasdraft = ($invoice->status == Facture::STATUS_DRAFT);
-
-		// Draft invoice with a negative total: transform into a credit note of the last
-		// validated invoice of the customer (same as invoice.php)
-		if ($invoicewasdraft && $invoice->total_ttc < 0) {
-			$invoice->type = $invoice::TYPE_CREDIT_NOTE;
-
-			$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."facture";
-			$sql .= " WHERE entity IN (".getEntity('invoice').")";
-			$sql .= " AND fk_soc = ".((int) $invoice->socid);
-			$sql .= " AND type <> ".Facture::TYPE_CREDIT_NOTE;
-			$sql .= " AND fk_statut >= ".$invoice::STATUS_VALIDATED;
-			$sql .= " ORDER BY rowid DESC";
-
-			$fk_source = 0;
-			$resql = $db->query($sql);
-			if ($resql) {
-				$obj = $db->fetch_object($resql);
-				if ($obj) {
-					$fk_source = $obj->rowid;
-				}
-			}
-			if ($fk_source == 0) {
-				$db->rollback();
-				return array('error' => $langs->trans("NoPreviousBillForCustomer"));
-			}
-			$invoice->fk_facture_source = $fk_source;
-			$invoice->update($user);
-		}
-
-		// Validation of the draft invoice: the invoice number is attributed here by the
-		// numbering module (same rules as invoice.php for the stock changes)
-		if ($invoice->status == Facture::STATUS_DRAFT) {
-			$constantforkey = 'FLUXPOS_NO_DECREASE_STOCK'.$fluxposterminal;
-			$allowstockchange = (getDolGlobalString($constantforkey) != "1");
-
-			if (isModEnabled('stock') && !isModEnabled('productbatch') && $allowstockchange) {
-				// Validation with a stock change into the warehouse of the terminal
-				$savconst = getDolGlobalString('STOCK_CALCULATE_ON_BILL');
-				$conf->global->STOCK_CALCULATE_ON_BILL = 1;	// To force the change of stock during invoice validation
-				$constantforkey = 'FLUXPOS_ID_WAREHOUSE'.$fluxposterminal;
-				$res = $invoice->validate($user, '', getDolGlobalInt($constantforkey), 0, 0);
-				$conf->global->STOCK_CALCULATE_ON_BILL = $savconst;
-			} else {
-				// Validation with no change into stock (same as invoice.php)
-				$res = $invoice->validate($user);
-			}
-			if ($res < 0) {
-				$db->rollback();
-				return array('error' => ($invoice->error == 'NotConfigured' ? $langs->trans("NotConfigured").' (FluxPos numbering module)' : $invoice->error));
-			}
-			$validatedhere = true;
-		}
-
-		// Record the payments captured on the terminal (same rules as invoice.php)
-		if (is_array($payments) && count($payments) > 0) {
-			$now = dol_now();
-			require_once DOL_DOCUMENT_ROOT.'/compta/paiement/class/paiement.class.php';
-
-			$lastpaiementid = 0;
-			foreach ($payments as $paymentinfo) {
-				if (!is_array($paymentinfo)) {
-					continue;
-				}
-				$pay = isset($paymentinfo['pay']) ? (string) $paymentinfo['pay'] : '';
-				$paycode = $pay;
-				if ($pay == 'cash') {
-					$paycode = 'LIQ';	// For backward compatibility
-				}
-				if ($pay == 'card') {
-					$paycode = 'CB';	// For backward compatibility
-				}
-				if ($pay == 'cheque') {
-					$paycode = 'CHQ';	// For backward compatibility
-				}
-
-				if ($paycode == 'delayed') {
-					// Payment will be made outside the POS
-					if (getDolGlobalInt("FLUXPOS_DELAYED_TERMS")) {
-						$invoice->setPaymentTerms(getDolGlobalInt("FLUXPOS_DELAYED_TERMS"));
-					}
-					continue;
-				}
-
-				// Search the payment mode id from its code (same as invoice.php)
-				$paiementid = 0;
-				if ($paycode) {
-					$sql = "SELECT id, code FROM ".MAIN_DB_PREFIX."c_paiement";
-					$sql .= " WHERE active = 1 AND code = '".$db->escape($paycode)."'";
-					$resql = $db->query($sql);
-					if ($resql) {
-						$obj = $db->fetch_object($resql);
-						if ($obj) {
-							$paiementid = $obj->id;
-						}
-					}
-				}
-
-				// Bank account of the terminal for this payment mode (same as invoice.php)
-				$bankaccount = 0;
-				if (!empty($paymentinfo['accountid'])) {
-					$bankaccount = (int) $paymentinfo['accountid'];
-				} elseif ($paycode == 'LIQ') {
-					$bankaccount = getDolGlobalInt('FLUXPOS_ID_BANKACCOUNT_CASH'.$fluxposterminal);	// For backward compatibility
-				} elseif ($paycode == 'CHQ') {
-					$bankaccount = getDolGlobalInt('FLUXPOS_ID_BANKACCOUNT_CHEQUE'.$fluxposterminal);	// For backward compatibility
-				} else {
-					$bankaccount = getDolGlobalInt('FLUXPOS_ID_BANKACCOUNT_'.$paycode.$fluxposterminal);
-				}
-				if ($bankaccount <= 0 && isModEnabled("bank")) {
-					$error++;
-					break;
-				}
-
-				$remaintopay = $invoice->getRemainToPay();
-				if (!(($remaintopay > 0 && $invoice->type != Facture::TYPE_CREDIT_NOTE) || ($remaintopay < 0 && $invoice->type == Facture::TYPE_CREDIT_NOTE))) {
-					continue;	// Nothing more to pay
-				}
-
-				$amountofpayment = (float) (isset($paymentinfo['amount']) ? $paymentinfo['amount'] : 0);
-				// Same rule as invoice.php: a missing amount, or an amount higher than the
-				// remain to pay (money received including the change), is capped to the remain to pay
-				if ($amountofpayment <= 0 || $amountofpayment > $remaintopay) {
-					$amountofpayment = $remaintopay;
-				}
-
-				$payment = new Paiement($db);
-				$payment->datepaye = $now;
-				$payment->fk_account = $bankaccount;
-				if ($paycode == 'LIQ') {
-					$payment->pos_change = !empty($paymentinfo['excess']) ? (float) $paymentinfo['excess'] : 0;
-				}
-				$payment->amounts[$invoice->id] = $amountofpayment;
-				// We do not set $payment->multicurrency_amounts because we want payment to be in main currency
-				$payment->paiementid = $paiementid;
-				$payment->paiementcode = $paycode;
-				$payment->num_payment = '';
-
-				$res = $payment->create($user);		// This record payment and regenerate the PDF
-				if ($res < 0) {
-					$error++;
-					break;
-				}
-				$res = $payment->addPaymentToBank($user, 'payment', '(CustomerInvoicePayment)', $bankaccount, '', '');
-				if ($res < 0) {
-					$error++;
-					break;
-				}
-				$lastpaiementid = $paiementid;
-			}
-
-			// Recalculate the remain to pay after the payments have been recorded
-			$remaintopay = $invoice->getRemainToPay();
-			if ($remaintopay == 0 && $lastpaiementid > 0) {
-				$result = $invoice->setPaid($user);
-				if ($result > 0) {
-					$invoice->paye = 1;
-					$invoice->status = $invoice::STATUS_CLOSED;
-					$invoice->close_code = '';
-				}
-				// set payment method
-				$invoice->setPaymentMethods($lastpaiementid);
-			}
+		$errmsg = fluxposValidateAndPay($invoice, $payments, $fluxposterminal, $validatedhere);
+		if ($errmsg !== '') {
+			$db->rollback();
+			return array('error' => $errmsg);
 		}
 	}
 
-	if ($error) {
-		if (!empty($payment) && $payment->error) {
-			return array('error' => $payment->error);
-		}
-		$db->rollback();
-		return array('error' => $invoice->error ? $invoice->error : $db->lasterror());
-	}
 	$db->commit();
 
 	$invoice->fetch($invoice->id);
 
 	// The receipt of a sale validated by this synchronization is printed on the receipt
-	// printer of the terminal when there is one configured (the receipt of a sale paid
-	// with browser printing can be printed from the card of the invoice)
+	// printer of the terminal when there is one configured
 	if ($validatedhere) {
 		fluxposPrintInvoiceTicket($invoice->id, $fluxposterminal, $user);
 	}
 
 	return array('placeid' => $invoice->id, 'place' => $place, 'socid' => $invoice->socid, 'total_ttc' => $invoice->total_ttc, 'ref' => $invoice->ref, 'paid' => (int) $invoice->paye);
+}
+
+/**
+ * Return the result of a sale already booked by fluxposSyncOfflineSale().
+ *
+ * @param  string     $saleuid Unique id of the sale, made by the terminal
+ * @return array|null          Result info (with 'duplicate' => 1), or null when the sale is not booked yet
+ */
+function fluxposFindBookedSale($saleuid)
+{
+	global $conf, $db;
+
+	$sql = "SELECT s.fk_facture, f.ref, f.total_ttc, f.paye";
+	$sql .= " FROM ".MAIN_DB_PREFIX."fluxpos_sale as s";
+	$sql .= " LEFT JOIN ".MAIN_DB_PREFIX."facture as f ON f.rowid = s.fk_facture";
+	$sql .= " WHERE s.entity = ".((int) $conf->entity);
+	$sql .= " AND s.sale_uid = '".$db->escape($saleuid)."'";
+	$resql = $db->query($sql);
+	if (!$resql) {
+		return null;
+	}
+	$obj = $db->fetch_object($resql);
+	if (!$obj) {
+		return null;
+	}
+
+	return array('uid' => $saleuid, 'placeid' => (int) $obj->fk_facture, 'ref' => $obj->ref, 'total_ttc' => $obj->total_ttc, 'paid' => (int) $obj->paye, 'duplicate' => 1);
+}
+
+/**
+ * Book one sale paid on a terminal while it was offline: a new invoice with its lines,
+ * validated (invoice number from the numbering module) and paid, in ONE database
+ * transaction. The sale id made by the terminal is stored with a unique key in the
+ * same transaction, so a sale sent twice (the terminal did not get the first answer,
+ * two tabs syncing at once) is booked only once: the second call just returns the
+ * invoice of the first one.
+ *
+ * @param  string $saleuid  Unique id of the sale, made by the terminal
+ * @param  string $place    Place the sale was made at (for information only)
+ * @param  array  $lines    Lines: array('id' => product id, 'qty' => qty)
+ * @param  int    $socid    Thirdparty id (0 = default customer of the terminal)
+ * @param  array  $payments Payments: array('pay', 'amount', 'excess', 'accountid')
+ * @param  int    $datesale Time of the sale on the terminal (timestamp, 0 if unknown)
+ * @return array            Result info: array('uid', 'placeid', 'ref', 'total_ttc', 'paid', 'duplicate') or array('error' => ...)
+ */
+function fluxposSyncOfflineSale($saleuid, $place, $lines, $socid, $payments, $datesale)
+{
+	global $conf, $db, $langs, $user;
+
+	require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
+	require_once DOL_DOCUMENT_ROOT.'/core/lib/functions2.lib.php';
+
+	$langs->loadLangs(array("bills", "errors", "admin", "fluxpos@fluxpos"));
+
+	if (!preg_match('/^[a-zA-Z0-9\-]{8,64}$/', $saleuid)) {
+		return array('error' => 'Bad request: invalid sale id');
+	}
+
+	// Already booked: the terminal did not get the first answer, give it again
+	$booked = fluxposFindBookedSale($saleuid);
+	if ($booked !== null) {
+		return $booked;
+	}
+
+	$haslines = false;
+	foreach ($lines as $linetarget) {
+		if ((int) $linetarget['id'] > 0 && (float) $linetarget['qty'] > 0) {
+			$haslines = true;
+			break;
+		}
+	}
+	if (!$haslines) {
+		return array('error' => $langs->trans("NoLinesToBill", "FluxPos"));
+	}
+
+	$fluxposterminal = empty($_SESSION['fluxposterminal']) ? 1 : $_SESSION['fluxposterminal'];
+	$constforcompanyid = 'FLUXPOS_ID_THIRDPARTY'.$fluxposterminal;
+
+	$db->begin();
+
+	// Claim the sale id first: the unique key makes a second, concurrent call for the
+	// same sale fail here (it waits for the first one, then sees it booked)
+	$sql = "INSERT INTO ".MAIN_DB_PREFIX."fluxpos_sale (entity, sale_uid, terminal, place, date_sale, date_creation, fk_user_creat)";
+	$sql .= " VALUES (".((int) $conf->entity).", '".$db->escape($saleuid)."', '".$db->escape((string) $fluxposterminal)."', '".$db->escape(dol_substr((string) $place, 0, 64))."',";
+	$sql .= " ".($datesale > 0 ? "'".$db->idate($datesale)."'" : "NULL").", '".$db->idate(dol_now())."', ".((int) $user->id).")";
+	if (!$db->query($sql)) {
+		$errno = $db->lasterrno();
+		$errmsg = $db->lasterror();
+		$db->rollback();
+		if ($errno == 'DB_ERROR_RECORD_ALREADY_EXISTS') {
+			$booked = fluxposFindBookedSale($saleuid);
+			if ($booked !== null) {
+				return $booked;
+			}
+		}
+		return array('error' => $errmsg);
+	}
+	$saleid = $db->last_insert_id(MAIN_DB_PREFIX."fluxpos_sale");
+
+	$invoice = new Facture($db);
+	$invoice->socid = ($socid > 0) ? $socid : getDolGlobalInt($constforcompanyid);
+	if ($invoice->socid <= 0) {
+		$db->rollback();
+		return array('error' => $langs->trans("ErrorModuleSetupNotComplete", "FluxPos"));
+	}
+
+	$dolnowtzuserrel = dol_now('tzuserrel');	// If user is 02 january 22:00, we want to store '02 january'
+	$monthuser = dol_print_date($dolnowtzuserrel, '%m', 'gmt');
+	$dayuser = dol_print_date($dolnowtzuserrel, '%d', 'gmt');
+	$yearuser = dol_print_date($dolnowtzuserrel, '%Y', 'gmt');
+	$invoice->date = dol_mktime(0, 0, 0, (int) $monthuser, (int) $dayuser, (int) $yearuser, 'tzserver');
+
+	$invoice->module_source = 'fluxpos';
+	$invoice->pos_source = $fluxposterminal;
+	$invoice->entity = !empty($_SESSION["fluxposinvoiceentity"]) ? $_SESSION["fluxposinvoiceentity"] : $conf->entity;
+
+	if ($invoice->create($user) < 0) {
+		$errmsg = ($invoice->error ? $invoice->error : $db->lasterror());
+		$db->rollback();
+		return array('error' => $errmsg);
+	}
+	$invoice->fetch($invoice->id);
+
+	$customer = new Societe($db);
+	$customer->fetch($invoice->socid);
+
+	if (fluxposReconcileLines($invoice, $customer, $lines) < 0) {
+		$errmsg = ($invoice->error ? $invoice->error : $db->lasterror());
+		$db->rollback();
+		return array('error' => $errmsg);
+	}
+
+	// Products deleted since the sale are skipped: a sale with none left must not be
+	// booked as an empty invoice (the money taken would be recorded nowhere)
+	$invoice->fetch($invoice->id);
+	if (empty($invoice->lines)) {
+		$db->rollback();
+		return array('error' => 'None of the products of this sale exist anymore: book it by hand');
+	}
+
+	$validatedhere = false;
+	$errmsg = fluxposValidateAndPay($invoice, $payments, $fluxposterminal, $validatedhere);
+	if ($errmsg !== '') {
+		$db->rollback();
+		return array('error' => $errmsg);
+	}
+
+	$sql = "UPDATE ".MAIN_DB_PREFIX."fluxpos_sale SET fk_facture = ".((int) $invoice->id)." WHERE rowid = ".((int) $saleid);
+	if (!$db->query($sql)) {
+		$errmsg = $db->lasterror();
+		$db->rollback();
+		return array('error' => $errmsg);
+	}
+
+	$db->commit();
+
+	$invoice->fetch($invoice->id);
+
+	// The receipt is printed on the receipt printer of the terminal when one is configured
+	if ($validatedhere) {
+		fluxposPrintInvoiceTicket($invoice->id, $fluxposterminal, $user);
+	}
+
+	return array('uid' => $saleuid, 'placeid' => $invoice->id, 'ref' => $invoice->ref, 'total_ttc' => $invoice->total_ttc, 'paid' => (int) $invoice->paye, 'duplicate' => 0);
 }
 
 
@@ -979,6 +1170,28 @@ if ($action == 'getProducts' && $user->hasRight('fluxpos', 'run')) {
 
 	$result = fluxposSyncOfflineOrder((string) $input['place'], (array) $input['lines'], (!empty($input['thirdpartyid']) ? (int) $input['thirdpartyid'] : 0), (isset($input['payments']) && is_array($input['payments']) ? $input['payments'] : array()), (!empty($input['valid'])));
 	echo json_encode($result);
+} elseif ($action == 'syncOfflineSale' && $user->hasRight('fluxpos', 'run')) {
+	top_httphead('application/json');
+
+	// Write operation: only POST is accepted
+	if ($_SERVER['REQUEST_METHOD'] != 'POST') {
+		http_response_code(405);
+		echo json_encode(array('error' => 'POST required'));
+		exit;
+	}
+
+	$input = json_decode(file_get_contents('php://input'), true);
+	if (!is_array($input) || empty($input['uid']) || !isset($input['lines']) || !is_array($input['lines'])) {
+		echo json_encode(array('error' => 'Bad request: uid and lines are required'));
+		exit;
+	}
+
+	$result = fluxposSyncOfflineSale((string) $input['uid'], (isset($input['place']) ? (string) $input['place'] : ''), (array) $input['lines'], (!empty($input['thirdpartyid']) ? (int) $input['thirdpartyid'] : 0), (isset($input['payments']) && is_array($input['payments']) ? $input['payments'] : array()), (!empty($input['created']) ? (int) $input['created'] : 0));
+	echo json_encode($result);
+} elseif ($action == 'ping' && $user->hasRight('fluxpos', 'run')) {
+	// Light call used by the terminal to know when the server can be reached again
+	top_httphead('application/json');
+	echo json_encode(array('ok' => 1));
 } elseif ($action == "opendrawer" && $term != '' && $user->hasRight('fluxpos', 'run')) {
 	top_httphead('application/html');
 

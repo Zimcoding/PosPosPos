@@ -33,10 +33,16 @@
  *
  *				Phase 3 (offline payment and validation): the cashier can pay and validate
  *				an order captured while offline (cash, credit card or cheque, with change
- *				given for cash). The validated order is locked on the terminal and its
- *				replay validates the sale with the invoice number and records the payments
- *				exactly like the online payment screen; the receipt is printed by the server
- *				receipt printer at the same moment.
+ *				given for cash). The paid order becomes a SALE with its own unique id
+ *				(stored as 'sale:<uid>'), and the cart of the place is emptied at once so
+ *				the next customer can be served. Each sale is sent to the syncOfflineSale
+ *				endpoint, which books it exactly once (invoice number, payments) even when
+ *				it is sent again; the receipt is printed by the server receipt printer.
+ *
+ *				Offline detection: the terminal is offline when the browser has no network
+ *				(navigator.onLine false) OR when a call to the server fails for a network
+ *				reason (no answer, timeout, gateway error): Wi-Fi can be up while the
+ *				server cannot be reached. A light ping finds out when it is back.
  */
 
 var FluxPosOfflineDBName = 'fluxpos';
@@ -179,12 +185,288 @@ function takePOSOfflineStorePut(key, value) {
 	});
 }
 
+/**
+ * Write one entry and remove another one in ONE transaction: both happen, or neither
+ * (used to turn a cart into a sale, so a sale can never also stay as an open cart).
+ *
+ * @param  {string} putkey    Key of the entry to write
+ * @param  {*}      value     Value to write
+ * @param  {string} deletekey Key of the entry to remove
+ * @returns {Promise<bool>} Promise resolved when the transaction is done
+ */
+function takePOSOfflineStorePutAndDelete(putkey, value, deletekey) {
+	'use strict';
+
+	return openFluxPosOfflineDB().then(function (db) {
+		return new Promise(function (resolve, reject) {
+			var transaction = db.transaction('catalog', 'readwrite');
+			var store = transaction.objectStore('catalog');
+			store.put(value, putkey);
+			store['delete'](deletekey);
+			transaction.oncomplete = function () {
+				db.close();
+				resolve(true);
+			};
+			transaction.onerror = function () {
+				reject(transaction.error);
+			};
+		});
+	});
+}
+
 
 var FluxPosOffline = {
 	fluxposbaseurl: (typeof fluxposbaseuri != 'undefined') ? fluxposbaseuri : '/fluxpos/',
 	fluxposnewtoken: (typeof fluxposnewtoken != 'undefined') ? fluxposnewtoken : '',
 	fluxposcurrency: (typeof fluxposcurrency != 'undefined') ? fluxposcurrency : '',
 	fluxposlang: (typeof fluxposlang != 'undefined') ? fluxposlang : {},
+
+	serverDown: false,			// true after a call to the server failed for a network reason
+	requestTimeout: 15000,		// ms before a call to the server is considered lost
+	probeInterval: 15000,		// ms between two checks of the server while it is down
+	_lastSaleNotice: '',		// message shown after a sale was stored on the terminal
+	_separatePlace: null,		// place where a new order was started offline next to an order on the server
+
+	/**
+	 * Start a new order on this terminal while the place shows an order stored on the
+	 * server that cannot be changed offline. The new order is kept apart: it is never
+	 * merged into the order on the server, it can only be paid (then it is a sale).
+	 *
+	 * @returns {Promise<bool>} Promise of true when the empty order is shown
+	 */
+	startSeparateOrder: function () {
+		'use strict';
+
+		this._separatePlace = (typeof place != 'undefined') ? String(place) : null;
+		return this.renderCart(true);
+	},
+
+	/**
+	 * Is the terminal offline? True when the browser has no network, or when the server
+	 * could not be reached on the last call (Wi-Fi up but server or internet down).
+	 *
+	 * @returns {boolean} True when the terminal must work offline
+	 */
+	isOffline: function () {
+		'use strict';
+
+		return !navigator.onLine || this.serverDown;
+	},
+
+	/**
+	 * Did an ajax call fail because the server could not be reached (as opposed to an
+	 * error answered by the server)?
+	 *
+	 * @param  {Object} jqxhr      jQuery XHR of the failed call
+	 * @param  {string} textStatus Status text given by jQuery ('timeout', 'error', ...)
+	 * @returns {boolean} True for a network failure
+	 */
+	isNetworkFailure: function (jqxhr, textStatus) {
+		'use strict';
+
+		if (textStatus == 'abort') {
+			return false;
+		}
+		if (textStatus == 'timeout') {
+			return true;
+		}
+		var status = (jqxhr && typeof jqxhr.status != 'undefined') ? jqxhr.status : 0;
+		return status === 0 || status == 502 || status == 503 || status == 504;
+	},
+
+	/**
+	 * Is this URL on the Dolibarr server (same origin as the page)?
+	 *
+	 * @param  {string} url URL of an ajax call (absolute or relative)
+	 * @returns {boolean} True when the call goes to the Dolibarr server
+	 */
+	isDolibarrUrl: function (url) {
+		'use strict';
+
+		try {
+			return new URL(url, window.location.href).origin === window.location.origin;
+		} catch (error) {
+			return false;
+		}
+	},
+
+	/**
+	 * To call from the failure handler of an ajax call. When the failure is a network
+	 * failure, the terminal switches to offline mode and true is returned, so the caller
+	 * can fall back to the data stored on the terminal.
+	 *
+	 * @param  {Object} jqxhr      jQuery XHR of the failed call
+	 * @param  {string} textStatus Status text given by jQuery
+	 * @returns {boolean} True when the caller must work offline
+	 */
+	handleFailure: function (jqxhr, textStatus) {
+		'use strict';
+
+		if (this.isNetworkFailure(jqxhr, textStatus)) {
+			this.markServerDown();
+			return true;
+		}
+		return !navigator.onLine;
+	},
+
+	/**
+	 * Switch to offline mode because the server could not be reached, and check it
+	 * regularly until it answers again.
+	 */
+	markServerDown: function () {
+		'use strict';
+
+		var self = this;
+		if (!this.serverDown) {
+			console.log('FluxPos offline: the server cannot be reached, working offline');
+		}
+		this.serverDown = true;
+		this.updateOfflineStatus();
+		if (!this._probeTimer) {
+			this._probeTimer = setInterval(function () {
+				self.probe();
+			}, this.probeInterval);
+		}
+	},
+
+	/**
+	 * The server answered again: leave offline mode, send the waiting sales and orders,
+	 * then give the display back to the server.
+	 */
+	markServerUp: function () {
+		'use strict';
+
+		if (!this.serverDown) {
+			return;
+		}
+		console.log('FluxPos offline: the server can be reached again');
+		this.serverDown = false;
+		this._separatePlace = null;
+		if (this._probeTimer) {
+			clearInterval(this._probeTimer);
+			this._probeTimer = null;
+		}
+		this.updateOfflineStatus();
+		this.syncCatalog();
+		this.syncOutbox().then(function () {
+			if (jQuery('#offlinecart').val() == '1' && typeof Refresh == 'function') {
+				Refresh();
+			}
+		});
+	},
+
+	/**
+	 * Light call to the server to know if it can be reached again.
+	 */
+	probe: function () {
+		'use strict';
+
+		var self = this;
+		if (!navigator.onLine) {
+			return;
+		}
+		jQuery.ajax(this.fluxposbaseurl + 'ajax/ajax.php?action=ping&token=' + this.fluxposnewtoken, {
+			dataType: 'json',
+			timeout: this.requestTimeout,
+			cache: false,
+			global: false
+		}).then(function (data) {
+			if (data && data.ok) {
+				self.markServerUp();
+			}
+		}, function () {
+			// Still down: next try at the next interval
+		});
+	},
+
+	/**
+	 * Make a unique id for a sale. The server books a sale only once per id.
+	 *
+	 * @returns {string} Unique id
+	 */
+	newSaleUid: function () {
+		'use strict';
+
+		if (window.crypto && typeof window.crypto.randomUUID == 'function') {
+			return window.crypto.randomUUID();
+		}
+		var bytes = new Uint8Array(16);
+		if (window.crypto && window.crypto.getRandomValues) {
+			window.crypto.getRandomValues(bytes);
+		} else {
+			for (var j = 0; j < 16; j++) {
+				bytes[j] = Math.floor(Math.random() * 256);
+			}
+		}
+		var hex = '';
+		for (var i = 0; i < 16; i++) {
+			hex += ('0' + bytes[i].toString(16)).slice(-2);
+			if (i == 3 || i == 5 || i == 7 || i == 9) {
+				hex += '-';
+			}
+		}
+		return hex;
+	},
+
+	/**
+	 * Turn the carts locked as "validated" by an older version of this file into sales,
+	 * so they are booked through the exactly-once endpoint and their place is free again.
+	 *
+	 * @returns {Promise<bool>} Promise resolved when done
+	 */
+	migrateLegacyCarts: function () {
+		'use strict';
+
+		var self = this;
+		return takePOSOfflineStoreKeys('cart:').then(function (keys) {
+			var promise = Promise.resolve(true);
+			jQuery.each(keys, function (index, key) {
+				promise = promise.then(function () {
+					return takePOSOfflineStoreGet(key).then(function (cart) {
+						if (!cart || cart.validated !== true) {
+							return true;
+						}
+						return self.storeSale(cart, cart.payments || [], key);
+					});
+				});
+			});
+			return promise;
+		}).catch(function (error) {
+			console.log('FluxPos offline: migration of the validated carts failed', error);
+			return false;
+		});
+	},
+
+	/**
+	 * Store a paid cart as a sale waiting to be booked on the server, and remove the cart
+	 * in the same transaction (a sale must never also stay as an open order).
+	 *
+	 * @param  {Object} cart     Cart (place, socid, lines)
+	 * @param  {Array}  payments Payments captured: [{pay, amount, excess}]
+	 * @param  {string} cartkey  Key of the cart to remove
+	 * @returns {Promise<Object>} Promise of the stored sale
+	 */
+	storeSale: function (cart, payments, cartkey) {
+		'use strict';
+
+		var total = 0;
+		for (var i = 0; i < cart.lines.length; i++) {
+			total += cart.lines[i].price_ttc * cart.lines[i].qty;
+		}
+		var sale = {
+			uid: this.newSaleUid(),
+			place: String(cart.place),
+			socid: cart.socid || 0,
+			lines: cart.lines,
+			payments: payments || [],
+			total_ttc: Math.round(total * 100) / 100,
+			created: Math.floor(Date.now() / 1000),
+			error: ''
+		};
+		return takePOSOfflineStorePutAndDelete('sale:' + sale.uid, sale, cartkey).then(function () {
+			return sale;
+		});
+	},
 
 	/**
 	 * Return a translated string passed by index.php (fluxposlang), or a fallback text.
@@ -282,9 +564,10 @@ var FluxPosOffline = {
 		var self = this;
 		qty = (parseFloat(qty) > 0) ? parseFloat(qty) : 1;
 		var socid = parseInt(jQuery('#thirdpartyid').val(), 10) || 0;
+		this._lastSaleNotice = '';
 		return this.getCart().then(function (cart) {
 			if (cart == null) {
-				cart = { place: String(place), socid: socid, created: Math.floor(Date.now() / 1000), lines: [] };
+				cart = { place: String(place), socid: socid, created: Math.floor(Date.now() / 1000), lines: [], separate: (self._separatePlace === String(place)) };
 			}
 			if (cart.validated) {
 				window.alert('This sale has been validated on this terminal and is waiting for its synchronization to the server. It cannot be modified anymore.');
@@ -350,38 +633,38 @@ var FluxPosOffline = {
 	},
 
 	/**
-	 * Validate the local cart of the current place and record the payments captured
-	 * on the terminal (same intent as invoice.php action=valid). A negative amount
-	 * means "take the missing amount from the customer" (the server will use the
-	 * remain to pay). The cart is locked: it can no more be modified until its
-	 * synchronization, which will validate the sale (invoice number) and record the
-	 * payments exactly like the online payment screen does.
+	 * Pay the local cart of the current place with the payments captured on the terminal
+	 * (same intent as invoice.php action=valid). An amount of 0 means "the remain to pay".
+	 * The cart becomes a sale with its own unique id, stored on the terminal until the
+	 * server has booked it (invoice number and payments, exactly once), and the cart of
+	 * the place is emptied at once so the next customer can be served.
 	 *
 	 * @param  {Array} payments Payments captured: [{pay: 'LIQ'|'CB'|'CHQ'|..., amount, excess}]
-	 * @returns {Promise<bool>} Promise of true when the cart has been validated
+	 * @returns {Promise<bool>} Promise of true when the sale has been stored
 	 */
 	validateCart: function (payments) {
 		'use strict';
 
 		var self = this;
-		payments = payments || [];
-		return this.getCart().then(function (cart) {
+		// Wait for a synchronization in progress: if it sends this order to the server, the
+		// order must be paid there, not turned into a second, offline sale
+		return (this._syncPromise || Promise.resolve()).then(function () {
+			return self.getCart();
+		}).then(function (cart) {
 			if (cart == null || !cart.lines.length) {
-				window.alert('There is no order captured on this place.');
+				if (!self.isOffline() && typeof Refresh == 'function') {
+					window.alert('This order has just been sent to the server. Pay it again on the screen.');
+					Refresh();
+				} else {
+					window.alert('There is no order captured on this place.');
+				}
 				return false;
 			}
-			if (cart.validated) {
-				window.alert('This sale has been validated on this terminal and is waiting for its synchronization to the server.');
-				return false;
-			}
-			var total = 0;
-			for (var i = 0; i < cart.lines.length; i++) {
-				total += cart.lines[i].price_ttc * cart.lines[i].qty;
-			}
-			cart.total_ttc = Math.round(total * 100) / 100;
-			cart.payments = payments;
-			cart.validated = true;
-			return self.saveCart(cart).then(function () {
+			return self.storeSale(cart, payments || [], 'cart:' + cart.place).then(function (sale) {
+				self._lastSaleNotice = 'Sale of ' + self.formatAmount(sale.total_ttc) + ' stored on this terminal. Its invoice number is given by the server when the connection is back.';
+			}).then(function () {
+				self.updateOfflineStatus();
+				self.scheduleSync();
 				return self.renderCart();
 			});
 		});
@@ -413,17 +696,18 @@ var FluxPosOffline = {
 	 * An order already stored on the server is never replaced: it can only be rendered
 	 * by invoice.php once the connection is back.
 	 *
+	 * @param  {boolean} force Show the local cart even when an order stored on the server is displayed
 	 * @returns {Promise<bool>} Promise of true when the cart has been rendered
 	 */
-	renderCart: function () {
+	renderCart: function (force) {
 		'use strict';
 
 		var self = this;
 		if (typeof jQuery == 'undefined' || typeof place == 'undefined') {
 			return Promise.resolve(false);
 		}
-		var offlinecartdisplayed = jQuery('#offlinecart').val() == '1';
-		if (navigator.onLine && !offlinecartdisplayed) {
+		var offlinecartdisplayed = (force === true) || jQuery('#offlinecart').val() == '1';
+		if (!this.isOffline() && !offlinecartdisplayed) {
 			return Promise.resolve(false);
 		}
 		if ((jQuery('#invoiceid').val() || '') != '' && !offlinecartdisplayed) {
@@ -487,7 +771,9 @@ var FluxPosOffline = {
 			if (validated) {
 				html += '<div class="fluxposofflinenotice">' + 'This sale is validated. It has been safely stored with its payments: its invoice number and its receipt will be issued by the server as soon as the synchronization can be done.' + '</div>';
 			} else if (lines.length) {
-				html += '<div class="fluxposofflinenotice">' + (navigator.onLine ? 'This order is synchronized to the server in background. Payment will be available as soon as the synchronization is done.' : 'This order is stored on this terminal and will be synchronized to the server when the connection is back.') + '</div>';
+				html += '<div class="fluxposofflinenotice">' + (!self.isOffline() ? 'This order is synchronized to the server in background.' : 'This order is stored on this terminal and will be synchronized to the server when the connection is back.') + '</div>';
+			} else if (self._lastSaleNotice) {
+				html += '<div class="fluxposofflinenotice">' + self.escapeHtml(self._lastSaleNotice) + '</div>';
 			} else {
 				html += '<div class="fluxposofflinenotice opacitymedium">Offline mode: a new order can be captured, it will be synchronized to the server when the connection is back. An order already registered on the server is shown again when the connection is back.</div>';
 			}
@@ -497,17 +783,45 @@ var FluxPosOffline = {
 	},
 
 	/**
-	 * Count the local orders not yet synchronized to the server.
+	 * Count what waits on this terminal: orders not paid yet (carts), paid sales not
+	 * booked yet, and among those the sales the server refused (with an error).
 	 *
-	 * @returns {Promise<number>} Promise of the number of pending orders
+	 * @returns {Promise<Object>} Promise of {orders, sales, failed}
+	 */
+	countPending: function () {
+		'use strict';
+
+		var res = { orders: 0, sales: 0, failed: 0 };
+		return takePOSOfflineStoreKeys('cart:').then(function (keys) {
+			res.orders = keys.length;
+			return takePOSOfflineStoreKeys('sale:');
+		}).then(function (keys) {
+			res.sales = keys.length;
+			return Promise.all(keys.map(function (key) {
+				return takePOSOfflineStoreGet(key);
+			}));
+		}).then(function (sales) {
+			for (var i = 0; i < sales.length; i++) {
+				if (sales[i] && sales[i].error) {
+					res.failed++;
+				}
+			}
+			return res;
+		}).catch(function () {
+			return res;
+		});
+	},
+
+	/**
+	 * Count the local orders and sales not yet synchronized to the server.
+	 *
+	 * @returns {Promise<number>} Promise of the number of pending orders and sales
 	 */
 	countPendingOrders: function () {
 		'use strict';
 
-		return takePOSOfflineStoreKeys('cart:').then(function (keys) {
-			return keys.length;
-		}).catch(function () {
-			return 0;
+		return this.countPending().then(function (res) {
+			return res.orders + res.sales;
 		});
 	},
 
@@ -544,9 +858,10 @@ var FluxPosOffline = {
 		var socid = parseInt(jQuery('#thirdpartyid').val(), 10) || 0;
 		var url = this.fluxposbaseurl + 'ajax/ajax.php?action=getCatalog&token=' + this.fluxposnewtoken + '&thirdpartyid=' + socid;
 
-		return jQuery.getJSON(url).then(function (data) {
+		return jQuery.ajax(url, { dataType: 'json', timeout: this.requestTimeout, global: false }).then(function (data) {
 			var puts = [];
 			var allproducts = {};
+			self.markServerUp();
 
 			jQuery.each(data.products || {}, function (catkey, products) {
 				for (var i = 0; i < products.length; i++) {
@@ -563,6 +878,10 @@ var FluxPosOffline = {
 				console.log('FluxPos offline: catalog synchronized for offline use');
 				return true;
 			});
+		}, function (jqxhr, textStatus) {
+			self.handleFailure(jqxhr, textStatus);
+			console.log('FluxPos offline: catalog synchronization failed', textStatus);
+			return false;
 		}).catch(function (error) {
 			console.log('FluxPos offline: catalog synchronization failed', error);
 			return false;
@@ -627,6 +946,32 @@ var FluxPosOffline = {
 		'use strict';
 
 		var self = this;
+
+		// A call that hangs (Wi-Fi up, server unreachable) must end in an error, so the
+		// terminal can switch to offline mode instead of waiting forever. While the server
+		// is known to be down, calls give up quickly and the terminal falls back at once.
+		// Only the read-only catalog calls (ajax.php) get this default: a payment or a
+		// validation (invoice.php) may be slow and must never be cut off by the tablet.
+		jQuery.ajaxPrefilter(function (options, originalOptions) {
+			if (typeof originalOptions.timeout == 'undefined' && self.isDolibarrUrl(options.url) && String(options.url).indexOf('/ajax/ajax.php') >= 0) {
+				options.timeout = self.serverDown ? 3000 : 30000;
+			}
+		});
+
+		// Any call of the page to the Dolibarr server tells whether it can be reached
+		// (calls to another host, like a local print server, say nothing about it)
+		jQuery(document).ajaxSuccess(function (event, jqxhr, settings) {
+			if (self.isDolibarrUrl(settings.url)) {
+				self.markServerUp();
+			}
+		});
+		jQuery(document).ajaxError(function (event, jqxhr, settings, thrownError) {
+			var textStatus = (thrownError === 'timeout' || thrownError === 'abort') ? thrownError : '';
+			if (self.isDolibarrUrl(settings.url) && self.isNetworkFailure(jqxhr, textStatus)) {
+				self.markServerDown();
+			}
+		});
+
 		window.addEventListener('online', function () {
 			self.updateOfflineStatus();
 			self.syncCatalog();
@@ -643,7 +988,17 @@ var FluxPosOffline = {
 				self.renderCart();	// Refresh the notice of the local cart currently displayed
 			}
 		});
-		this.updateOfflineStatus();
+
+		// Retry what is still waiting (a sale refused by the server, a failed sync)
+		setInterval(function () {
+			if (!self.isOffline()) {
+				self.syncOutbox();
+			}
+		}, 60000);
+
+		this.migrateLegacyCarts().then(function () {
+			self.updateOfflineStatus();
+		});
 	},
 
 	/**
@@ -668,11 +1023,90 @@ var FluxPosOffline = {
 	},
 
 	/**
-	 * Synchronize the local orders (captured while offline) to the server, one place
-	 * after the other: each place is sent to the idempotent syncOfflineOrder endpoint
-	 * which creates or completes the draft invoice of the place. The cart of a place
-	 * is removed as soon as its synchronization succeeds. A failure stops the replay:
-	 * it is retried on the next trigger (new change, back online, page load).
+	 * Send the paid sales stored on this terminal to the server, oldest first. Each sale
+	 * is booked exactly once by the syncOfflineSale endpoint (unique id), so a sale can
+	 * be sent again safely. A sale refused by the server keeps its error and stays on the
+	 * terminal, the next sales are still sent. When the server cannot be reached, the
+	 * sending stops and is retried later.
+	 *
+	 * @returns {Promise<bool>} Promise of false when the server could not be reached
+	 */
+	syncSales: function () {
+		'use strict';
+
+		var self = this;
+		var url = this.fluxposbaseurl + 'ajax/ajax.php?action=syncOfflineSale&token=' + this.fluxposnewtoken;
+
+		return takePOSOfflineStoreKeys('sale:').then(function (keys) {
+			return Promise.all(keys.map(function (key) {
+				return takePOSOfflineStoreGet(key);
+			}));
+		}).then(function (sales) {
+			sales = sales.filter(function (sale) {
+				return sale && sale.uid;
+			}).sort(function (a, b) {
+				return a.created - b.created;
+			});
+
+			var promise = Promise.resolve(true);
+			jQuery.each(sales, function (index, sale) {
+				promise = promise.then(function (ok) {
+					if (!ok) {
+						return false;
+					}
+					var lines = [];
+					for (var i = 0; i < sale.lines.length; i++) {
+						if (sale.lines[i].qty > 0) {
+							lines.push({ id: sale.lines[i].rowid, qty: sale.lines[i].qty });
+						}
+					}
+					return jQuery.ajax(url, {
+						method: 'POST',
+						contentType: 'application/json; charset=utf-8',
+						data: JSON.stringify({
+							uid: sale.uid,
+							place: sale.place,
+							thirdpartyid: sale.socid,
+							lines: lines,
+							payments: sale.payments,
+							created: sale.created
+						}),
+						dataType: 'json',
+						timeout: self.requestTimeout,
+						global: false
+					}).then(function (data) {
+						self.markServerUp();
+						if (!data || data.error) {
+							// Refused by the server: keep the sale with its error and go on with the next one
+							sale.error = (data && data.error) ? String(data.error) : 'Unexpected answer of the server';
+							console.log('FluxPos offline: sale ' + sale.uid + ' refused by the server: ' + sale.error);
+							return takePOSOfflineStorePut('sale:' + sale.uid, sale).then(function () {
+								return true;
+							});
+						}
+						console.log('FluxPos offline: sale ' + sale.uid + ' booked as invoice ' + data.ref + (data.duplicate ? ' (already booked before)' : ''));
+						return takePOSOfflineStoreDelete('sale:' + sale.uid).then(function () {
+							return true;
+						});
+					}, function (jqxhr, textStatus) {
+						// Not reached, or no usable answer (session expired for example): try again later
+						self.handleFailure(jqxhr, textStatus);
+						console.log('FluxPos offline: sale ' + sale.uid + ' not sent (' + textStatus + '), will retry');
+						return false;
+					});
+				});
+			});
+			return promise;
+		});
+	},
+
+	/**
+	 * Synchronize what was captured on this terminal: first the paid sales (see
+	 * syncSales()), then the orders not paid yet, one place after the other: each
+	 * place is sent to the idempotent syncOfflineOrder endpoint which creates or
+	 * completes the draft invoice of the place. The cart of a place is removed as soon
+	 * as its synchronization succeeds. A failure stops the replay: it is retried on the
+	 * next trigger (new change, back online, page load, every minute).
 	 *
 	 * @returns {Promise<bool>} Promise of true when all the pending orders are synchronized
 	 */
@@ -685,7 +1119,15 @@ var FluxPosOffline = {
 		}
 		this._syncing = true;
 		var currentplace = (typeof place != 'undefined') ? String(place) : null;
-		return takePOSOfflineStoreKeys('cart:').then(function (keys) {
+		this._syncPromise = this.syncSales().then(function (salesok) {
+			if (!salesok) {
+				return false;	// Server not reached: keep the orders for later too
+			}
+			return takePOSOfflineStoreKeys('cart:');
+		}).then(function (keys) {
+			if (keys === false) {
+				return false;
+			}
 			var promise = Promise.resolve(true);
 			jQuery.each(keys, function (index, key) {
 				promise = promise.then(function (ok) {
@@ -700,6 +1142,12 @@ var FluxPosOffline = {
 								return true;
 							});
 						}
+						if (cart.separate === true) {
+							// New order started offline while the place had an order on the server:
+							// sending it would merge it into that other order. It stays on the
+							// terminal until it is paid (then it is a sale) or discarded.
+							return true;
+						}
 						var lines = [];
 						for (var i = 0; i < cart.lines.length; i++) {
 							if (cart.lines[i].qty > 0) {
@@ -713,17 +1161,18 @@ var FluxPosOffline = {
 							data: JSON.stringify({
 								place: cart.place,
 								thirdpartyid: cart.socid,
-								lines: lines,
-								valid: (cart.validated === true),
-								payments: (cart.validated === true && cart.payments) ? cart.payments : []
+								lines: lines
 							}),
-							dataType: 'json'
+							dataType: 'json',
+							timeout: 0,		// No timeout: giving up while the server still adds the lines would leave them on the server AND on the terminal
+							global: false
 						}).then(function (data) {
+							self.markServerUp();
 							if (data && data.error) {
 								console.log('FluxPos offline: synchronization of the order of place ' + cart.place + ' failed: ' + data.error);
 								return false;
 							}
-							console.log('FluxPos offline: order of place ' + cart.place + ' synchronized to the server' + (data && data.ref ? ' (invoice ' + data.ref + (data.paid ? ', paid' : '') + ')' : ''));
+							console.log('FluxPos offline: order of place ' + cart.place + ' synchronized to the server');
 							return takePOSOfflineStoreDelete(key).then(function () {
 								if (plc === currentplace && typeof Refresh == 'function') {
 									// Reload the order of the current place from the server
@@ -731,6 +1180,9 @@ var FluxPosOffline = {
 								}
 								return true;
 							});
+						}, function (jqxhr, textStatus) {
+							self.handleFailure(jqxhr, textStatus);
+							return false;
 						});
 					});
 				});
@@ -741,16 +1193,19 @@ var FluxPosOffline = {
 			return false;
 		}).then(function (result) {
 			self._syncing = false;
+			self._syncPromise = null;
 			if (!self._syncTimer) {
 				self.updateOfflineStatus();
 			}
 			return result;
 		});
+		return this._syncPromise;
 	},
 
 	/**
-	 * Show or hide the offline status pill. It also shows the number of local orders
-	 * waiting for synchronization (and allows to retry the synchronization on click).
+	 * Show or hide the offline status pill: offline or not, the number of sales and
+	 * orders waiting for synchronization and the sales refused by the server (a click
+	 * retries the synchronization).
 	 */
 	updateOfflineStatus: function () {
 		'use strict';
@@ -760,18 +1215,30 @@ var FluxPosOffline = {
 		if (!element) {
 			return;
 		}
-		this.countPendingOrders().then(function (pending) {
+		this.countPending().then(function (pending) {
+			var parts = [];
+			if (pending.sales > 0) {
+				parts.push(pending.sales + ' sale(s) waiting');
+			}
+			if (pending.failed > 0) {
+				parts.push(pending.failed + ' refused by the server, see the browser console');
+			}
+			if (pending.orders > 0) {
+				parts.push(pending.orders + ' open order(s) waiting');
+			}
 			element.classList.remove('offline', 'pending');
 			element.onclick = null;
-			if (!navigator.onLine) {
+			if (self.isOffline()) {
 				element.classList.add('offline');
-				element.textContent = pending > 0 ? 'Offline - ' + pending + ' order(s) waiting for synchronization' : 'Offline - catalog only';
-			} else if (pending > 0) {
+				element.textContent = 'Offline' + (parts.length ? ' - ' + parts.join(', ') : ' - catalog only');
+			} else if (parts.length) {
 				element.classList.add('pending');
-				element.textContent = pending + ' offline order(s) waiting for synchronization - click to retry';
+				element.textContent = parts.join(', ') + ' - click to retry';
 				element.onclick = function () {
 					self.syncOutbox();
 				};
+			} else {
+				element.textContent = '';
 			}
 		});
 	}
