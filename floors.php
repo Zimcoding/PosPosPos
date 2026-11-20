@@ -38,7 +38,7 @@ if (!defined('NOREQUIREAJAX')) {
 }
 
 // Load Dolibarr environment
-require '../main.inc.php'; // Load $user and permissions
+require_once __DIR__.'/mainenv.php'; // Load $user and permissions
 require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
 /**
  * @var Conf $conf
@@ -148,7 +148,7 @@ $title = 'FluxPos - Dolibarr '.DOL_VERSION;
 if (getDolGlobalString('MAIN_APPLICATION_TITLE')) {
 	$title = 'FluxPos - ' . getDolGlobalString('MAIN_APPLICATION_TITLE');
 }
-$arrayofcss = array('/fluxpos/css/pos.css.php?a=xxx');
+$arrayofcss = array(dol_buildpath('/fluxpos/css/pos.css.php', 1).'?a=xxx');
 
 top_htmlhead($head, $title, 0, 0, array(), $arrayofcss);
 

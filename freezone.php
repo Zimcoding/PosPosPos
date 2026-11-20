@@ -42,7 +42,7 @@ if (!defined('NOREQUIREAJAX')) {
 }
 
 // Load Dolibarr environment
-require '../main.inc.php'; // Load $user and permissions
+require_once __DIR__.'/mainenv.php'; // Load $user and permissions
 require_once DOL_DOCUMENT_ROOT.'/core/lib/functions.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
 require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
@@ -94,7 +94,7 @@ $vatRateDefault = get_default_tva($mysoc, $soc);
  * View
  */
 
-$arrayofcss = array('/fluxpos/css/pos.css.php');
+$arrayofcss = array(dol_buildpath('/fluxpos/css/pos.css.php', 1));
 $arrayofjs = array();
 
 top_htmlhead('', '', 0, 0, $arrayofjs, $arrayofcss);

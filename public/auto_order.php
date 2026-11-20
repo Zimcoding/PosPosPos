@@ -32,7 +32,7 @@ if (!defined('NOBROWSERNOTIF')) {
 }
 
 // Load Dolibarr environment
-require '../../main.inc.php';
+require_once __DIR__.'/../mainenv.php';
 
 if (!getDolGlobalString('FLUXPOS_AUTO_ORDER')) {
 	accessforbidden('Auto order is not allowed'); // If Auto Order is disabled never allow access to this page (that is a NO LOGIN access)

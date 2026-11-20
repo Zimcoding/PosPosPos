@@ -40,7 +40,7 @@ if (!defined('NOBROWSERNOTIF')) {
 }
 
 // Load Dolibarr environment
-require '../../main.inc.php'; // Load $user and permissions
+require_once __DIR__.'/../mainenv.php'; // Load $user and permissions
 /**
  * @var Conf $conf
  * @var DoliDB $db
