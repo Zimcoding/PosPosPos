@@ -1496,7 +1496,12 @@ if (empty($reshook)) {
 					}
 				} elseif ($customprinterallowed && $customprinttemplateallowed && (isModEnabled('receiptprinter') && getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term) > 0) || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "receiptprinter") {		// @phpstan-ignore-line
 					// Button Print Receipt on special custom printer using custom template
-					$nameOfPrinter = dol_getIdFromCode($db, getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term), 'printer_receipt', 'rowid', 'name', 1);
+					// Only query the printer table when the core receiptprinter module is enabled: since Dolibarr 22 a
+					// query on a missing table (llx_printer_receipt) throws instead of returning an error.
+					$nameOfPrinter = '';
+					if (isModEnabled('receiptprinter') && getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term) > 0) {
+						$nameOfPrinter = dol_getIdFromCode($db, getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term), 'printer_receipt', 'rowid', 'name', 1);
+					}
 					$sectionwithinvoicelink .= ' <button id="buttonprint" type="button" onclick="PrintByESCPOS('.$placeid.')" title="'.dolPrintHTMLForAttribute($langs->trans("SentToPrinter").' '.$nameOfPrinter).'">'.$langs->trans('PrintTicket').'</button>';
 				} else {
 					// Button Print Receipt on browser
@@ -1734,7 +1739,12 @@ function PrintByESCPOSOld(id){
 }
 
 <?php
-$nameOfPrinter = dol_getIdFromCode($db, getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term), 'printer_receipt', 'rowid', 'name', 1);
+// Only query the printer table when the core receiptprinter module is enabled: since Dolibarr 22 a
+// query on a missing table (llx_printer_receipt) throws instead of returning an error.
+$nameOfPrinter = '';
+if (isModEnabled('receiptprinter') && getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term) > 0) {
+	$nameOfPrinter = dol_getIdFromCode($db, getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term), 'printer_receipt', 'rowid', 'name', 1);
+}
 ?>
 // Call the ajax to execute the printinvoiceticket action, using the ESCPOS driver
 // With some external module another method may be called.

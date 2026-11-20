@@ -1,5 +1,12 @@
 # CHANGELOG FLUXPOS FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.0.5
+
+- The main POS screen (index.php) called `isALNERunningVersion()` from the core blockedlog library. That function only exists in Dolibarr 23; on Dolibarr 22 it threw a "Call to undefined function" fatal error with no SQL or log entry, and the page stopped rendering after the numpad: the action buttons, the category tabs and the payment area never appeared. The call is now guarded so the page renders on Dolibarr 22 the same way the core TakePOS screen does.
+- The same ALNE helpers are called by receipt.php, pay.php, the receipt setup pages and the receipt printer class. Missing shims return "false" on Dolibarr lower than 23, which matches the behaviour of the core TakePOS screens of those versions.
+- The printer name lookup `dol_getIdFromCode(... 'printer_receipt' ...)` in index.php and invoice.php ran even when the core "Receipt Printer" module is not enabled (so the `llx_printer_receipt` table does not exist). Since Dolibarr 22 a query on a missing table throws and aborts the invoice fragment. The lookup is now skipped when the module is disabled and no printer is configured, and the print button falls back to browser printing.
+- phone.php used `getDolCurrency()`, a helper that does not exist in Dolibarr 22, when displaying a product price; the currency is now taken from `$conf->currency` as the core TakePOS phone page does.
+
 ## 1.0.4
 
 - The dialogs of the POS (Customer, Contact, History, cash fence create/detail/report) linked to the Dolibarr pages with a relative path ("../societe/list.php") that only resolved when the module was installed in htdocs/fluxpos. From htdocs/custom/fluxpos the request went to /custom/societe/... and the dialog showed a 404 or the home dashboard instead of the list. All these links now use DOL_URL_ROOT.
