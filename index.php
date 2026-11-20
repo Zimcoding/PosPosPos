@@ -119,7 +119,7 @@ $form = new Form($db);
 
 $disablejs = 0;
 $disablehead = 0;
-$arrayofjs = array('/takepos/js/jquery.colorbox-min.js', '/takepos/js/offline.js'); // TODO It seems we don't need colorbox
+$arrayofjs = array('/takepos/js/jquery.colorbox-min.js'); // TODO It seems we don't need this
 $arrayofcss = array('/takepos/css/pos.css.php', '/takepos/css/colorbox.css');
 
 if (getDolGlobalInt('TAKEPOS_COLOR_THEME') == 1) {
@@ -179,7 +179,6 @@ if (!empty($_SESSION['takeposterminal'])) {
 ?>
 
 <body class="bodytakepos" style="overflow: hidden;">
-<div id="takeposofflinestatus" class="takeposofflinestatus"></div>
 
 <script>
 var categories = <?php echo json_encode($maincategories); ?>;
@@ -191,8 +190,6 @@ var currentsubcategories=[];	// Subcategories of currentcat, shown before its pr
 var pagecategories=0;
 var pageactions=0;
 var place="<?php echo $place; ?>";
-var takeposbaseuri = '<?php echo DOL_URL_ROOT ?>/takepos/';
-var takeposnewtoken = '<?php echo newToken(); ?>';
 var editaction="qty";
 var editnumber="";
 var invoiceid=0;
@@ -388,6 +385,7 @@ function LoadProducts(position, issubcat) {
 
 	// Only show products for sale (tosell=1)
 	$.getJSON('<?php echo DOL_URL_ROOT ?>/takepos/ajax/ajax.php?action=getProducts&token=<?php echo currentToken();?>&thirdpartyid=' + socid + '&category='+currentcat+'&tosell=1&limit='+limit+'&offset=0', function(data) {
+		/* Fill thumbs from ishow to end max of products with products loaded into data array */
 		console.log("Call ajax.php (in LoadProducts) to get Products of category "+currentcat+" then loop on result to fill image thumbs");
 		console.log("Found "+data.length+" record");
 
@@ -395,27 +393,7 @@ function LoadProducts(position, issubcat) {
 			alert("No supplements found into the supplement category. Check the module setup and your product categories.");
 		}
 
-		FillProductsGrid(data);
-	}).fail(function() {
-		// Offline fallback: fill the grid from the catalog cached into IndexedDB
-		if (navigator.onLine) {
-			return;
-		}
-		TakePOSOffline.getCategoryProducts(currentcat, socid).then(function(data) {
-			if (data !== null) {
-				FillProductsGrid(data);
-			}
-		});
-	});
-
-	ClearSearch(false);
-}
-
-// Fill the product thumbs of the grid with an array of products (same format as the getProducts ajax action), starting at tile ishow
-function FillProductsGrid(data) {
-	console.log("FillProductsGrid");
-	var maxproduct = <?php echo (int) ($MAXPRODUCT - 2); ?>;
-	while (ishow < maxproduct) {
+		while (ishow < maxproduct) {
 			console.log("ishow"+ishow+" idata="+idata);
 			console.log(data[idata]);
 
@@ -498,6 +476,9 @@ function FillProductsGrid(data) {
 			ishow++; //Next product to show after print data product
 			idata++; //Next data every time
 		}
+	});
+
+	ClearSearch(false);
 }
 
 function MoreProducts(moreorless) {
@@ -600,26 +581,6 @@ function MoreProducts(moreorless) {
 			ishow++; //Next product to show after print data product
 			idata++; //Next data every time
 		}
-	}).fail(function() {
-		// Offline fallback: fill the page from the catalog cached into IndexedDB
-		if (navigator.onLine) {
-			return;
-		}
-		TakePOSOffline.getCategoryProducts(currentcat, socid).then(function(products) {
-			if (products === null) {
-				return;
-			}
-			var data = products.slice(offset, offset + limit);
-			if (typeof (data[0]) == "undefined" && first >= currentsubcategories.length && moreorless == "more") { // Return if no more pages
-				pageproducts=pageproducts-1;
-				return;
-			}
-			while (ishow < maxproduct && first + ishow < currentsubcategories.length) {
-				PrintSubCategory(ishow, currentsubcategories[first + ishow]);
-				ishow++;
-			}
-			FillProductsGrid(data);
-		});
 	});
 
 	ClearSearch(false);
@@ -880,25 +841,71 @@ function Search2(keyCodeForEnter, moreorless) {
 			}
 
 			$.getJSON('<?php echo DOL_URL_ROOT ?>/takepos/ajax/ajax.php?action=search&token=<?php echo currentToken();?>&search_term=' + search_term + '&thirdpartyid=' + socid + '&search_start=' + search_start + '&search_limit=' + search_limit, function (data) {
-				nbsearchresults = FillSearchResults(data);
-			}).fail(function () {
-				// Offline fallback: search into the catalog cached into IndexedDB
-				if (navigator.onLine) {
-					return;
-				}
-				TakePOSOffline.searchProducts(search_term, socid, search_limit).then(function (cacheddata) {
-					nbsearchresults = FillSearchResults(cacheddata);
-					searchAlways(cacheddata);
-				});
-			}).always(function (data) {
-				if (typeof (data) == "undefined" || typeof (data.length) != "number") {
-					return; // Failed request, handled by the offline fallback above
-				}
-				searchAlways(data);
-			});
+				for (i = 0; i < <?php echo($MAXPRODUCT - 2); ?>; i++) {	// the last 2 slots are the pager arrows, not product slots
+					if (typeof (data[i]) == "undefined") {
+						$("#prowatermark" + i).html("");
+						$("#prodesc" + i).text("");
+						$("#probutton" + i).text("");
+						$("#probutton" + i).hide();
+						$("#proprice" + i).attr("class", "hidden");
+						$("#proprice" + i).html("");
+						$("#proimg" + i).attr("src", "genimg/empty.png");
+						$("#prodiv" + i).data("rowid", "");
+						$("#prodiv" + i).attr("data-rowid", "");
+						continue;
+					}
+					<?php
+					$titlestring = "'".dol_escape_js($langs->transnoentities('Ref').': ')."' + data[i]['ref']";
+					$titlestring .= " + ' - ".dol_escape_js($langs->trans("Barcode").': ')."' + data[i]['barcode']";
+					?>
+					var titlestring = <?php echo $titlestring; ?>;
+					<?php if (getDolGlobalInt('TAKEPOS_SHOW_PRODUCT_REFERENCE') == 1) { ?>
+						$("#prodesc" + i).html(data[i]['ref'].bold() + ' - ' + data[i]['label']);
+					<?php } elseif (getDolGlobalInt('TAKEPOS_SHOW_PRODUCT_REFERENCE') == 2) { ?>
+						$("#prodesc" + i).html(data[i]['ref'].bold());
+					<?php } else { ?>
+						$("#prodesc" + i).html(data[i]['label']);
+					<?php } ?>
+					$("#prodivdesc" + i).show();
+					$("#probutton" + i).html(data[i]['label']);
+					$("#probutton" + i).show();
+					if (data[i]['price_formated']) {
+						$("#proprice" + i).attr("class", "productprice");
+						<?php
+						if (getDolGlobalInt('TAKEPOS_CHANGE_PRICE_HT')) {
+							?>
+							$("#proprice" + i).html(data[i]['price_formated']);
+							<?php
+						} else {
+							?>
+							$("#proprice" + i).html(data[i]['price_ttc_formated']);
+							<?php
+						}
+						?>
+					}
+					$("#proimg" + i).attr("title", titlestring);
+					if( undefined !== data[i]['img']) {
+						$("#proimg" + i).attr("src", data[i]['img']);
+					}
+					else {
+						$("#proimg" + i).attr("src", "genimg/index.php?query=pro&id=" + data[i]['rowid']);
+					}
+					$("#prodiv" + i).data("rowid", data[i]['rowid']);
+					$("#prodiv" + i).attr("data-rowid", data[i]['rowid']);
+					$("#prodiv" + i).data("iscat", 0);
+					$("#prodiv" + i).attr("data-iscat", 0);
 
-			// Post processing of a search: single answer actions, error message and pagination
-			var searchAlways = function (data) {
+					<?php
+					// Add js from hooks
+					$parameters = array();
+					$parameters['caller'] = 'search2';
+					$hookmanager->executeHooks('completeJSProductDisplay', $parameters);
+					print $hookmanager->resPrint;
+					?>
+
+					nbsearchresults++;
+				}
+			}).always(function (data) {
 				// If there is only 1 answer
 				if ($('#search').val().length > 0 && data.length == 1) {
 					console.log($('#search').val()+' - '+data[0]['barcode']);
@@ -939,81 +946,10 @@ function Search2(keyCodeForEnter, moreorless) {
 					var search_start_more = parseInt(search_start) + parseInt(<?php echo $MAXPRODUCT - 2;?>);
 					$("#search_start_more").val(search_start_more);
 				}
-			};
+			});
 		}, 500); // 500ms delay
 	}
 
-}
-
-// Fill the product thumbs of the grid with search results (same format as the search ajax action) and return the number of results shown
-function FillSearchResults(data) {
-	console.log("FillSearchResults");
-	var nbresults = 0;
-	for (i = 0; i < <?php echo($MAXPRODUCT - 2); ?>; i++) {	// the last 2 slots are the pager arrows, not product slots
-		if (typeof (data[i]) == "undefined") {
-			$("#prowatermark" + i).html("");
-			$("#prodesc" + i).text("");
-			$("#probutton" + i).text("");
-			$("#probutton" + i).hide();
-			$("#proprice" + i).attr("class", "hidden");
-			$("#proprice" + i).html("");
-			$("#proimg" + i).attr("src", "genimg/empty.png");
-			$("#prodiv" + i).data("rowid", "");
-			$("#prodiv" + i).attr("data-rowid", "");
-			continue;
-		}
-		<?php
-		$titlestring = "'".dol_escape_js($langs->transnoentities('Ref').': ')."' + data[i]['ref']";
-		$titlestring .= " + ' - ".dol_escape_js($langs->trans("Barcode").': ')."' + data[i]['barcode']";
-		?>
-		var titlestring = <?php echo $titlestring; ?>;
-		<?php if (getDolGlobalInt('TAKEPOS_SHOW_PRODUCT_REFERENCE') == 1) { ?>
-			$("#prodesc" + i).html(data[i]['ref'].bold() + ' - ' + data[i]['label']);
-		<?php } elseif (getDolGlobalInt('TAKEPOS_SHOW_PRODUCT_REFERENCE') == 2) { ?>
-			$("#prodesc" + i).html(data[i]['ref'].bold());
-		<?php } else { ?>
-			$("#prodesc" + i).html(data[i]['label']);
-		<?php } ?>
-		$("#prodivdesc" + i).show();
-		$("#probutton" + i).html(data[i]['label']);
-		$("#probutton" + i).show();
-		if (data[i]['price_formated']) {
-			$("#proprice" + i).attr("class", "productprice");
-			<?php
-			if (getDolGlobalInt('TAKEPOS_CHANGE_PRICE_HT')) {
-				?>
-				$("#proprice" + i).html(data[i]['price_formated']);
-				<?php
-			} else {
-				?>
-				$("#proprice" + i).html(data[i]['price_ttc_formated']);
-				<?php
-			}
-			?>
-		}
-		$("#proimg" + i).attr("title", titlestring);
-		if( undefined !== data[i]['img']) {
-			$("#proimg" + i).attr("src", data[i]['img']);
-		}
-		else {
-			$("#proimg" + i).attr("src", "genimg/index.php?query=pro&id=" + data[i]['rowid']);
-		}
-		$("#prodiv" + i).data("rowid", data[i]['rowid']);
-		$("#prodiv" + i).attr("data-rowid", data[i]['rowid']);
-		$("#prodiv" + i).data("iscat", 0);
-		$("#prodiv" + i).attr("data-iscat", 0);
-
-		<?php
-		// Add js from hooks
-		$parameters = array();
-		$parameters['caller'] = 'search2';
-		$hookmanager->executeHooks('completeJSProductDisplay', $parameters);
-		print $hookmanager->resPrint;
-		?>
-
-		nbresults++;
-	}
-	return nbresults;
 }
 
 /* Function called on an action into the PAD */
@@ -1239,9 +1175,6 @@ $( document ).ready(function() {
 	PrintCategories(0);
 	LoadProducts(0);
 	Refresh();
-	TakePOSOffline.registerServiceWorker();
-	TakePOSOffline.initOfflineStatus();
-	TakePOSOffline.syncCatalog();
 	<?php
 	// IF NO TERMINAL SELECTED
 	if (empty($_SESSION["takeposterminal"]) || $_SESSION["takeposterminal"] == "") {
