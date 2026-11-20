@@ -22,9 +22,9 @@
  */
 
 /**
- *	\file       htdocs/takepos/admin/setup.php
- *	\ingroup    takepos
- *	\brief      Setup page for TakePos module
+ *	\file       htdocs/fluxpos/admin/setup.php
+ *	\ingroup    fluxpos
+ *	\brief      Setup page for FluxPos module
  */
 
 // Load Dolibarr environment
@@ -40,14 +40,14 @@ require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/product/class/html.formproduct.class.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/pdf.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php';
-require_once DOL_DOCUMENT_ROOT."/core/lib/takepos.lib.php";
+require_once dol_buildpath('/fluxpos/lib/fluxpos.lib.php');
 require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
 
 // If socid provided by ajax company selector
-if (GETPOST('CASHDESK_ID_THIRDPARTY_id', 'alpha')) {
-	$_GET['CASHDESK_ID_THIRDPARTY'] = GETPOST('CASHDESK_ID_THIRDPARTY_id', 'alpha');
-	$_POST['CASHDESK_ID_THIRDPARTY'] = GETPOST('CASHDESK_ID_THIRDPARTY_id', 'alpha');
-	$_REQUEST['CASHDESK_ID_THIRDPARTY'] = GETPOST('CASHDESK_ID_THIRDPARTY_id', 'alpha');
+if (GETPOST('FLUXPOS_ID_THIRDPARTY_id', 'alpha')) {
+	$_GET['FLUXPOS_ID_THIRDPARTY'] = GETPOST('FLUXPOS_ID_THIRDPARTY_id', 'alpha');
+	$_POST['FLUXPOS_ID_THIRDPARTY'] = GETPOST('FLUXPOS_ID_THIRDPARTY_id', 'alpha');
+	$_REQUEST['FLUXPOS_ID_THIRDPARTY'] = GETPOST('FLUXPOS_ID_THIRDPARTY_id', 'alpha');
 }
 
 // Security check
@@ -55,7 +55,7 @@ if (!$user->admin) {
 	accessforbidden();
 }
 
-$langs->loadLangs(array("admin", "cashdesk"));
+$langs->loadLangs(array("admin", "fluxpos@fluxpos"));
 
 global $db, $mysoc;
 
@@ -83,22 +83,22 @@ $error = 0;
 if ($action == 'set') {
 	$db->begin();
 
-	$res = dolibarr_set_const($db, "TAKEPOS_ROOT_CATEGORY_ID", GETPOST('TAKEPOS_ROOT_CATEGORY_ID', 'alpha'), 'chaine', 0, '', $conf->entity);
-	$res = dolibarr_set_const($db, "TAKEPOS_SUPPLEMENTS_CATEGORY", GETPOST('TAKEPOS_SUPPLEMENTS_CATEGORY', 'alpha'), 'chaine', 0, '', $conf->entity);
-	$res = dolibarr_set_const($db, "TAKEPOS_NUMPAD", GETPOST('TAKEPOS_NUMPAD', 'alpha'), 'chaine', 0, '', $conf->entity);
-	$res = dolibarr_set_const($db, "TAKEPOS_SORTPRODUCTFIELD", GETPOST('TAKEPOS_SORTPRODUCTFIELD', 'alpha'), 'chaine', 0, '', $conf->entity);
-	$res = dolibarr_set_const($db, "TAKEPOS_NUM_TERMINALS", GETPOST('TAKEPOS_NUM_TERMINALS', 'alpha'), 'chaine', 0, '', $conf->entity);
-	$res = dolibarr_set_const($db, "TAKEPOS_ADDON", GETPOST('TAKEPOS_ADDON', 'alpha'), 'int', 0, '', $conf->entity);
-	$res = dolibarr_set_const($db, "TAKEPOS_EMAIL_TEMPLATE_INVOICE", GETPOST('TAKEPOS_EMAIL_TEMPLATE_INVOICE', 'alpha'), 'chaine', 0, '', $conf->entity);
-	if (getDolGlobalInt('TAKEPOS_ENABLE_SUMUP')) {
-		$res = dolibarr_set_const($db, "TAKEPOS_SUMUP_AFFILIATE", GETPOST('TAKEPOS_SUMUP_AFFILIATE', 'alpha'), 'chaine', 0, '', $conf->entity);
-		$res = dolibarr_set_const($db, "TAKEPOS_SUMUP_APPID", GETPOST('TAKEPOS_SUMUP_APPID', 'alpha'), 'chaine', 0, '', $conf->entity);
+	$res = dolibarr_set_const($db, "FLUXPOS_ROOT_CATEGORY_ID", GETPOST('FLUXPOS_ROOT_CATEGORY_ID', 'alpha'), 'chaine', 0, '', $conf->entity);
+	$res = dolibarr_set_const($db, "FLUXPOS_SUPPLEMENTS_CATEGORY", GETPOST('FLUXPOS_SUPPLEMENTS_CATEGORY', 'alpha'), 'chaine', 0, '', $conf->entity);
+	$res = dolibarr_set_const($db, "FLUXPOS_NUMPAD", GETPOST('FLUXPOS_NUMPAD', 'alpha'), 'chaine', 0, '', $conf->entity);
+	$res = dolibarr_set_const($db, "FLUXPOS_SORTPRODUCTFIELD", GETPOST('FLUXPOS_SORTPRODUCTFIELD', 'alpha'), 'chaine', 0, '', $conf->entity);
+	$res = dolibarr_set_const($db, "FLUXPOS_NUM_TERMINALS", GETPOST('FLUXPOS_NUM_TERMINALS', 'alpha'), 'chaine', 0, '', $conf->entity);
+	$res = dolibarr_set_const($db, "FLUXPOS_ADDON", GETPOST('FLUXPOS_ADDON', 'alpha'), 'int', 0, '', $conf->entity);
+	$res = dolibarr_set_const($db, "FLUXPOS_EMAIL_TEMPLATE_INVOICE", GETPOST('FLUXPOS_EMAIL_TEMPLATE_INVOICE', 'alpha'), 'chaine', 0, '', $conf->entity);
+	if (getDolGlobalInt('FLUXPOS_ENABLE_SUMUP')) {
+		$res = dolibarr_set_const($db, "FLUXPOS_SUMUP_AFFILIATE", GETPOST('FLUXPOS_SUMUP_AFFILIATE', 'alpha'), 'chaine', 0, '', $conf->entity);
+		$res = dolibarr_set_const($db, "FLUXPOS_SUMUP_APPID", GETPOST('FLUXPOS_SUMUP_APPID', 'alpha'), 'chaine', 0, '', $conf->entity);
 	}
 	if (isModEnabled('barcode')) {
-		$res = dolibarr_set_const($db, 'TAKEPOS_BARCODE_RULE_TO_INSERT_PRODUCT', GETPOST('TAKEPOS_BARCODE_RULE_TO_INSERT_PRODUCT', 'alpha'), 'chaine', 0, '', $conf->entity);
+		$res = dolibarr_set_const($db, 'FLUXPOS_BARCODE_RULE_TO_INSERT_PRODUCT', GETPOST('FLUXPOS_BARCODE_RULE_TO_INSERT_PRODUCT', 'alpha'), 'chaine', 0, '', $conf->entity);
 	}
 
-	dol_syslog("admin/cashdesk: level ".GETPOST('level', 'alpha'));
+	dol_syslog("admin/fluxpos: level ".GETPOST('level', 'alpha'));
 
 	if ($res <= 0) {
 		$error++;
@@ -121,7 +121,7 @@ if ($action == 'set') {
 	}
 } elseif ($action == 'setrefmod') {
 	$value = GETPOST('value', 'alpha');
-	dolibarr_set_const($db, "TAKEPOS_REF_ADDON", $value, 'chaine', 0, '', $conf->entity);
+	dolibarr_set_const($db, "FLUXPOS_REF_ADDON", $value, 'chaine', 0, '', $conf->entity);
 }
 
 if ($action != '') {
@@ -139,13 +139,13 @@ if ($action != '') {
 
 $form = new Form($db);
 
-$help_url = 'EN:Module_Point_of_sale_(TakePOS)';
+$help_url = 'EN:Module_Point_of_sale_(FluxPos)';
 
-llxHeader('', $langs->trans("CashDeskSetup"), $help_url, '', 0, 0, '', '', '', 'mod-takepos page-admin_setup');
+llxHeader('', $langs->trans("CashDeskSetup"), $help_url, '', 0, 0, '', '', '', 'mod-fluxpos page-admin_setup');
 
 $linkback = '<a href="'.dolBuildUrl(DOL_URL_ROOT.'/admin/modules.php', ['restore_lastsearch_values' => 1]).'">'.img_picto($langs->trans("BackToModuleList"), 'back', 'class="pictofixedwidth"').'<span class="hideonsmartphone">'.$langs->trans("BackToModuleList").'</span></a>';
 
-print load_fiche_titre($langs->trans("CashDeskSetup").' (TakePOS)', $linkback, 'title_setup');
+print load_fiche_titre($langs->trans("CashDeskSetup").' (FluxPos)', $linkback, 'title_setup');
 
 
 if (in_array($mysoc->country_code, array('FR'))) {
@@ -155,8 +155,8 @@ if (in_array($mysoc->country_code, array('FR'))) {
 }
 
 
-$head = takepos_admin_prepare_head();
-print dol_get_fiche_head($head, 'setup', 'TakePOS', -1, 'cash-register');
+$head = fluxpos_admin_prepare_head();
+print dol_get_fiche_head($head, 'setup', 'FluxPos', -1, 'cash-register');
 
 // Numbering modules
 $now = dol_now();
@@ -177,19 +177,19 @@ print '</tr>'."\n";
 clearstatcache();
 
 foreach ($dirmodels as $reldir) {
-	$dir = dol_buildpath($reldir."core/modules/takepos/");
+	$dir = dol_buildpath($reldir."core/modules/fluxpos/");
 
 	if (is_dir($dir)) {
 		$handle = opendir($dir);
 		if (is_resource($handle)) {
 			while (($file = readdir($handle)) !== false) {
-				if (substr($file, 0, 16) == 'mod_takepos_ref_' && substr($file, dol_strlen($file) - 3, 3) == 'php') {
+				if (substr($file, 0, 16) == 'mod_fluxpos_ref_' && substr($file, dol_strlen($file) - 3, 3) == 'php') {
 					$file = substr($file, 0, dol_strlen($file) - 4);
 
 					require_once $dir.$file.'.php';
 
 					$module = new $file();
-					'@phan-var-force ModeleNumRefTakepos $module';
+					'@phan-var-force ModeleNumRefFluxPos $module';
 
 					// Show modules according to features level
 					if ($module->version == 'development' && getDolGlobalInt('MAIN_FEATURES_LEVEL') < 2) {
@@ -218,7 +218,7 @@ foreach ($dirmodels as $reldir) {
 						print '</td>'."\n";
 
 						print '<td class="center">';
-						if (getDolGlobalString('TAKEPOS_REF_ADDON', 'mod_takepos_ref_simple') == $file) {
+						if (getDolGlobalString('FLUXPOS_REF_ADDON', 'mod_fluxpos_ref_simple') == $file) {
 							print img_picto($langs->trans("Activated"), 'switch_on');
 						} else {
 							print '<a href="'.$_SERVER["PHP_SELF"].'?action=setrefmod&token='.newToken().'&value='.urlencode($file).'">';
@@ -230,7 +230,7 @@ foreach ($dirmodels as $reldir) {
 						// example for next value
 						$invoice = new Facture($db);
 						$invoice->date = $now;
-						$invoice->module_source = 'takepos';
+						$invoice->module_source = 'fluxpos';
 						$invoice->pos_source = '1';
 
 						// Info
@@ -286,7 +286,7 @@ print "</tr>\n";
 print '<tr class="oddeven"><td>';
 print $langs->trans("NumberOfTerminals");
 print '<td>';
-print '<input type="number" name="TAKEPOS_NUM_TERMINALS" min="1" class="width50" value="' . getDolGlobalString('TAKEPOS_NUM_TERMINALS', '1') . '">';
+print '<input type="number" name="FLUXPOS_NUM_TERMINALS" min="1" class="width50" value="' . getDolGlobalString('FLUXPOS_NUM_TERMINALS', '1') . '">';
 print "</td></tr>\n";
 
 // Services
@@ -294,8 +294,8 @@ if (isModEnabled("service")) {
 	print '<tr class="oddeven"><td>';
 	print $langs->trans("CashdeskShowServices");
 	print '<td>';
-	print ajax_constantonoff("CASHDESK_SERVICES", array(), $conf->entity, 0, 0, 1, 0);
-	//print $form->selectyesno("CASHDESK_SERVICES", $conf->global->CASHDESK_SERVICES, 1);
+	print ajax_constantonoff("FLUXPOS_SERVICES", array(), $conf->entity, 0, 0, 1, 0);
+	//print $form->selectyesno("FLUXPOS_SERVICES", $conf->global->FLUXPOS_SERVICES, 1);
 	print "</td></tr>\n";
 }
 
@@ -303,9 +303,9 @@ if (isModEnabled("service")) {
 print '<tr class="oddeven"><td>';
 print $form->textwithpicto($langs->trans("RootCategoryForProductsToSell"), $langs->trans("RootCategoryForProductsToSellDesc"));
 print '<td>';
-//print $form->selectCategories(Categorie::TYPE_PRODUCT, 'TAKEPOS_ROOT_CATEGORY_ID', null);
-print img_object('', 'category', 'class="paddingright"').$form->select_all_categories(Categorie::TYPE_PRODUCT, getDolGlobalInt('TAKEPOS_ROOT_CATEGORY_ID'), 'TAKEPOS_ROOT_CATEGORY_ID', 64, 0, 0, 0, 'maxwidth500 widthcentpercentminusx');
-print ajax_combobox('TAKEPOS_ROOT_CATEGORY_ID');
+//print $form->selectCategories(Categorie::TYPE_PRODUCT, 'FLUXPOS_ROOT_CATEGORY_ID', null);
+print img_object('', 'category', 'class="paddingright"').$form->select_all_categories(Categorie::TYPE_PRODUCT, getDolGlobalInt('FLUXPOS_ROOT_CATEGORY_ID'), 'FLUXPOS_ROOT_CATEGORY_ID', 64, 0, 0, 0, 'maxwidth500 widthcentpercentminusx');
+print ajax_combobox('FLUXPOS_ROOT_CATEGORY_ID');
 print "</td></tr>\n";
 
 // Sort product
@@ -313,13 +313,13 @@ print '<tr class="oddeven"><td>';
 print $langs->trans("SortProductField");
 print '<td>';
 $array = array('rowid' => 'ID', 'ref' => 'Ref', 'label' => 'Label', 'datec' => 'DateCreation', 'tms' => 'DateModification');
-print $form->selectarray('TAKEPOS_SORTPRODUCTFIELD', $array, getDolGlobalString('TAKEPOS_SORTPRODUCTFIELD', 'rowid'), 0, 0, 0, '', 1);
+print $form->selectarray('FLUXPOS_SORTPRODUCTFIELD', $array, getDolGlobalString('FLUXPOS_SORTPRODUCTFIELD', 'rowid'), 0, 0, 0, '', 1);
 print "</td></tr>\n";
 
 print '<tr class="oddeven"><td>';
-print $langs->trans('TakeposGroupSameProduct');
+print $langs->trans('FluxPosGroupSameProduct');
 print '<td>';
-print ajax_constantonoff("TAKEPOS_GROUP_SAME_PRODUCT", array(), $conf->entity, 0, 0, 1, 0);
+print ajax_constantonoff("FLUXPOS_GROUP_SAME_PRODUCT", array(), $conf->entity, 0, 0, 1, 0);
 print "</td></tr>\n";
 
 $substitutionarray = pdf_getSubstitutionArray($langs, null, null, 2);
@@ -335,14 +335,14 @@ print '<tr class="oddeven"><td>';
 print $langs->trans("Paymentnumpad");
 print '<td>';
 $array = array(0 => $langs->trans("Numberspad"), 1 => $langs->trans("BillsCoinsPad"));
-print $form->selectarray('TAKEPOS_NUMPAD', $array, (!getDolGlobalString('TAKEPOS_NUMPAD') ? '0' : $conf->global->TAKEPOS_NUMPAD), 0);
+print $form->selectarray('FLUXPOS_NUMPAD', $array, (!getDolGlobalString('FLUXPOS_NUMPAD') ? '0' : $conf->global->FLUXPOS_NUMPAD), 0);
 print "</td></tr>\n";
 
 // Numpad use payment icons
 /*print '<tr class="oddeven"><td>';
-print $langs->trans('TakeposNumpadUsePaymentIcon');
+print $langs->trans('FluxPosNumpadUsePaymentIcon');
 print '<td colspan="2">';
-print ajax_constantonoff("TAKEPOS_NUMPAD_USE_PAYMENT_ICON", array(), $conf->entity, 0, 0, 1, 0);
+print ajax_constantonoff("FLUXPOS_NUMPAD_USE_PAYMENT_ICON", array(), $conf->entity, 0, 0, 1, 0);
 print "</td></tr>\n";
 */
 
@@ -350,15 +350,15 @@ print "</td></tr>\n";
 print '<tr class="oddeven"><td>';
 print $langs->trans('DirectPaymentButton');
 print '<td>';
-print ajax_constantonoff("TAKEPOS_DIRECT_PAYMENT", array(), $conf->entity, 0, 0, 1, 0);
-//print $form->selectyesno("TAKEPOS_DIRECT_PAYMENT", $conf->global->TAKEPOS_DIRECT_PAYMENT, 1);
+print ajax_constantonoff("FLUXPOS_DIRECT_PAYMENT", array(), $conf->entity, 0, 0, 1, 0);
+//print $form->selectyesno("FLUXPOS_DIRECT_PAYMENT", $conf->global->FLUXPOS_DIRECT_PAYMENT, 1);
 print "</td></tr>\n";
 
 // Head Bar
 /*print '<tr class="oddeven"><td>';
 print $langs->trans('HeadBar');
 print '<td colspan="2">';
-print $form->selectyesno("TAKEPOS_HEAD_BAR", $conf->global->TAKEPOS_HEAD_BAR, 1);
+print $form->selectyesno("FLUXPOS_HEAD_BAR", $conf->global->FLUXPOS_HEAD_BAR, 1);
 print "</td></tr>\n";
 */
 
@@ -382,7 +382,7 @@ if (is_array($formmail->lines_model)) {
 }
 //var_dump($arraydefaultmessage);
 //var_dump($arrayofmessagename);
-print $form->selectarray('TAKEPOS_EMAIL_TEMPLATE_INVOICE', $arrayofmessagename, getDolGlobalString('TAKEPOS_EMAIL_TEMPLATE_INVOICE'), $langs->transnoentitiesnoconv('NoneOrChooseAnEmailTemplateForInvoice'), 1, 0, '', 0, 0, 0, '', 'maxwidth500 widthcentpercentminusx', 1);
+print $form->selectarray('FLUXPOS_EMAIL_TEMPLATE_INVOICE', $arrayofmessagename, getDolGlobalString('FLUXPOS_EMAIL_TEMPLATE_INVOICE'), $langs->transnoentitiesnoconv('NoneOrChooseAnEmailTemplateForInvoice'), 1, 0, '', 0, 0, 0, '', 'maxwidth500 widthcentpercentminusx', 1);
 // TODO Add link to go to email templates
 print "</td></tr>\n";
 
@@ -390,43 +390,43 @@ print "</td></tr>\n";
 print '<tr class="oddeven"><td>';
 print $langs->trans('ControlCashOpening');
 print '<td>';
-print ajax_constantonoff("TAKEPOS_CONTROL_CASH_OPENING", array(), $conf->entity, 0, 0, 1, 0);
+print ajax_constantonoff("FLUXPOS_CONTROL_CASH_OPENING", array(), $conf->entity, 0, 0, 1, 0);
 print "</td></tr>\n";
 
 // Delayed Pay Button
 print '<tr class="oddeven"><td>';
 print $langs->trans('AllowDelayedPayment');
 print '<td>';
-print ajax_constantonoff("TAKEPOS_DELAYED_PAYMENT", array(), $conf->entity, 0, 0, 1, 0);
+print ajax_constantonoff("FLUXPOS_DELAYED_PAYMENT", array(), $conf->entity, 0, 0, 1, 0);
 print "</td></tr>\n";
 
 // Show price without vat
 print '<tr class="oddeven"><td>';
 print $langs->trans('ShowPriceHT');
 print '<td>';
-print ajax_constantonoff("TAKEPOS_SHOW_HT", array(), $conf->entity, 0, 0, 1, 0);
+print ajax_constantonoff("FLUXPOS_SHOW_HT", array(), $conf->entity, 0, 0, 1, 0);
 print "</td></tr>\n";
 
 // Use price excl. taxes (HT) and not price incl. taxes (TTC)
 print '<tr class="oddeven"><td>';
 print $langs->trans('UsePriceHT');
 print '</td><td>';
-print ajax_constantonoff("TAKEPOS_CHANGE_PRICE_HT", array(), $conf->entity, 0, 0, 1, 0);
+print ajax_constantonoff("FLUXPOS_CHANGE_PRICE_HT", array(), $conf->entity, 0, 0, 1, 0);
 print "</td></tr>\n";
 
 // disable freezone product
 print '<tr class="oddeven"><td>';
 print $form->textwithpicto($langs->trans('NoFreeZoneProduct'), $langs->trans('NoFreeZoneProductDesc'));
 print '</td><td>';
-print ajax_constantonoff("TAKEPOS_NO_FREE_ZONE_PRODUCT", array(), $conf->entity, 0, 0, 1, 0);
+print ajax_constantonoff("FLUXPOS_NO_FREE_ZONE_PRODUCT", array(), $conf->entity, 0, 0, 1, 0);
 print "</td></tr>\n";
 
 // Barcode rule to insert product
 if (isModEnabled('barcode')) {
 	print '<tr class="oddeven"><td>';
-	print $form->textwithpicto($langs->trans("TakeposBarcodeRuleToInsertProduct"), $langs->trans("TakeposBarcodeRuleToInsertProductDesc"), 1, 'help', '', 0, 3, 'barcoderuleonsmartphone');
+	print $form->textwithpicto($langs->trans("FluxPosBarcodeRuleToInsertProduct"), $langs->trans("FluxPosBarcodeRuleToInsertProductDesc"), 1, 'help', '', 0, 3, 'barcoderuleonsmartphone');
 	print '<td>';
-	print '<input type="text" name="TAKEPOS_BARCODE_RULE_TO_INSERT_PRODUCT" value="' . (getDolGlobalString('TAKEPOS_BARCODE_RULE_TO_INSERT_PRODUCT')) . '">';
+	print '<input type="text" name="FLUXPOS_BARCODE_RULE_TO_INSERT_PRODUCT" value="' . (getDolGlobalString('FLUXPOS_BARCODE_RULE_TO_INSERT_PRODUCT')) . '">';
 	print "</td></tr>\n";
 }
 
@@ -484,7 +484,7 @@ if (isModEnabled('barcode')) {
 //    }
 //}
 //
-//print $form->selectarray('TAKEPOS_ADDON', $array, (empty($conf->global->TAKEPOS_ADDON) ? '0' : $conf->global->TAKEPOS_ADDON), 0);
+//print $form->selectarray('FLUXPOS_ADDON', $array, (empty($conf->global->FLUXPOS_ADDON) ? '0' : $conf->global->FLUXPOS_ADDON), 0);
 //print "</td></tr>\n";
 
 print '</table>';
@@ -492,7 +492,7 @@ print '</div>';
 
 
 // Sumup options
-if (getDolGlobalInt('TAKEPOS_ENABLE_SUMUP')) {
+if (getDolGlobalInt('FLUXPOS_ENABLE_SUMUP')) {
 	print '<br>';
 
 	print '<div class="div-table-responsive-no-min">';
@@ -505,12 +505,12 @@ if (getDolGlobalInt('TAKEPOS_ENABLE_SUMUP')) {
 	print '<tr class="oddeven"><td>';
 	print $langs->trans("SumupAffiliate");
 	print '<td colspan="2">';
-	print '<input type="text" name="TAKEPOS_SUMUP_AFFILIATE" value="' . getDolGlobalString('TAKEPOS_SUMUP_AFFILIATE').'"></input>';
+	print '<input type="text" name="FLUXPOS_SUMUP_AFFILIATE" value="' . getDolGlobalString('FLUXPOS_SUMUP_AFFILIATE').'"></input>';
 	print "</td></tr>\n";
 	print '<tr class="oddeven"><td>';
 	print $langs->trans("SumupAppId");
 	print '<td colspan="2">';
-	print '<input type="text" name="TAKEPOS_SUMUP_APPID" value="' . getDolGlobalString('TAKEPOS_SUMUP_APPID').'"></input>';
+	print '<input type="text" name="FLUXPOS_SUMUP_APPID" value="' . getDolGlobalString('FLUXPOS_SUMUP_APPID').'"></input>';
 	print "</td></tr>\n";
 
 	print '</table>';

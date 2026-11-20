@@ -16,20 +16,20 @@
  */
 
 /**
- *	\file       htdocs/takepos/serviceworker.js
- *	\brief      Service worker of TakePOS: precaches the application shell and serves
+ *	\file       htdocs/fluxpos/serviceworker.js
+ *	\brief      Service worker of FluxPos: precaches the application shell and serves
  *				static assets and the last known pages when the terminal is offline.
  *
- *				Scope is the takepos module directory, so it only controls the TakePOS
+ *				Scope is the fluxpos module directory, so it only controls the FluxPos
  *				pages. Write requests (POST and the tokenized ajax calls) are never
  *				intercepted: the JS layers fall back on IndexedDB when offline.
  */
 
-var takeposCacheName = 'takepos-offline-v1';
+var fluxposCacheName = 'fluxpos-offline-v1';
 
 
 self.addEventListener('install', function (event) {
-	// Relative URLs are resolved against the takepos module directory
+	// Relative URLs are resolved against the fluxpos module directory
 	var urlsToCache = [
 		'css/pos.css.php',
 		'css/colorbox.css',
@@ -38,9 +38,9 @@ self.addEventListener('install', function (event) {
 		'genimg/empty.png'
 	];
 	event.waitUntil(
-		caches.open(takeposCacheName).then(function (cache) {
+		caches.open(fluxposCacheName).then(function (cache) {
 			return cache.addAll(urlsToCache).catch(function (error) {
-				console.log('TakePOS offline: precache failed', error);
+				console.log('FluxPos offline: precache failed', error);
 			});
 		})
 	);
@@ -52,7 +52,7 @@ self.addEventListener('activate', function (event) {
 		caches.keys().then(function (keys) {
 			return Promise.all(
 				keys.filter(function (key) {
-					return key !== takeposCacheName;
+					return key !== fluxposCacheName;
 				}).map(function (key) {
 					return caches.delete(key);
 				})
@@ -77,19 +77,19 @@ self.addEventListener('fetch', function (event) {
 	var pathname = url.pathname;
 
 	// Static assets of the module and of Dolibarr core: cache first, then network
-	var isStaticAsset = pathname.indexOf('/takepos/css/') >= 0 ||
-		pathname.indexOf('/takepos/js/') >= 0 ||
-		pathname.indexOf('/takepos/img/') >= 0 ||
-		pathname.indexOf('/takepos/genimg/') >= 0 ||
+	var isStaticAsset = pathname.indexOf('/fluxpos/css/') >= 0 ||
+		pathname.indexOf('/fluxpos/js/') >= 0 ||
+		pathname.indexOf('/fluxpos/img/') >= 0 ||
+		pathname.indexOf('/fluxpos/genimg/') >= 0 ||
 		/\.(css|js|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)$/.test(pathname);
 	if (isStaticAsset) {
-		event.respondWith(takeposCacheFirst(request));
+		event.respondWith(fluxposCacheFirst(request));
 		return;
 	}
 
 	// Page navigations: network first to keep pages fresh, cached shell when offline
 	if (request.mode === 'navigate') {
-		event.respondWith(takeposNetworkFirst(request));
+		event.respondWith(fluxposNetworkFirst(request));
 		return;
 	}
 
@@ -103,8 +103,8 @@ self.addEventListener('fetch', function (event) {
  * @param  {Request} request Request to serve
  * @returns {Promise<Response>} Promise of the response
  */
-function takeposCacheFirst(request) {
-	return caches.open(takeposCacheName).then(function (cache) {
+function fluxposCacheFirst(request) {
+	return caches.open(fluxposCacheName).then(function (cache) {
 		return cache.match(request).then(function (cached) {
 			if (cached) {
 				return cached;
@@ -125,8 +125,8 @@ function takeposCacheFirst(request) {
  * @param  {Request} request Request to serve
  * @returns {Promise<Response>} Promise of the response
  */
-function takeposNetworkFirst(request) {
-	return caches.open(takeposCacheName).then(function (cache) {
+function fluxposNetworkFirst(request) {
+	return caches.open(fluxposCacheName).then(function (cache) {
 		return fetch(request).then(function (response) {
 			if (response.ok) {
 				cache.put(request, response.clone());

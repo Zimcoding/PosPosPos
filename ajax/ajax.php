@@ -19,8 +19,8 @@
  */
 
 /**
- *	\file       htdocs/takepos/ajax/ajax.php
- *	\brief      Ajax search component for TakePos. It search products of a category.
+ *	\file       htdocs/fluxpos/ajax/ajax.php
+ *	\brief      Ajax search component for FluxPos. It search products of a category.
  */
 
 if (!defined('NOTOKENRENEWAL')) {
@@ -61,12 +61,12 @@ $id = GETPOSTINT('id');
 $search_start = GETPOSTINT('search_start');
 $search_limit = GETPOSTINT('search_limit');
 
-if (!$user->hasRight('takepos', 'run')) {
+if (!$user->hasRight('fluxpos', 'run')) {
 	accessforbidden();
 }
 
 // Initialize a technical object to manage hooks. Note that conf->hooks_modules contains array of hooks
-$hookmanager->initHooks(array('takeposproductsearch')); // new context for product search hooks
+$hookmanager->initHooks(array('fluxposproductsearch')); // new context for product search hooks
 
 $pricelevel = 1;	// default price level if PRODUIT_MULTIPRICES. TODO Get price level from thirdparty.
 
@@ -79,7 +79,7 @@ $pricelevel = 1;	// default price level if PRODUIT_MULTIPRICES. TODO Get price l
  * @param  int $pricelevel Price level to use for prices
  * @return array           Array of products
  */
-function getTakePosProductsForCategory($categid, $pricelevel)
+function getFluxPosProductsForCategory($categid, $pricelevel)
 {
 	global $conf, $db, $langs;
 
@@ -89,7 +89,7 @@ function getTakePosProductsForCategory($categid, $pricelevel)
 		return array();
 	}
 
-	$prods = $object->getObjectsInCateg("product", 0, 0, 0, getDolGlobalString('TAKEPOS_SORTPRODUCTFIELD'), 'ASC', '(o.tosell:=:1)');
+	$prods = $object->getObjectsInCateg("product", 0, 0, 0, getDolGlobalString('FLUXPOS_SORTPRODUCTFIELD'), 'ASC', '(o.tosell:=:1)');
 
 	$res = array();
 	if (is_array($prods) && count($prods) > 0) {
@@ -124,7 +124,7 @@ function getTakePosProductsForCategory($categid, $pricelevel)
  * @param  User   $user User asking the printing
  * @return void
  */
-function takeposPrintInvoiceTicket($id, $term, $user)
+function fluxposPrintInvoiceTicket($id, $term, $user)
 {
 	global $db;
 
@@ -132,11 +132,11 @@ function takeposPrintInvoiceTicket($id, $term, $user)
 		return;
 	}
 
-	require_once DOL_DOCUMENT_ROOT.'/takepos/class/dolreceiptprinter.class.php';
+	require_once dol_buildpath('/fluxpos/class/dolreceiptprinter.class.php');
 	require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
 
 	// check printer for terminal
-	if (getDolGlobalInt('TAKEPOS_PRINTER_TO_USE'.$term) <= 0 && getDolGlobalString('TAKEPOS_PRINT_METHOD') != "takeposconnector") {
+	if (getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term) <= 0 && getDolGlobalString('FLUXPOS_PRINT_METHOD') != "takeposconnector") {
 		return;
 	}
 
@@ -155,13 +155,13 @@ function takeposPrintInvoiceTicket($id, $term, $user)
 		$resultinccounter++;
 		$object->pos_print_counter++;	// increase counter to match the change in database
 
-		$templateidtouse = getDolGlobalInt('TAKEPOS_TEMPLATE_TO_USE_FOR_INVOICES'.$term);	// Note that this may not be ignored by the sendToPrinter()
+		$templateidtouse = getDolGlobalInt('FLUXPOS_TEMPLATE_TO_USE_FOR_INVOICES'.$term);	// Note that this may not be ignored by the sendToPrinter()
 	}
 
 	if ($resultinccounter) {
 		// Send to printer
 		$printer = new dolReceiptPrinter($db);
-		$printer->sendToPrinter($object, $templateidtouse, getDolGlobalInt('TAKEPOS_PRINTER_TO_USE'.$term));
+		$printer->sendToPrinter($object, $templateidtouse, getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term));
 	} else {
 		print 'Failed to update print counter for object ID='.$object->id.' so we refuse to print.';
 	}
@@ -196,17 +196,17 @@ function takeposPrintInvoiceTicket($id, $term, $user)
  * @param  bool   $valid    Validate the sale and record the payments
  * @return array            Result info: array('placeid', 'socid', 'total_ttc', 'ref', 'paid') or array('error' => ...)
  */
-function takeposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $valid = false)
+function fluxposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $valid = false)
 {
 	global $conf, $db, $langs, $mysoc, $user;
 
 	require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
 	require_once DOL_DOCUMENT_ROOT.'/core/lib/functions2.lib.php';
 
-	$langs->loadLangs(array("bills", "errors", "admin", "takepos@takepos"));
+	$langs->loadLangs(array("bills", "errors", "admin", "fluxpos@fluxpos"));
 
-	$takeposterminal = empty($_SESSION['takeposterminal']) ? 1 : $_SESSION['takeposterminal'];
-	$constforcompanyid = 'CASHDESK_ID_THIRDPARTY'.$takeposterminal;
+	$fluxposterminal = empty($_SESSION['fluxposterminal']) ? 1 : $_SESSION['fluxposterminal'];
+	$constforcompanyid = 'FLUXPOS_ID_THIRDPARTY'.$fluxposterminal;
 
 	$invoice = new Facture($db);
 
@@ -219,14 +219,14 @@ function takeposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $v
 			break;
 		}
 	}
-	$ret = $invoice->fetch(0, '(PROV-POS'.$takeposterminal.'-'.$place.')');
+	$ret = $invoice->fetch(0, '(PROV-POS'.$fluxposterminal.'-'.$place.')');
 	if ($ret <= 0) {
 		if (!$haslines) {
 			return array('place' => $place, 'socid' => 0, 'total_ttc' => 0, 'created' => 0);
 		}
 		$invoice->socid = ($socid > 0) ? $socid : getDolGlobalInt($constforcompanyid);
 		if ($invoice->socid <= 0) {
-			return array('error' => $langs->trans("ErrorModuleSetupNotComplete", "TakePOS"));
+			return array('error' => $langs->trans("ErrorModuleSetupNotComplete", "FluxPos"));
 		}
 
 		$dolnowtzuserrel = dol_now('tzuserrel');	// If user is 02 january 22:00, we want to store '02 january'
@@ -235,9 +235,9 @@ function takeposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $v
 		$yearuser = dol_print_date($dolnowtzuserrel, '%Y', 'gmt');
 		$invoice->date = dol_mktime(0, 0, 0, (int) $monthuser, (int) $dayuser, (int) $yearuser, 'tzserver');
 
-		$invoice->module_source = 'takepos';
-		$invoice->pos_source = $takeposterminal;
-		$invoice->entity = !empty($_SESSION["takeposinvoiceentity"]) ? $_SESSION["takeposinvoiceentity"] : $conf->entity;
+		$invoice->module_source = 'fluxpos';
+		$invoice->pos_source = $fluxposterminal;
+		$invoice->entity = !empty($_SESSION["fluxposinvoiceentity"]) ? $_SESSION["fluxposinvoiceentity"] : $conf->entity;
 
 		$db->begin();
 		$placeid = $invoice->create($user);
@@ -246,7 +246,7 @@ function takeposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $v
 			return array('error' => $invoice->error);
 		}
 		$sql = "UPDATE ".MAIN_DB_PREFIX."facture";
-		$sql .= " SET ref='(PROV-POS".$takeposterminal."-".$place.")'";
+		$sql .= " SET ref='(PROV-POS".$fluxposterminal."-".$place.")'";
 		$sql .= " WHERE rowid = ".((int) $placeid);
 		if (!$db->query($sql)) {
 			$db->rollback();
@@ -345,7 +345,7 @@ function takeposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $v
 	if ($valid) {
 		if (!$haslines) {
 			$db->rollback();
-			return array('error' => $langs->trans("NoLinesToBill", "TakePOS"));
+			return array('error' => $langs->trans("NoLinesToBill", "FluxPos"));
 		}
 
 		// Test that the period is not close: a cash control closed for today on this
@@ -353,7 +353,7 @@ function takeposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $v
 		$tmpcurrentday = dol_getdate(dol_now());
 		$sql = "SELECT MIN(ref) as firstref FROM ".MAIN_DB_PREFIX."pos_cash_fence";
 		$sql .= " WHERE entity = ".((int) $conf->entity);
-		$sql .= " AND posnumber = ".((int) $takeposterminal);
+		$sql .= " AND posnumber = ".((int) $fluxposterminal);
 		$sql .= " AND year_close = ".((int) $tmpcurrentday['year']);
 		$sql .= " AND (";
 		$sql .= " (month_close IS NULL AND day_close IS NULL)";
@@ -403,14 +403,14 @@ function takeposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $v
 		// Validation of the draft invoice: the invoice number is attributed here by the
 		// numbering module (same rules as invoice.php for the stock changes)
 		if ($invoice->status == Facture::STATUS_DRAFT) {
-			$constantforkey = 'CASHDESK_NO_DECREASE_STOCK'.$takeposterminal;
+			$constantforkey = 'FLUXPOS_NO_DECREASE_STOCK'.$fluxposterminal;
 			$allowstockchange = (getDolGlobalString($constantforkey) != "1");
 
 			if (isModEnabled('stock') && !isModEnabled('productbatch') && $allowstockchange) {
 				// Validation with a stock change into the warehouse of the terminal
 				$savconst = getDolGlobalString('STOCK_CALCULATE_ON_BILL');
 				$conf->global->STOCK_CALCULATE_ON_BILL = 1;	// To force the change of stock during invoice validation
-				$constantforkey = 'CASHDESK_ID_WAREHOUSE'.$takeposterminal;
+				$constantforkey = 'FLUXPOS_ID_WAREHOUSE'.$fluxposterminal;
 				$res = $invoice->validate($user, '', getDolGlobalInt($constantforkey), 0, 0);
 				$conf->global->STOCK_CALCULATE_ON_BILL = $savconst;
 			} else {
@@ -419,7 +419,7 @@ function takeposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $v
 			}
 			if ($res < 0) {
 				$db->rollback();
-				return array('error' => ($invoice->error == 'NotConfigured' ? $langs->trans("NotConfigured").' (TakePOS numbering module)' : $invoice->error));
+				return array('error' => ($invoice->error == 'NotConfigured' ? $langs->trans("NotConfigured").' (FluxPos numbering module)' : $invoice->error));
 			}
 			$validatedhere = true;
 		}
@@ -448,8 +448,8 @@ function takeposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $v
 
 				if ($paycode == 'delayed') {
 					// Payment will be made outside the POS
-					if (getDolGlobalInt("TAKEPOS_DELAYED_TERMS")) {
-						$invoice->setPaymentTerms(getDolGlobalInt("TAKEPOS_DELAYED_TERMS"));
+					if (getDolGlobalInt("FLUXPOS_DELAYED_TERMS")) {
+						$invoice->setPaymentTerms(getDolGlobalInt("FLUXPOS_DELAYED_TERMS"));
 					}
 					continue;
 				}
@@ -473,11 +473,11 @@ function takeposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $v
 				if (!empty($paymentinfo['accountid'])) {
 					$bankaccount = (int) $paymentinfo['accountid'];
 				} elseif ($paycode == 'LIQ') {
-					$bankaccount = getDolGlobalInt('CASHDESK_ID_BANKACCOUNT_CASH'.$takeposterminal);	// For backward compatibility
+					$bankaccount = getDolGlobalInt('FLUXPOS_ID_BANKACCOUNT_CASH'.$fluxposterminal);	// For backward compatibility
 				} elseif ($paycode == 'CHQ') {
-					$bankaccount = getDolGlobalInt('CASHDESK_ID_BANKACCOUNT_CHEQUE'.$takeposterminal);	// For backward compatibility
+					$bankaccount = getDolGlobalInt('FLUXPOS_ID_BANKACCOUNT_CHEQUE'.$fluxposterminal);	// For backward compatibility
 				} else {
-					$bankaccount = getDolGlobalInt('CASHDESK_ID_BANKACCOUNT_'.$paycode.$takeposterminal);
+					$bankaccount = getDolGlobalInt('FLUXPOS_ID_BANKACCOUNT_'.$paycode.$fluxposterminal);
 				}
 				if ($bankaccount <= 0 && isModEnabled("bank")) {
 					$error++;
@@ -551,7 +551,7 @@ function takeposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $v
 	// printer of the terminal when there is one configured (the receipt of a sale paid
 	// with browser printing can be printed from the card of the invoice)
 	if ($validatedhere) {
-		takeposPrintInvoiceTicket($invoice->id, $takeposterminal, $user);
+		fluxposPrintInvoiceTicket($invoice->id, $fluxposterminal, $user);
 	}
 
 	return array('placeid' => $invoice->id, 'place' => $place, 'socid' => $invoice->socid, 'total_ttc' => $invoice->total_ttc, 'ref' => $invoice->ref, 'paid' => (int) $invoice->paye);
@@ -565,7 +565,7 @@ function takeposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $v
 
 $thirdparty = new Societe($db);
 
-if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
+if ($action == 'getProducts' && $user->hasRight('fluxpos', 'run')) {
 	$tosell = GETPOSTISSET('tosell') ? GETPOSTINT('tosell') : '';
 	$limit = GETPOSTISSET('limit') ? GETPOSTINT('limit') : 0;
 	$offset = GETPOSTISSET('offset') ? GETPOSTINT('offset') : 0;
@@ -582,9 +582,9 @@ if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
 
 	$object = new Categorie($db);
 	if ($category == "supplements") {
-		$category = getDolGlobalInt('TAKEPOS_SUPPLEMENTS_CATEGORY');
+		$category = getDolGlobalInt('FLUXPOS_SUPPLEMENTS_CATEGORY');
 		if (empty($category)) {
-			echo 'Error, the category to use for supplements is not defined. Go into setup of module TakePOS.';
+			echo 'Error, the category to use for supplements is not defined. Go into setup of module FluxPos.';
 			exit;
 		}
 	}
@@ -595,14 +595,14 @@ if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
 		if ($tosell != '') {
 			$filter = '(o.tosell:=:'.((int) $tosell).')';
 		}
-		$prods = $object->getObjectsInCateg("product", 0, $limit, $offset, getDolGlobalString('TAKEPOS_SORTPRODUCTFIELD'), 'ASC', $filter);
+		$prods = $object->getObjectsInCateg("product", 0, $limit, $offset, getDolGlobalString('FLUXPOS_SORTPRODUCTFIELD'), 'ASC', $filter);
 		// Removed properties we don't need
 		$res = array();
 		if (is_array($prods) && count($prods) > 0) {
 			$productChildrenNb = 0;
 			foreach ($prods as $prod) {
 				'@phan-var-force Product $prod';
-				if (getDolGlobalInt('TAKEPOS_PRODUCT_IN_STOCK') == 1) {
+				if (getDolGlobalInt('FLUXPOS_PRODUCT_IN_STOCK') == 1) {
 					if (getDolGlobalInt('PRODUIT_SOUSPRODUITS')) {
 						$productChildrenNb = $prod->hasFatherOrChild(1);
 					}
@@ -610,7 +610,7 @@ if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
 					if ($productChildrenNb == 0) {
 						// remove products without stock
 						$prod->load_stock('nobatch,novirtual');
-						if ($prod->stock_warehouse[getDolGlobalString('CASHDESK_ID_WAREHOUSE'.$_SESSION['takeposterminal'])]->real <= 0) {
+						if ($prod->stock_warehouse[getDolGlobalString('FLUXPOS_ID_WAREHOUSE'.$_SESSION['fluxposterminal'])]->real <= 0) {
 							continue;
 						}
 					}
@@ -628,7 +628,7 @@ if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
 	} else {
 		echo 'Failed to load category with id='.dol_escape_htmltag($category);
 	}
-} elseif ($action == 'search' && $search_term != '' && $user->hasRight('takepos', 'run')) {
+} elseif ($action == 'search' && $search_term != '' && $user->hasRight('fluxpos', 'run')) {
 	top_httphead('application/json');
 
 	// Search barcode into third parties. If found, it means we want to change third parties.
@@ -656,10 +656,10 @@ if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
 
 	// Define $filteroncategids, the filter on category ID if there is a Root category defined.
 	$filteroncategids = '';
-	if (getDolGlobalInt('TAKEPOS_ROOT_CATEGORY_ID') > 0) {	// A root category is defined, we must filter on products inside this category tree
+	if (getDolGlobalInt('FLUXPOS_ROOT_CATEGORY_ID') > 0) {	// A root category is defined, we must filter on products inside this category tree
 		$object = new Categorie($db);
-		//$result = $object->fetch($conf->global->TAKEPOS_ROOT_CATEGORY_ID);
-		$arrayofcateg = $object->get_full_arbo('product', getDolGlobalInt('TAKEPOS_ROOT_CATEGORY_ID'), 1);
+		//$result = $object->fetch($conf->global->FLUXPOS_ROOT_CATEGORY_ID);
+		$arrayofcateg = $object->get_full_arbo('product', getDolGlobalInt('FLUXPOS_ROOT_CATEGORY_ID'), 1);
 		if (is_array($arrayofcateg) && count($arrayofcateg) > 0) {
 			foreach ($arrayofcateg as $val) {
 				$filteroncategids .= ($filteroncategids ? ', ' : '').$val['id'];
@@ -667,7 +667,7 @@ if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
 		}
 	}
 
-	$barcode_rules = getDolGlobalString('TAKEPOS_BARCODE_RULE_TO_INSERT_PRODUCT');
+	$barcode_rules = getDolGlobalString('FLUXPOS_BARCODE_RULE_TO_INSERT_PRODUCT');
 	if (isModEnabled('barcode') && !empty($barcode_rules)) {
 		$barcode_rules_list = array();
 
@@ -725,7 +725,7 @@ if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
 						$objProd->fetch($obj->rowid);
 
 						$ig = '../public/theme/common/nophoto.png';
-						if (!getDolGlobalString('TAKEPOS_HIDE_PRODUCT_IMAGES')) {
+						if (!getDolGlobalString('FLUXPOS_HIDE_PRODUCT_IMAGES')) {
 							$image = $objProd->show_photos('product', $conf->product->multidir_output[(int) $objProd->entity], 'small', 1);
 
 							$match = array();
@@ -736,7 +736,7 @@ if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
 								if (!defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE')) {
 									$ig = $file.'&cache=1';
 								} else {
-									$ig = $file.'&cache=1&publictakepos=1&modulepart=product';
+									$ig = $file.'&cache=1&publicfluxpos=1&modulepart=product';
 								}
 							}
 						}
@@ -767,8 +767,8 @@ if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
 	}
 
 	$sql = 'SELECT p.rowid, p.ref, p.label, p.tosell, p.tobuy, p.barcode, p.price, p.price_ttc' ;
-	if (getDolGlobalInt('TAKEPOS_PRODUCT_IN_STOCK') == 1) {
-		if (getDolGlobalInt('CASHDESK_ID_WAREHOUSE'.$_SESSION['takeposterminal'])) {
+	if (getDolGlobalInt('FLUXPOS_PRODUCT_IN_STOCK') == 1) {
+		if (getDolGlobalInt('FLUXPOS_ID_WAREHOUSE'.$_SESSION['fluxposterminal'])) {
 			$sql .= ', ps.reel';
 		} else {
 			$sql .= ', SUM(ps.reel) as reel';
@@ -791,11 +791,11 @@ if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
 		$sql .= " LEFT JOIN ".MAIN_DB_PREFIX."product_price as pp ON pp.fk_product = p.rowid AND pp.entity = ".((int) $conf->entity)." AND pp.price_level = ".((int) $pricelevel);
 		$sql .= " AND archive = 0";
 	}*/
-	if (getDolGlobalInt('TAKEPOS_PRODUCT_IN_STOCK') == 1) {
+	if (getDolGlobalInt('FLUXPOS_PRODUCT_IN_STOCK') == 1) {
 		$sql .= ' LEFT JOIN '.MAIN_DB_PREFIX.'product_stock as ps';
 		$sql .= ' ON (p.rowid = ps.fk_product';
-		if (getDolGlobalString('CASHDESK_ID_WAREHOUSE'.$_SESSION['takeposterminal'])) {
-			$sql .= " AND ps.fk_entrepot = ".((int) getDolGlobalInt("CASHDESK_ID_WAREHOUSE".$_SESSION['takeposterminal']));
+		if (getDolGlobalString('FLUXPOS_ID_WAREHOUSE'.$_SESSION['fluxposterminal'])) {
+			$sql .= " AND ps.fk_entrepot = ".((int) getDolGlobalInt("FLUXPOS_ID_WAREHOUSE".$_SESSION['fluxposterminal']));
 		}
 		$sql .= ')';
 	}
@@ -812,7 +812,7 @@ if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
 		$sql .= ' AND EXISTS (SELECT cp.fk_product FROM '.MAIN_DB_PREFIX.'categorie_product as cp WHERE cp.fk_product = p.rowid AND cp.fk_categorie IN ('.$db->sanitize($filteroncategids).'))';
 	}
 	$sql .= ' AND p.tosell = 1';
-	if (getDolGlobalInt('TAKEPOS_PRODUCT_IN_STOCK') == 1 && getDolGlobalInt('CASHDESK_ID_WAREHOUSE'.$_SESSION['takeposterminal'])) {
+	if (getDolGlobalInt('FLUXPOS_PRODUCT_IN_STOCK') == 1 && getDolGlobalInt('FLUXPOS_ID_WAREHOUSE'.$_SESSION['fluxposterminal'])) {
 		$sql .= ' AND ps.reel > 0';
 	}
 	$sql .= natural_search(array('ref', 'label', 'barcode'), $search_term);
@@ -823,7 +823,7 @@ if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
 		$sql .= $hookmanager->resPrint;
 	}
 
-	if (getDolGlobalInt('TAKEPOS_PRODUCT_IN_STOCK') == 1 && !getDolGlobalInt('CASHDESK_ID_WAREHOUSE'.$_SESSION['takeposterminal'])) {
+	if (getDolGlobalInt('FLUXPOS_PRODUCT_IN_STOCK') == 1 && !getDolGlobalInt('FLUXPOS_ID_WAREHOUSE'.$_SESSION['fluxposterminal'])) {
 		$sql .= ' GROUP BY p.rowid, p.ref, p.label, p.tosell, p.tobuy, p.barcode, p.price, p.price_ttc';
 		// Add fields from hooks
 		$parameters = array();
@@ -856,7 +856,7 @@ if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
 				if (!defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE')) {
 					$ig = $file.'&cache=1';
 				} else {
-					$ig = $file.'&cache=1&publictakepos=1&modulepart=product';
+					$ig = $file.'&cache=1&publicfluxpos=1&modulepart=product';
 				}
 			}
 
@@ -901,7 +901,7 @@ if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
 	} else {
 		echo 'Failed to search product : '.$db->lasterror();
 	}
-} elseif ($action == 'getCatalog' && $user->hasRight('takepos', 'run')) {
+} elseif ($action == 'getCatalog' && $user->hasRight('fluxpos', 'run')) {
 	top_httphead('application/json');
 
 	// Price level of the thirdparty (or default level)
@@ -914,12 +914,12 @@ if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
 
 	// Categories tree of the POS products (same split as index.php)
 	$object = new Categorie($db);
-	$fulltree = $object->get_full_arbo('product', getDolGlobalInt('TAKEPOS_ROOT_CATEGORY_ID'), 1);
+	$fulltree = $object->get_full_arbo('product', getDolGlobalInt('FLUXPOS_ROOT_CATEGORY_ID'), 1);
 
 	$levelofrootcategory = 0;
-	if (getDolGlobalInt('TAKEPOS_ROOT_CATEGORY_ID') > 0) {
+	if (getDolGlobalInt('FLUXPOS_ROOT_CATEGORY_ID') > 0) {
 		foreach ($fulltree as $key => $categorycursor) {
-			if ($categorycursor['id'] == getDolGlobalInt('TAKEPOS_ROOT_CATEGORY_ID')) {
+			if ($categorycursor['id'] == getDolGlobalInt('FLUXPOS_ROOT_CATEGORY_ID')) {
 				$levelofrootcategory = $categorycursor['level'];
 				break;
 			}
@@ -948,7 +948,7 @@ if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
 	foreach ($subcategories as $categorycursor) {
 		$categidstoload[] = $categorycursor['id'];
 	}
-	$supplementscategoryid = getDolGlobalInt('TAKEPOS_SUPPLEMENTS_CATEGORY');
+	$supplementscategoryid = getDolGlobalInt('FLUXPOS_SUPPLEMENTS_CATEGORY');
 	if ($supplementscategoryid > 0) {
 		$categidstoload[] = $supplementscategoryid;
 	}
@@ -956,12 +956,12 @@ if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
 	foreach ($categidstoload as $categid) {
 		$catalogkey = ($categid == $supplementscategoryid) ? 'supplements' : (string) $categid;
 		if (!isset($products[$catalogkey])) {
-			$products[$catalogkey] = getTakePosProductsForCategory($categid, $pricelevel);
+			$products[$catalogkey] = getFluxPosProductsForCategory($categid, $pricelevel);
 		}
 	}
 
 	echo json_encode(array('maincategories' => $maincategories, 'subcategories' => $subcategories, 'products' => $products));
-} elseif ($action == 'syncOfflineOrder' && $user->hasRight('takepos', 'run')) {
+} elseif ($action == 'syncOfflineOrder' && $user->hasRight('fluxpos', 'run')) {
 	top_httphead('application/json');
 
 	// Write operation: only POST is accepted
@@ -977,33 +977,33 @@ if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
 		exit;
 	}
 
-	$result = takeposSyncOfflineOrder((string) $input['place'], (array) $input['lines'], (!empty($input['thirdpartyid']) ? (int) $input['thirdpartyid'] : 0), (isset($input['payments']) && is_array($input['payments']) ? $input['payments'] : array()), (!empty($input['valid'])));
+	$result = fluxposSyncOfflineOrder((string) $input['place'], (array) $input['lines'], (!empty($input['thirdpartyid']) ? (int) $input['thirdpartyid'] : 0), (isset($input['payments']) && is_array($input['payments']) ? $input['payments'] : array()), (!empty($input['valid'])));
 	echo json_encode($result);
-} elseif ($action == "opendrawer" && $term != '' && $user->hasRight('takepos', 'run')) {
+} elseif ($action == "opendrawer" && $term != '' && $user->hasRight('fluxpos', 'run')) {
 	top_httphead('application/html');
 
-	require_once DOL_DOCUMENT_ROOT.'/takepos/class/dolreceiptprinter.class.php';
+	require_once dol_buildpath('/fluxpos/class/dolreceiptprinter.class.php');
 	$printer = new dolReceiptPrinter($db);
 
 	// check printer for terminal
-	if (getDolGlobalInt('TAKEPOS_PRINTER_TO_USE'.$term) > 0) {
+	if (getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term) > 0) {
 		// TODO Set the profile into $this->profile (used by initPrinter). Profile not used yet.
 
 		// Init printer
-		$printer->initPrinter(getDolGlobalInt('TAKEPOS_PRINTER_TO_USE'.$term));
+		$printer->initPrinter(getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term));
 		// open cashdrawer
 		if ($printer->getPrintConnector()) {
 			$printer->pulse();
 			$printer->close();
 		} else {
-			print 'Failed to init printer with ID='.getDolGlobalInt('TAKEPOS_PRINTER_TO_USE'.$term);
+			print 'Failed to init printer with ID='.getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term);
 		}
 	}
-} elseif ($action == "printinvoiceticket" && $term != '' && $id > 0 && $user->hasRight('takepos', 'run')) {
+} elseif ($action == "printinvoiceticket" && $term != '' && $id > 0 && $user->hasRight('fluxpos', 'run')) {
 	top_httphead('application/html');
 
-	takeposPrintInvoiceTicket($id, $term, $user);
-} elseif ($action == 'getInvoice' && $user->hasRight('takepos', 'run')) {
+	fluxposPrintInvoiceTicket($id, $term, $user);
+} elseif ($action == 'getInvoice' && $user->hasRight('fluxpos', 'run')) {
 	top_httphead('application/json');
 
 	require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
@@ -1019,14 +1019,14 @@ if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
 	unset($object->fields);
 
 	echo json_encode($object);
-} elseif ($action == 'thecheck' && $user->hasRight('takepos', 'run')) {
+} elseif ($action == 'thecheck' && $user->hasRight('fluxpos', 'run')) {
 	top_httphead('application/html');
 
 	require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
-	require_once DOL_DOCUMENT_ROOT.'/takepos/class/dolreceiptprinter.class.php';
+	require_once dol_buildpath('/fluxpos/class/dolreceiptprinter.class.php');
 
 	$object = new Facture($db);
 	$printer = new dolReceiptPrinter($db);
 
-	$printer->sendToPrinter($object, getDolGlobalInt('TAKEPOS_TEMPLATE_TO_USE_FOR_INVOICES'.$term), getDolGlobalInt('TAKEPOS_PRINTER_TO_USE'.$term));
+	$printer->sendToPrinter($object, getDolGlobalInt('FLUXPOS_TEMPLATE_TO_USE_FOR_INVOICES'.$term), getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term));
 }

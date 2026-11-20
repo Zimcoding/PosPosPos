@@ -17,8 +17,8 @@
  */
 
 /**
- *       \file       htdocs/takepos/public/menu.php
- *       \ingroup    takepos
+ *       \file       htdocs/fluxpos/public/menu.php
+ *       \ingroup    fluxpos
  *       \brief      Public menu for customers
  */
 
@@ -42,7 +42,7 @@ require_once DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php';
  * @var Societe $mysoc
  * @var Translate $langs
  */
-if (!$conf->global->TAKEPOS_QR_MENU) {
+if (!$conf->global->FLUXPOS_QR_MENU) {
 	accessforbidden(); // If Restaurant Menu is disabled never allow NO LOGIN access
 }
 ?>
@@ -65,11 +65,11 @@ if (!$conf->global->TAKEPOS_QR_MENU) {
 
 <?php
 $categorie = new Categorie($db);
-$categories = $categorie->get_full_arbo('product', ((getDolGlobalInt('TAKEPOS_ROOT_CATEGORY_ID') > 0) ? $conf->global->TAKEPOS_ROOT_CATEGORY_ID : 0), 1);
+$categories = $categorie->get_full_arbo('product', ((getDolGlobalInt('FLUXPOS_ROOT_CATEGORY_ID') > 0) ? $conf->global->FLUXPOS_ROOT_CATEGORY_ID : 0), 1);
 $levelofrootcategory = 0;
-if (getDolGlobalInt('TAKEPOS_ROOT_CATEGORY_ID') > 0) {
+if (getDolGlobalInt('FLUXPOS_ROOT_CATEGORY_ID') > 0) {
 	foreach ($categories as $key => $categorycursor) {
-		if ($categorycursor['id'] == getDolGlobalInt('TAKEPOS_ROOT_CATEGORY_ID')) {
+		if ($categorycursor['id'] == getDolGlobalInt('FLUXPOS_ROOT_CATEGORY_ID')) {
 			$levelofrootcategory = $categorycursor['level'];
 			break;
 		}
@@ -97,7 +97,7 @@ foreach ($maincategories as $cat) {
 
 	$object = new Categorie($db);
 	$result = $object->fetch($cat['id']);
-	$prods = $object->getObjectsInCateg("product", 0, 0, 0, $conf->global->TAKEPOS_SORTPRODUCTFIELD, 'ASC');
+	$prods = $object->getObjectsInCateg("product", 0, 0, 0, $conf->global->FLUXPOS_SORTPRODUCTFIELD, 'ASC');
 	/** @var Product[] $prods */
 	'@phan-var-force Product[] $prods';
 	foreach ($prods as $pro) {

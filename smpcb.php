@@ -17,8 +17,8 @@
  */
 
 /**
- *	\file       htdocs/takepos/smpcb.php
- *	\ingroup	takepos
+ *	\file       htdocs/fluxpos/smpcb.php
+ *	\ingroup	fluxpos
  *	\brief      Page with the content for smpcb payment
  */
 
@@ -41,7 +41,7 @@ require '../main.inc.php';
  * @var User $user
  */
 
-if (!$user->hasRight('takepos', 'run')) {
+if (!$user->hasRight('fluxpos', 'run')) {
 	accessforbidden();
 }
 

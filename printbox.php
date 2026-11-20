@@ -19,8 +19,8 @@
  */
 
 /**
- *	\file       htdocs/takepos/printbox.php
- *	\ingroup    takepos
+ *	\file       htdocs/fluxpos/printbox.php
+ *	\ingroup    fluxpos
  *	\brief      Popup to enter details before printing
  */
 
@@ -52,13 +52,13 @@ require_once DOL_DOCUMENT_ROOT.'/core/lib/functions.lib.php';
 
 global $langs, $db;
 
-$langs->loadLangs(array("bills", "cashdesk"));
+$langs->loadLangs(array("bills", "fluxpos@fluxpos"));
 
 $facid = GETPOSTINT('facid');
 
 $action = GETPOST('action', 'aZ09');
 
-if (!$user->hasRight('takepos', 'run')) {
+if (!$user->hasRight('fluxpos', 'run')) {
 	accessforbidden();
 }
 
@@ -74,8 +74,8 @@ if (!$user->hasRight('takepos', 'run')) {
  * View
  */
 
-$arrayofcss = array('/takepos/css/pos.css.php');
-$arrayofjs = array('/takepos/js/jquery.colorbox-min.js');
+$arrayofcss = array('/fluxpos/css/pos.css.php');
+$arrayofjs = array('/fluxpos/js/jquery.colorbox-min.js');
 
 $head = '';
 top_htmlhead($head, '', 0, 0, $arrayofjs, $arrayofcss);
@@ -101,14 +101,14 @@ top_htmlhead($head, '', 0, 0, $arrayofjs, $arrayofcss);
 <center>
 <?php
 if ($action == "without_details") {
-	$label_default = getDolGlobalString('TAKEPOS_PRINT_WITHOUT_DETAILS_LABEL_DEFAULT');
+	$label_default = getDolGlobalString('FLUXPOS_PRINT_WITHOUT_DETAILS_LABEL_DEFAULT');
 	$qty_default = 1;
 
-	print '<input type="text" id="label" name="label" class="takepospay" value="' . $label_default . '" style="width:40%;" placeholder="' . $langs->trans('Label') . '">';
-	print '<input type="text" id="qty" name="qty" class="takepospay" value="' . $qty_default . '" style="width:10%;" placeholder="' . $langs->trans('Qty') . '">';
+	print '<input type="text" id="label" name="label" class="fluxpospay" value="' . $label_default . '" style="width:40%;" placeholder="' . $langs->trans('Label') . '">';
+	print '<input type="text" id="qty" name="qty" class="fluxpospay" value="' . $qty_default . '" style="width:10%;" placeholder="' . $langs->trans('Qty') . '">';
 }
 ?>
-<input type="button" class="button takepospay clearboth" value="OK" onclick="Save();">
+<input type="button" class="button fluxpospay clearboth" value="OK" onclick="Save();">
 </center>
 
 </body>

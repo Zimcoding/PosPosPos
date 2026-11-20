@@ -21,8 +21,8 @@
  */
 
 /**
- *    \file       htdocs/takepos/invoice.php
- *    \ingroup    takepos
+ *    \file       htdocs/fluxpos/invoice.php
+ *    \ingroup    fluxpos
  *    \brief      Page to generate section with list of lines
  */
 
@@ -62,9 +62,9 @@ require_once DOL_DOCUMENT_ROOT.'/contact/class/contact.class.php';
  * @var User $user
  */
 
-$hookmanager->initHooks(array('takeposinvoice'));
+$hookmanager->initHooks(array('fluxposinvoice'));
 
-$langs->loadLangs(array("companies", "commercial", "bills", "cashdesk", "stocks", "banks"));
+$langs->loadLangs(array("companies", "commercial", "bills", "fluxpos@fluxpos", "stocks", "banks"));
 
 $action = GETPOST('action', 'aZ09');
 $idproduct = GETPOSTINT('idproduct');
@@ -73,35 +73,35 @@ $placeid = 0; // $placeid is ID of invoice
 $mobilepage = GETPOST('mobilepage', 'alpha');
 $batch = ''; // Default no batch if missing
 
-// Terminal is stored into $_SESSION["takeposterminal"];
+// Terminal is stored into $_SESSION["fluxposterminal"];
 
-if (!$user->hasRight('takepos', 'run') && !defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE')) {
-	accessforbidden('No permission to use the TakePOS');
+if (!$user->hasRight('fluxpos', 'run') && !defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE')) {
+	accessforbidden('No permission to use the FluxPos');
 }
 
 if (defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE')) {
 	// DIRECT LINK TO THIS PAGE FROM MOBILE AND NO TERMINAL SELECTED
-	if ($_SESSION["takeposterminal"] == "") {
-		if (getDolGlobalString('TAKEPOS_NUM_TERMINALS') == "1") {
-			$_SESSION["takeposterminal"] = 1;
+	if ($_SESSION["fluxposterminal"] == "") {
+		if (getDolGlobalString('FLUXPOS_NUM_TERMINALS') == "1") {
+			$_SESSION["fluxposterminal"] = 1;
 		} else {
-			header("Location: ".DOL_URL_ROOT."/takepos/index.php");
+			header("Location: ".dol_buildpath('/fluxpos/index.php', 1));
 			exit;
 		}
 	}
 }
 
 
-$takeposterminal = isset($_SESSION["takeposterminal"]) ? $_SESSION["takeposterminal"] : '';
+$fluxposterminal = isset($_SESSION["fluxposterminal"]) ? $_SESSION["fluxposterminal"] : '';
 
 // When session has expired (selected terminal has been lost from session), redirect to the terminal selection.
-if (empty($takeposterminal)) {
-	if (getDolGlobalInt('TAKEPOS_NUM_TERMINALS') == 1) {
-		$_SESSION["takeposterminal"] = 1; // Use terminal 1 if there is only 1 terminal
-		$takeposterminal = 1;
-	} elseif (!empty($_COOKIE["takeposterminal"])) {
-		$_SESSION["takeposterminal"] = preg_replace('/[^a-zA-Z0-9_\-]/', '', $_COOKIE["takeposterminal"]); // Restore takeposterminal from previous session
-		$takeposterminal = $_SESSION["takeposterminal"];
+if (empty($fluxposterminal)) {
+	if (getDolGlobalInt('FLUXPOS_NUM_TERMINALS') == 1) {
+		$_SESSION["fluxposterminal"] = 1; // Use terminal 1 if there is only 1 terminal
+		$fluxposterminal = 1;
+	} elseif (!empty($_COOKIE["fluxposterminal"])) {
+		$_SESSION["fluxposterminal"] = preg_replace('/[^a-zA-Z0-9_\-]/', '', $_COOKIE["fluxposterminal"]); // Restore fluxposterminal from previous session
+		$fluxposterminal = $_SESSION["fluxposterminal"];
 	} else {
 		print <<<SCRIPT
 <script language="javascript">
@@ -128,13 +128,13 @@ function fail($message)
 }
 
 /**
- * Delete an invoice line and the TakePOS supplement lines attached to it.
+ * Delete an invoice line and the FluxPos supplement lines attached to it.
  *
  * @param	Facture	$invoice	Invoice object
  * @param	int		$lineid		Line id to delete
  * @return	int					Return integer <0 if KO, >0 if OK
  */
-function takeposDeleteLineWithChildren($invoice, $lineid)
+function fluxposDeleteLineWithChildren($invoice, $lineid)
 {
 	$lineid = (int) $lineid;
 	if ($lineid <= 0) {
@@ -219,13 +219,13 @@ $invoice = new Facture($db);
 if ($invoiceid > 0) {
 	$ret = $invoice->fetch($invoiceid);
 } else {
-	$ret = $invoice->fetch(0, '(PROV-POS'.$takeposterminal.'-'.$place.')');
+	$ret = $invoice->fetch(0, '(PROV-POS'.$fluxposterminal.'-'.$place.')');
 }
 if ($ret > 0) {
 	$placeid = $invoice->id;
 }
 
-$constforcompanyid = 'CASHDESK_ID_THIRDPARTY'.$takeposterminal;
+$constforcompanyid = 'FLUXPOS_ID_THIRDPARTY'.$fluxposterminal;
 
 $soc = new Societe($db);
 if ($invoice->socid > 0) {
@@ -235,18 +235,18 @@ if ($invoice->socid > 0) {
 }
 
 // Assign a default project, if relevant
-if (isModEnabled('project') && getDolGlobalInt("CASHDESK_ID_PROJECT".$takeposterminal)) {
-	$invoice->fk_project = getDolGlobalInt("CASHDESK_ID_PROJECT".$takeposterminal);
+if (isModEnabled('project') && getDolGlobalInt("FLUXPOS_ID_PROJECT".$fluxposterminal)) {
+	$invoice->fk_project = getDolGlobalInt("FLUXPOS_ID_PROJECT".$fluxposterminal);
 }
 
 // Change the currency of invoice if it was modified
-if (isModEnabled('multicurrency') && !empty($_SESSION["takeposcustomercurrency"])) {
-	if ($invoice->multicurrency_code != $_SESSION["takeposcustomercurrency"]) {
-		$invoice->setMulticurrencyCode($_SESSION["takeposcustomercurrency"]);
+if (isModEnabled('multicurrency') && !empty($_SESSION["fluxposcustomercurrency"])) {
+	if ($invoice->multicurrency_code != $_SESSION["fluxposcustomercurrency"]) {
+		$invoice->setMulticurrencyCode($_SESSION["fluxposcustomercurrency"]);
 	}
 }
 
-$term = empty($_SESSION["takeposterminal"]) ? 1 : $_SESSION["takeposterminal"];
+$term = empty($_SESSION["fluxposterminal"]) ? 1 : $_SESSION["fluxposterminal"];
 
 
 /*
@@ -271,8 +271,8 @@ $idoflineadded = 0;
 // Enforce the "edit lines" permission on every action that modifies an existing line
 // (delete, quantity, price, discount). Adding a line, a free zone or a note is gated by
 // the "run" permission elsewhere and must stay available to a plain cashier (#38949).
-if (in_array($action, array('deleteline', 'updateqty', 'updateprice', 'updatereduction', 'update_reduction_global')) && !$user->hasRight('takepos', 'editlines')) {
-	dol_htmloutput_errors($langs->trans("NotEnoughPermissions", "TakePos"), array(), 1);
+if (in_array($action, array('deleteline', 'updateqty', 'updateprice', 'updatereduction', 'update_reduction_global')) && !$user->hasRight('fluxpos', 'editlines')) {
+	dol_htmloutput_errors($langs->trans("NotEnoughPermissions", "FluxPos"), array(), 1);
 	$action = '';
 }
 
@@ -283,7 +283,7 @@ if (empty($reshook)) {
 
 	$sql = "SELECT MIN(ref) as firstref FROM ".MAIN_DB_PREFIX."pos_cash_fence";
 	$sql .= " WHERE entity = ".((int) $conf->entity);
-	$sql .= " AND posnumber = ".((int) $takeposterminal);
+	$sql .= " AND posnumber = ".((int) $fluxposterminal);
 	$sql .= " AND year_close = ".((int) $tmpcurrentday['year']);
 	$sql .= " AND (";
 	$sql .= " (month_close IS NULL AND day_close IS NULL)";
@@ -308,20 +308,20 @@ if (empty($reshook)) {
 		$action = '';
 	}
 
-	// Action to record a payment on a TakePOS invoice
-	if ($action == 'valid' && $user->hasRight('takepos', 'run')) {
+	// Action to record a payment on a FluxPos invoice
+	if ($action == 'valid' && $user->hasRight('fluxpos', 'run')) {
 		$bankaccount = 0;
 		$error = 0;
 
-		if (getDolGlobalString('TAKEPOS_CAN_FORCE_BANK_ACCOUNT_DURING_PAYMENT')) {
+		if (getDolGlobalString('FLUXPOS_CAN_FORCE_BANK_ACCOUNT_DURING_PAYMENT')) {
 			$bankaccount = GETPOSTINT('accountid');
 		} else {
 			if ($pay == 'LIQ') {
-				$bankaccount = getDolGlobalInt('CASHDESK_ID_BANKACCOUNT_CASH'.$_SESSION["takeposterminal"]);            // For backward compatibility
+				$bankaccount = getDolGlobalInt('FLUXPOS_ID_BANKACCOUNT_CASH'.$_SESSION["fluxposterminal"]);            // For backward compatibility
 			} elseif ($pay == "CHQ") {
-				$bankaccount = getDolGlobalInt('CASHDESK_ID_BANKACCOUNT_CHEQUE'.$_SESSION["takeposterminal"]);    // For backward compatibility
+				$bankaccount = getDolGlobalInt('FLUXPOS_ID_BANKACCOUNT_CHEQUE'.$_SESSION["fluxposterminal"]);    // For backward compatibility
 			} else {
-				$accountname = "CASHDESK_ID_BANKACCOUNT_".$pay.$_SESSION["takeposterminal"];
+				$accountname = "FLUXPOS_ID_BANKACCOUNT_".$pay.$_SESSION["fluxposterminal"];
 				$bankaccount = getDolGlobalInt($accountname);
 			}
 		}
@@ -370,7 +370,7 @@ if (empty($reshook)) {
 			$invoice->update($user);
 		}
 
-		$constantforkey = 'CASHDESK_NO_DECREASE_STOCK'.(isset($_SESSION["takeposterminal"]) ? $_SESSION["takeposterminal"] : '');
+		$constantforkey = 'FLUXPOS_NO_DECREASE_STOCK'.(isset($_SESSION["fluxposterminal"]) ? $_SESSION["fluxposterminal"] : '');
 		$allowstockchange = (getDolGlobalString($constantforkey) != "1");
 
 		if ($error) {
@@ -382,12 +382,12 @@ if (empty($reshook)) {
 				$res = 1;
 			} else {
 				dol_syslog("Sale already validated");
-				dol_htmloutput_errors($langs->trans("InvoiceIsAlreadyValidated", "TakePos"), [], 1);
+				dol_htmloutput_errors($langs->trans("InvoiceIsAlreadyValidated", "FluxPos"), [], 1);
 			}
 		} elseif (count($invoice->lines) == 0) {
 			$error++;
 			dol_syslog('Sale without lines');
-			dol_htmloutput_errors($langs->trans("NoLinesToBill", "TakePos"), [], 1);
+			dol_htmloutput_errors($langs->trans("NoLinesToBill", "FluxPos"), [], 1);
 		} elseif (isModEnabled('stock') && !isModEnabled('productbatch') && $allowstockchange) {
 			// Validation of invoice with change into stock when product/lot module is NOT enabled and stock change NOT disabled.
 			// The case for isModEnabled('productbatch') is processed few lines later.
@@ -395,7 +395,7 @@ if (empty($reshook)) {
 
 			$conf->global->STOCK_CALCULATE_ON_BILL = 1;	// To force the change of stock during invoice validation
 
-			$constantforkey = 'CASHDESK_ID_WAREHOUSE'.(isset($_SESSION["takeposterminal"]) ? $_SESSION["takeposterminal"] : '');
+			$constantforkey = 'FLUXPOS_ID_WAREHOUSE'.(isset($_SESSION["fluxposterminal"]) ? $_SESSION["fluxposterminal"] : '');
 			dol_syslog("Validate invoice with stock change. Warehouse defined into constant ".$constantforkey." = ".getDolGlobalString($constantforkey));
 
 			// Validate invoice with stock change into warehouse getDolGlobalInt($constantforkey)
@@ -412,7 +412,7 @@ if (empty($reshook)) {
 			if ($res < 0) {
 				$error++;
 				$langs->load("admin");
-				dol_htmloutput_errors($invoice->error == 'NotConfigured' ? $langs->trans("NotConfigured").' (TakePos numbering module)' : $invoice->error, $invoice->errors, 1);
+				dol_htmloutput_errors($invoice->error == 'NotConfigured' ? $langs->trans("NotConfigured").' (FluxPos numbering module)' : $invoice->error, $invoice->errors, 1);
 			}
 		}
 
@@ -460,8 +460,8 @@ if (empty($reshook)) {
 						}
 					}
 					$remaintopay = $invoice->getRemainToPay(); // Recalculate remain to pay after the payment is recorded
-				} elseif (getDolGlobalInt("TAKEPOS_DELAYED_TERMS")) {
-					$invoice->setPaymentTerms(getDolGlobalInt("TAKEPOS_DELAYED_TERMS"));
+				} elseif (getDolGlobalInt("FLUXPOS_DELAYED_TERMS")) {
+					$invoice->setPaymentTerms(getDolGlobalInt("FLUXPOS_DELAYED_TERMS"));
 				}
 			}
 
@@ -492,10 +492,10 @@ if (empty($reshook)) {
 
 				// The case !isModEnabled('productbatch') was processed few lines before.
 				require_once DOL_DOCUMENT_ROOT . "/product/stock/class/mouvementstock.class.php";
-				$constantforkey = 'CASHDESK_ID_WAREHOUSE'.$_SESSION["takeposterminal"];
+				$constantforkey = 'FLUXPOS_ID_WAREHOUSE'.$_SESSION["fluxposterminal"];
 				$inventorycode = dol_print_date(dol_now(), 'dayhourlog');
-				// Label of stock movement will be "TakePOS - Invoice XXXX"
-				$labeltakeposmovement = 'TakePOS - '.$langs->trans("Invoice").' '.$invoice->ref;
+				// Label of stock movement will be "FluxPos - Invoice XXXX"
+				$labelfluxposmovement = 'FluxPos - '.$langs->trans("Invoice").' '.$invoice->ref;
 
 				foreach ($invoice->lines as $line) {
 					// Use the warehouse id defined on invoice line else in the setup
@@ -509,7 +509,7 @@ if (empty($reshook)) {
 						$mouvP = new MouvementStock($db);
 						$mouvP->setOrigin($invoice->element, $invoice->id);
 
-						$res = $mouvP->livraison($user, $line->fk_product, $warehouseid, $line->qty, $line->price, $labeltakeposmovement, '', '', '', $prod_batch->batch, $prod_batch->id, $inventorycode);
+						$res = $mouvP->livraison($user, $line->fk_product, $warehouseid, $line->qty, $line->price, $labelfluxposmovement, '', '', '', $prod_batch->batch, $prod_batch->id, $inventorycode);
 						if ($res < 0) {
 							dol_htmloutput_errors($mouvP->error, $mouvP->errors, 1);
 							$error++;
@@ -518,7 +518,7 @@ if (empty($reshook)) {
 						$mouvP = new MouvementStock($db);
 						$mouvP->setOrigin($invoice->element, $invoice->id);
 
-						$res = $mouvP->livraison($user, $line->fk_product, $warehouseid, $line->qty, $line->price, $labeltakeposmovement, '', '', '', '', 0, $inventorycode);
+						$res = $mouvP->livraison($user, $line->fk_product, $warehouseid, $line->qty, $line->price, $labelfluxposmovement, '', '', '', '', 0, $inventorycode);
 						if ($res < 0) {
 							dol_htmloutput_errors($mouvP->error, $mouvP->errors, 1);
 							$error++;
@@ -541,14 +541,14 @@ if (empty($reshook)) {
 	}
 
 	$creditnote = null;
-	if ($action == 'creditnote' && $user->hasRight('takepos', 'run')) {
+	if ($action == 'creditnote' && $user->hasRight('fluxpos', 'run')) {
 		$db->begin();
 
 		$creditnote = new Facture($db);
 		$creditnote->socid = $invoice->socid;
 		$creditnote->date = dol_now();
-		$creditnote->module_source = 'takepos';
-		$creditnote->pos_source =  isset($_SESSION["takeposterminal"]) ? $_SESSION["takeposterminal"] : '' ;
+		$creditnote->module_source = 'fluxpos';
+		$creditnote->pos_source =  isset($_SESSION["fluxposterminal"]) ? $_SESSION["fluxposterminal"] : '' ;
 		$creditnote->type = Facture::TYPE_CREDIT_NOTE;
 		$creditnote->fk_facture_source = $placeid;
 
@@ -667,7 +667,7 @@ if (empty($reshook)) {
 
 		// The credit note is create here. We must now validate it.
 
-		$constantforkey = 'CASHDESK_NO_DECREASE_STOCK'.(isset($_SESSION["takeposterminal"]) ? $_SESSION["takeposterminal"] : '');
+		$constantforkey = 'FLUXPOS_NO_DECREASE_STOCK'.(isset($_SESSION["fluxposterminal"]) ? $_SESSION["fluxposterminal"] : '');
 		$allowstockchange = getDolGlobalString($constantforkey) != "1";
 
 		if (isModEnabled('stock') && !isModEnabled('productbatch') && $allowstockchange) {
@@ -676,7 +676,7 @@ if (empty($reshook)) {
 			$savconst = getDolGlobalString('STOCK_CALCULATE_ON_BILL');
 			$conf->global->STOCK_CALCULATE_ON_BILL = 1;	// We force setup to have update of stock on invoice validation/unvalidation
 
-			$constantforkey = 'CASHDESK_ID_WAREHOUSE'.(isset($_SESSION["takeposterminal"]) ? $_SESSION["takeposterminal"] : '');
+			$constantforkey = 'FLUXPOS_ID_WAREHOUSE'.(isset($_SESSION["fluxposterminal"]) ? $_SESSION["fluxposterminal"] : '');
 			$warehouseid = getDolGlobalInt($constantforkey);
 
 			dol_syslog("Validate invoice with stock change into warehouse defined into constant ".$constantforkey." = ".getDolGlobalString($constantforkey)." or warehouseid= ".$warehouseid." if defined.");
@@ -704,10 +704,10 @@ if (empty($reshook)) {
 
 				// The case !isModEnabled('productbatch') was processed few lines before.
 				require_once DOL_DOCUMENT_ROOT . "/product/stock/class/mouvementstock.class.php";
-				$constantforkey = 'CASHDESK_ID_WAREHOUSE'.$_SESSION["takeposterminal"];
+				$constantforkey = 'FLUXPOS_ID_WAREHOUSE'.$_SESSION["fluxposterminal"];
 				$inventorycode = dol_print_date(dol_now(), 'dayhourlog');
-				// Label of stock movement will be "TakePOS - Invoice XXXX"
-				$labeltakeposmovement = 'TakePOS - '.$langs->trans("CreditNote").' '.$creditnote->ref;
+				// Label of stock movement will be "FluxPos - Invoice XXXX"
+				$labelfluxposmovement = 'FluxPos - '.$langs->trans("CreditNote").' '.$creditnote->ref;
 
 				foreach ($creditnote->lines as $line) {
 					// Use the warehouse id defined on invoice line else in the setup
@@ -721,7 +721,7 @@ if (empty($reshook)) {
 						$mouvP = new MouvementStock($db);
 						$mouvP->setOrigin($creditnote->element, $creditnote->id);
 
-						$res = $mouvP->reception($user, $line->fk_product, $warehouseid, $line->qty, $line->price, $labeltakeposmovement, '', '', $line->batch, '', 0, $inventorycode);
+						$res = $mouvP->reception($user, $line->fk_product, $warehouseid, $line->qty, $line->price, $labelfluxposmovement, '', '', $line->batch, '', 0, $inventorycode);
 						if ($res < 0) {
 							dol_htmloutput_errors($mouvP->error, $mouvP->errors, 1);
 							$error++;
@@ -730,7 +730,7 @@ if (empty($reshook)) {
 						$mouvP = new MouvementStock($db);
 						$mouvP->setOrigin($creditnote->element, $creditnote->id);
 
-						$res = $mouvP->reception($user, $line->fk_product, $warehouseid, $line->qty, $line->price, $labeltakeposmovement, '', '', '', '', 0, $inventorycode);
+						$res = $mouvP->reception($user, $line->fk_product, $warehouseid, $line->qty, $line->price, $labelfluxposmovement, '', '', '', '', 0, $inventorycode);
 						if ($res < 0) {
 							dol_htmloutput_errors($mouvP->error, $mouvP->errors, 1);
 							$error++;
@@ -748,7 +748,7 @@ if (empty($reshook)) {
 		}
 	}
 
-	if (($action == 'history' || $action == 'creditnote') && $user->hasRight('takepos', 'run')) {
+	if (($action == 'history' || $action == 'creditnote') && $user->hasRight('fluxpos', 'run')) {
 		if ($action == 'creditnote' && $creditnote !== null && $creditnote->id > 0) {	// Test on permission already done
 			$placeid = $creditnote->id;
 		} else {
@@ -768,7 +768,7 @@ if (empty($reshook)) {
 	}
 
 	// If we add a line and no invoice yet, we create the invoice
-	if (($action == "addline" || $action == "freezone") && $placeid == 0 && ($user->hasRight('takepos', 'run') || defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE'))) {
+	if (($action == "addline" || $action == "freezone") && $placeid == 0 && ($user->hasRight('fluxpos', 'run') || defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE'))) {
 		$invoice->socid = getDolGlobalInt($constforcompanyid);
 
 		$dolnowtzuserrel = dol_now('tzuserrel');	// If user is 02 january 22:00, we want to store '02 january'
@@ -792,13 +792,13 @@ if (empty($reshook)) {
 		print dol_print_date($db->idate($invoice->date, 'gmt'), 'dayhour', 'gmt').'<br>';
 		*/
 
-		$invoice->module_source = 'takepos';
-		$invoice->pos_source =  isset($_SESSION["takeposterminal"]) ? $_SESSION["takeposterminal"] : '' ;
-		$invoice->entity = !empty($_SESSION["takeposinvoiceentity"]) ? $_SESSION["takeposinvoiceentity"] : $conf->entity;
+		$invoice->module_source = 'fluxpos';
+		$invoice->pos_source =  isset($_SESSION["fluxposterminal"]) ? $_SESSION["fluxposterminal"] : '' ;
+		$invoice->entity = !empty($_SESSION["fluxposinvoiceentity"]) ? $_SESSION["fluxposinvoiceentity"] : $conf->entity;
 
 		if ($invoice->socid <= 0) {
 			$langs->load('errors');
-			dol_htmloutput_errors($langs->trans("ErrorModuleSetupNotComplete", "TakePos"), [], 1);
+			dol_htmloutput_errors($langs->trans("ErrorModuleSetupNotComplete", "FluxPos"), [], 1);
 		} else {
 			$db->begin();
 
@@ -810,7 +810,7 @@ if (empty($reshook)) {
 				dol_htmloutput_errors($invoice->error, $invoice->errors, 1);
 			} else {
 				$sql = "UPDATE ".MAIN_DB_PREFIX."facture";
-				$sql .= " SET ref='(PROV-POS".$_SESSION["takeposterminal"]."-".$place.")'";
+				$sql .= " SET ref='(PROV-POS".$_SESSION["fluxposterminal"]."-".$place.")'";
 				$sql .= " WHERE rowid = ".((int) $placeid);
 				$resql = $db->query($sql);
 				if (!$resql) {
@@ -828,7 +828,7 @@ if (empty($reshook)) {
 
 	$tva_npr = 0;
 	// If we add a line by clicking on a product (invoice exists here because it was created juste before if it didn't exists)
-	if ($action == "addline" && ($user->hasRight('takepos', 'run') || defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE'))) {
+	if ($action == "addline" && ($user->hasRight('fluxpos', 'run') || defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE'))) {
 		$prod = new Product($db);
 		$prod->fetch($idproduct);
 
@@ -862,7 +862,7 @@ if (empty($reshook)) {
 				$nbofsuggested = 0;
 				$prod->load_stock('warehouseopen');
 
-				$constantforkey = 'CASHDESK_ID_WAREHOUSE'.$_SESSION["takeposterminal"];
+				$constantforkey = 'FLUXPOS_ID_WAREHOUSE'.$_SESSION["fluxposterminal"];
 				$warehouseid = getDolGlobalInt($constantforkey);
 
 				//var_dump($prod->stock_warehouse);
@@ -884,7 +884,7 @@ if (empty($reshook)) {
 				echo "<script>\n";
 				echo "function addbatch(batch, warehouseid) {\n";
 				echo "console.log('We add batch '+batch+' from warehouse id '+warehouseid);\n";
-				echo '$("#poslines").load("'.DOL_URL_ROOT.'/takepos/invoice.php?action=addline&batch="+encodeURI(batch)+"&warehouseid="+warehouseid+"&place='.$place.'&idproduct='.$idproduct.'&token='.newToken().'", function() {});'."\n";
+				echo '$("#poslines").load("'.dol_buildpath('/fluxpos/invoice.php', 1).'?action=addline&batch="+encodeURI(batch)+"&warehouseid="+warehouseid+"&place='.$place.'&idproduct='.$idproduct.'&token='.newToken().'", function() {});'."\n";
 				echo "}\n";
 				echo "</script>\n";
 
@@ -936,11 +936,11 @@ if (empty($reshook)) {
 		}
 
 
-		if (getDolGlobalString('TAKEPOS_SUPPLEMENTS')) {
+		if (getDolGlobalString('FLUXPOS_SUPPLEMENTS')) {
 			require_once DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php';
 			$cat = new Categorie($db);
 			$categories = $cat->containing($idproduct, 'product');
-			$found = (array_search(getDolGlobalInt('TAKEPOS_SUPPLEMENTS_CATEGORY'), array_column($categories, 'id')));
+			$found = (array_search(getDolGlobalInt('FLUXPOS_SUPPLEMENTS_CATEGORY'), array_column($categories, 'id')));
 			if ($found !== false) { // If this product is a supplement
 				$sql = "SELECT fk_parent_line FROM ".MAIN_DB_PREFIX."facturedet where rowid = ".((int) $selectedline);
 				$resql = $db->query($sql);
@@ -955,14 +955,14 @@ if (empty($reshook)) {
 
 		$err = 0;
 		// Group if enabled. Skip group if line already sent to the printer
-		if (getDolGlobalString('TAKEPOS_GROUP_SAME_PRODUCT')) {
+		if (getDolGlobalString('FLUXPOS_GROUP_SAME_PRODUCT')) {
 			foreach ($invoice->lines as $line) {
 				if ($line->product_ref == $prod->ref) {
 					if ($line->special_code == 4) {
 						continue;
 					} // If this line is sended to printer create new line
 					// check if qty in stock
-					if (getDolGlobalString('TAKEPOS_QTY_IN_STOCK') && (($line->qty + $qty) > $prod->stock_reel)) {
+					if (getDolGlobalString('FLUXPOS_QTY_IN_STOCK') && (($line->qty + $qty) > $prod->stock_reel)) {
 						$invoice->error = $langs->trans("ErrorStockIsNotEnough");
 						dol_htmloutput_errors($invoice->error, $invoice->errors, 1);
 						$err++;
@@ -1008,7 +1008,7 @@ if (empty($reshook)) {
 
 			// complete line by hook
 			$parameters = array('prod' => $prod, 'line' => $line);
-			$reshook = $hookmanager->executeHooks('completeTakePosAddLine', $parameters, $invoice, $action);    // Note that $action and $line may have been modified by some hooks
+			$reshook = $hookmanager->executeHooks('completeFluxPosAddLine', $parameters, $invoice, $action);    // Note that $action and $line may have been modified by some hooks
 			if ($reshook < 0) {
 				setEventMessages($hookmanager->error, $hookmanager->errors, 'errors');
 			}
@@ -1020,7 +1020,7 @@ if (empty($reshook)) {
 				}
 
 				// check if qty in stock
-				if (getDolGlobalString('TAKEPOS_QTY_IN_STOCK') && $qty > $prod->stock_reel) {
+				if (getDolGlobalString('FLUXPOS_QTY_IN_STOCK') && $qty > $prod->stock_reel) {
 					$invoice->error = $langs->trans("ErrorStockIsNotEnough");
 					dol_htmloutput_errors($invoice->error, $invoice->errors, 1);
 					$err++;
@@ -1031,7 +1031,7 @@ if (empty($reshook)) {
 				}
 			}
 
-			if (getDolGlobalString('TAKEPOS_CUSTOMER_DISPLAY')) {
+			if (getDolGlobalString('FLUXPOS_CUSTOMER_DISPLAY')) {
 				$CUSTOMER_DISPLAY_line1 = $prod->label;
 				$CUSTOMER_DISPLAY_line2 = price($price_ttc);
 			}
@@ -1041,7 +1041,7 @@ if (empty($reshook)) {
 	}
 
 	// If we add a line by submitting freezone form (invoice exists here because it was created just before if it didn't exist)
-	if ($action == "freezone" && $user->hasRight('takepos', 'run')) {
+	if ($action == "freezone" && $user->hasRight('fluxpos', 'run')) {
 		$customer = new Societe($db);
 		$customer->fetch($invoice->socid);
 
@@ -1058,14 +1058,14 @@ if (empty($reshook)) {
 		$localtax1_tx = get_localtax($tva_tx, 1, $customer, $mysoc, $tva_npr);
 		$localtax2_tx = get_localtax($tva_tx, 2, $customer, $mysoc, $tva_npr);
 
-		$res = $invoice->addline($desc, $number, 1, $tva_tx, $localtax1_tx, $localtax2_tx, 0, 0, '', 0, 0, 0, 0, getDolGlobalInt('TAKEPOS_DISCOUNT_TTC') ? ($number >= 0 ? 'HT' : 'TTC') : (getDolGlobalInt('TAKEPOS_CHANGE_PRICE_HT') ? 'HT' : 'TTC'), $number, 0, -1, 0, '', 0, 0, 0, 0, '', array(), 100, 0, null, 0);
+		$res = $invoice->addline($desc, $number, 1, $tva_tx, $localtax1_tx, $localtax2_tx, 0, 0, '', 0, 0, 0, 0, getDolGlobalInt('FLUXPOS_DISCOUNT_TTC') ? ($number >= 0 ? 'HT' : 'TTC') : (getDolGlobalInt('FLUXPOS_CHANGE_PRICE_HT') ? 'HT' : 'TTC'), $number, 0, -1, 0, '', 0, 0, 0, 0, '', array(), 100, 0, null, 0);
 		if ($res < 0) {
 			dol_htmloutput_errors($invoice->error, $invoice->errors, 1);
 		}
 		$invoice->fetch($placeid);
 	}
 
-	if ($action == "addnote" && ($user->hasRight('takepos', 'run') || defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE'))) {
+	if ($action == "addnote" && ($user->hasRight('fluxpos', 'run') || defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE'))) {
 		$desc = GETPOST('addnote', 'alpha');
 		if ($idline == 0) {
 			$invoice->update_note($desc, '_public');
@@ -1079,11 +1079,11 @@ if (empty($reshook)) {
 		$invoice->fetch($placeid);
 	}
 
-	if ($action == "deleteline" && ($user->hasRight('takepos', 'editlines') || defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE'))) {
+	if ($action == "deleteline" && ($user->hasRight('fluxpos', 'editlines') || defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE'))) {
 		/*
-		$permissiontoupdateline = ($user->hasRight('takepos', 'editlines') && ($user->hasRight('takepos', 'editorderedlines') || $line->special_code != "4"));
+		$permissiontoupdateline = ($user->hasRight('fluxpos', 'editlines') && ($user->hasRight('fluxpos', 'editorderedlines') || $line->special_code != "4"));
 		if (defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE')) {
-			if ($invoice->status == $invoice::STATUS_DRAFT && $invoice->pos_source && $invoice->module_source == 'takepos') {
+			if ($invoice->status == $invoice::STATUS_DRAFT && $invoice->pos_source && in_array($invoice->module_source, array('fluxpos', 'takepos'))) {
 				$permissiontoupdateline = true;
 				// TODO Add also a test on $_SESSION('publicobjectid'] defined at creation of object
 				// TODO Check also that invoice->ref is (PROV-POS1-2) with 1 = terminal and 2, the table ID
@@ -1092,7 +1092,7 @@ if (empty($reshook)) {
 		$db->begin();
 
 		if ($idline > 0 && $placeid > 0) { 	// If invoice exists and a line is selected.
-			$result = takeposDeleteLineWithChildren($invoice, $idline);
+			$result = fluxposDeleteLineWithChildren($invoice, $idline);
 			if ($result < 0) {
 				dol_htmloutput_errors($invoice->error, $invoice->errors, 1);
 			}
@@ -1103,7 +1103,7 @@ if (empty($reshook)) {
 			$obj = $db->fetch_object($resql);
 			if ($obj) {
 				$deletelineid = $obj->rowid;
-				$result = takeposDeleteLineWithChildren($invoice, $deletelineid);
+				$result = fluxposDeleteLineWithChildren($invoice, $deletelineid);
 				if ($result < 0) {
 					dol_htmloutput_errors($invoice->error, $invoice->errors, 1);
 				}
@@ -1117,16 +1117,16 @@ if (empty($reshook)) {
 			// Keep an empty draft invoice alive when a non-default customer was
 			// already attached so deleting the last line does not silently lose
 			// the customer that was just selected (#38219). Only drop the invoice
-			// when it is still on the default cashdesk thirdparty (or none).
-			$defaultsocid = (int) getDolGlobalString('CASHDESK_ID_THIRDPARTY'.$_SESSION["takeposterminal"]);
+			// when it is still on the default FluxPos thirdparty (or none).
+			$defaultsocid = (int) getDolGlobalString('FLUXPOS_ID_THIRDPARTY'.$_SESSION["fluxposterminal"]);
 			$invoicesocid = (int) $invoice->socid;
 			if ($invoicesocid === 0 || $invoicesocid === $defaultsocid) {
 				$invoice->delete($user);
 
 				if (defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE')) {
-					header("Location: ".DOL_URL_ROOT."/takepos/public/auto_order.php");
+					header("Location: ".dol_buildpath('/fluxpos/public/auto_order.php', 1));
 				} else {
-					header("Location: ".DOL_URL_ROOT."/takepos/invoice.php");
+					header("Location: ".dol_buildpath('/fluxpos/invoice.php', 1));
 				}
 				exit;
 			}
@@ -1134,9 +1134,9 @@ if (empty($reshook)) {
 	}
 
 	// Action to delete or discard an invoice
-	if ($action == "delete" && ($user->hasRight('takepos', 'run') || defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE'))) {
+	if ($action == "delete" && ($user->hasRight('fluxpos', 'run') || defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE'))) {
 		// $placeid is the invoice id (it differs from place) and is defined if the place is set and
-		// the ref of invoice is '(PROV-POS'.$_SESSION["takeposterminal"].'-'.$place.')', so the fetch at beginning of page works.
+		// the ref of invoice is '(PROV-POS'.$_SESSION["fluxposterminal"].'-'.$place.')', so the fetch at beginning of page works.
 		if ($placeid > 0) {
 			$result = $invoice->fetch($placeid);
 
@@ -1155,11 +1155,11 @@ if (empty($reshook)) {
 				}
 
 				$sql = "UPDATE ".MAIN_DB_PREFIX."facture";
-				$varforconst = 'CASHDESK_ID_THIRDPARTY'.$_SESSION["takeposterminal"];
+				$varforconst = 'FLUXPOS_ID_THIRDPARTY'.$_SESSION["fluxposterminal"];
 				$sql .= " SET fk_soc = ".((int) getDolGlobalString($varforconst)).", ";
 				$sql .= " datec = '".$db->idate(dol_now())."'";
 				$sql .= " WHERE entity IN (".getEntity('invoice').")";
-				$sql .= " AND ref = '(PROV-POS".$db->escape($_SESSION["takeposterminal"]."-".$place).")'";
+				$sql .= " AND ref = '(PROV-POS".$db->escape($_SESSION["fluxposterminal"]."-".$place).")'";
 				$resql1 = $db->query($sql);
 
 				if ($resdeletelines && $resql1) {
@@ -1176,16 +1176,16 @@ if (empty($reshook)) {
 	if ($action == "updateqty") {	// Test on permission is done later
 		foreach ($invoice->lines as $line) {
 			if ($line->id == $idline) {
-				$permissiontoupdateline = ($user->hasRight('takepos', 'editlines') && ($user->hasRight('takepos', 'editorderedlines') || $line->special_code != "4"));
+				$permissiontoupdateline = ($user->hasRight('fluxpos', 'editlines') && ($user->hasRight('fluxpos', 'editorderedlines') || $line->special_code != "4"));
 				if (defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE')) {
-					if ($invoice->status == $invoice::STATUS_DRAFT && $invoice->pos_source && $invoice->module_source == 'takepos') {
+					if ($invoice->status == $invoice::STATUS_DRAFT && $invoice->pos_source && in_array($invoice->module_source, array('fluxpos', 'takepos'))) {
 						$permissiontoupdateline = true;
 						// TODO Add also a test on $_SESSION('publicobjectid'] defined at creation of object
 						// TODO Check also that invoice->ref is (PROV-POS1-2) with 1 = terminal and 2, the table ID
 					}
 				}
 				if (!$permissiontoupdateline) {
-					dol_htmloutput_errors($langs->trans("NotEnoughPermissions", "TakePos").' - No permission to updateqty', [], 1);
+					dol_htmloutput_errors($langs->trans("NotEnoughPermissions", "FluxPos").' - No permission to updateqty', [], 1);
 				} else {
 					$vatratecode = $line->tva_tx;
 					if ($line->vat_src_code) {
@@ -1226,9 +1226,9 @@ if (empty($reshook)) {
 					dol_htmloutput_errors($langs->trans("CantBeLessThanMinPrice", price(price2num($price_min, 'MU'), 0, $langs, 0, 0, -1, $conf->currency)));
 					// echo $langs->trans("CantBeLessThanMinPrice");
 				} else {
-					$permissiontoupdateline = ($user->hasRight('takepos', 'editlines') && ($user->hasRight('takepos', 'editorderedlines') || $line->special_code != "4"));
+					$permissiontoupdateline = ($user->hasRight('fluxpos', 'editlines') && ($user->hasRight('fluxpos', 'editorderedlines') || $line->special_code != "4"));
 					if (defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE')) {
-						if ($invoice->status == $invoice::STATUS_DRAFT && $invoice->pos_source && $invoice->module_source == 'takepos') {
+						if ($invoice->status == $invoice::STATUS_DRAFT && $invoice->pos_source && in_array($invoice->module_source, array('fluxpos', 'takepos'))) {
 							$permissiontoupdateline = true;
 							// TODO Add also a test on $_SESSION('publicobjectid'] defined at creation of object
 							// TODO Check also that invoice->ref is (PROV-POS1-2) with 1 = terminal and 2, the table ID
@@ -1241,8 +1241,8 @@ if (empty($reshook)) {
 					}
 
 					if (!$permissiontoupdateline) {
-						dol_htmloutput_errors($langs->trans("NotEnoughPermissions", "TakePos").' - No permission to updateprice', [], 1);
-					} elseif (getDolGlobalInt('TAKEPOS_CHANGE_PRICE_HT')  == 1) {
+						dol_htmloutput_errors($langs->trans("NotEnoughPermissions", "FluxPos").' - No permission to updateprice', [], 1);
+					} elseif (getDolGlobalInt('FLUXPOS_CHANGE_PRICE_HT')  == 1) {
 						$result = $invoice->updateline($line->id, $line->desc, $number, $line->qty, $line->remise_percent, $line->date_start, $line->date_end, $vatratecode, $line->localtax1_tx, $line->localtax2_tx, 'HT', $line->info_bits, $line->product_type, $line->fk_parent_line, 0, $line->fk_fournprice, $line->pa_ht, $line->label, $line->special_code, $line->array_options, $line->situation_percent, $line->fk_unit);
 					} else {
 						$result = $invoice->updateline($line->id, $line->desc, $number, $line->qty, $line->remise_percent, $line->date_start, $line->date_end, $vatratecode, $line->localtax1_tx, $line->localtax2_tx, 'TTC', $line->info_bits, $line->product_type, $line->fk_parent_line, 0, $line->fk_fournprice, $line->pa_ht, $line->label, $line->special_code, $line->array_options, $line->situation_percent, $line->fk_unit);
@@ -1277,16 +1277,16 @@ if (empty($reshook)) {
 					$langs->load("products");
 					dol_htmloutput_errors($langs->trans("CantBeLessThanMinPrice", price(price2num($price_min, 'MU'), 0, $langs, 0, 0, -1, $conf->currency)));
 				} else {
-					$permissiontoupdateline = ($user->hasRight('takepos', 'editlines') && ($user->hasRight('takepos', 'editorderedlines') || $line->special_code != "4"));
+					$permissiontoupdateline = ($user->hasRight('fluxpos', 'editlines') && ($user->hasRight('fluxpos', 'editorderedlines') || $line->special_code != "4"));
 					if (defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE')) {
-						if ($invoice->status == $invoice::STATUS_DRAFT && $invoice->pos_source && $invoice->module_source == 'takepos') {
+						if ($invoice->status == $invoice::STATUS_DRAFT && $invoice->pos_source && in_array($invoice->module_source, array('fluxpos', 'takepos'))) {
 							$permissiontoupdateline = true;
 							// TODO Add also a test on $_SESSION('publicobjectid'] defined at creation of object
 							// TODO Check also that invoice->ref is (PROV-POS1-2) with 1 = terminal and 2, the table ID
 						}
 					}
 					if (!$permissiontoupdateline) {
-						dol_htmloutput_errors($langs->trans("NotEnoughPermissions", "TakePos"), [], 1);
+						dol_htmloutput_errors($langs->trans("NotEnoughPermissions", "FluxPos"), [], 1);
 					} else {
 						$vatratecode = $line->tva_tx;
 						if ($line->vat_src_code) {
@@ -1300,7 +1300,7 @@ if (empty($reshook)) {
 
 		// Reload data
 		$invoice->fetch($placeid);
-	} elseif ($action == 'update_reduction_global' && $user->hasRight('takepos', 'editlines')) {
+	} elseif ($action == 'update_reduction_global' && $user->hasRight('fluxpos', 'editlines')) {
 		foreach ($invoice->lines as $line) {
 			$vatratecode = $line->tva_tx;
 			if ($line->vat_src_code) {
@@ -1312,22 +1312,22 @@ if (empty($reshook)) {
 		$invoice->fetch($placeid);
 	}
 
-	if ($action == "setbatch" && ($user->hasRight('takepos', 'run') || defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE'))) {
-		$constantforkey = 'CASHDESK_ID_WAREHOUSE'.$_SESSION["takeposterminal"];
+	if ($action == "setbatch" && ($user->hasRight('fluxpos', 'run') || defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE'))) {
+		$constantforkey = 'FLUXPOS_ID_WAREHOUSE'.$_SESSION["fluxposterminal"];
 		$warehouseid = (GETPOSTINT('warehouseid') > 0 ? GETPOSTINT('warehouseid') : getDolGlobalInt($constantforkey));	// Get the warehouse id from GETPOSTINT('warehouseid'), otherwise use default setup.
 		$sql = "UPDATE ".MAIN_DB_PREFIX."facturedet SET batch = '".$db->escape($batch)."', fk_warehouse = ".((int) $warehouseid);
 		$sql .= " WHERE rowid = ".((int) $idoflineadded);
 		$db->query($sql);
 	}
 
-	if ($action == "order" && $placeid != 0 && ($user->hasRight('takepos', 'run') || defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE'))) {
+	if ($action == "order" && $placeid != 0 && ($user->hasRight('fluxpos', 'run') || defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE'))) {
 		include_once DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php';
-		if ((isModEnabled('receiptprinter') && getDolGlobalInt('TAKEPOS_PRINTER_TO_USE'.$term) > 0) || getDolGlobalString('TAKEPOS_PRINT_METHOD') == "receiptprinter" || getDolGlobalString('TAKEPOS_PRINT_METHOD') == "takeposconnector") {
-			require_once DOL_DOCUMENT_ROOT.'/takepos/class/dolreceiptprinter.class.php';
+		if ((isModEnabled('receiptprinter') && getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term) > 0) || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "receiptprinter" || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "takeposconnector") {
+			require_once dol_buildpath('/fluxpos/class/dolreceiptprinter.class.php');
 			$printer = new dolReceiptPrinter($db);
 		}
 
-		$sql = "SELECT label FROM ".MAIN_DB_PREFIX."takepos_floor_tables where rowid = ".((int) $place);
+		$sql = "SELECT label FROM ".MAIN_DB_PREFIX."fluxpos_floor_tables where rowid = ".((int) $place);
 		$resql = $db->query($sql);
 		$row = $db->fetch_object($resql);
 		$headerorder = '<html><br><b>'.$langs->trans('Place').' '.$row->label.'<br><table width="65%"><thead><tr><th class="left">'.$langs->trans("Label").'</th><th class="right">'.$langs->trans("Qty").'</th></tr></thead><tbody>';
@@ -1335,9 +1335,9 @@ if (empty($reshook)) {
 		$order_receipt_printer1 = "";
 		$order_receipt_printer2 = "";
 		$order_receipt_printer3 = "";
-		$catsprinter1 = explode(';', getDolGlobalString('TAKEPOS_PRINTED_CATEGORIES_1'));
-		$catsprinter2 = explode(';', getDolGlobalString('TAKEPOS_PRINTED_CATEGORIES_2'));
-		$catsprinter3 = explode(';', getDolGlobalString('TAKEPOS_PRINTED_CATEGORIES_3'));
+		$catsprinter1 = explode(';', getDolGlobalString('FLUXPOS_PRINTED_CATEGORIES_1'));
+		$catsprinter2 = explode(';', getDolGlobalString('FLUXPOS_PRINTED_CATEGORIES_2'));
+		$catsprinter3 = explode(';', getDolGlobalString('FLUXPOS_PRINTED_CATEGORIES_3'));
 		$linestoprint = 0;
 		foreach ($invoice->lines as $line) {
 			if ($line->special_code == "4") {
@@ -1367,12 +1367,12 @@ if (empty($reshook)) {
 				$order_receipt_printer1 .= '</td></tr>';
 			}
 		}
-		if (((isModEnabled('receiptprinter') && getDolGlobalInt('TAKEPOS_PRINTER_TO_USE'.$term) > 0) || getDolGlobalString('TAKEPOS_PRINT_METHOD') == "receiptprinter" || getDolGlobalString('TAKEPOS_PRINT_METHOD') == "takeposconnector") && $linestoprint > 0 && $printer !== null) {
+		if (((isModEnabled('receiptprinter') && getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term) > 0) || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "receiptprinter" || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "takeposconnector") && $linestoprint > 0 && $printer !== null) {
 			$invoice->fetch($placeid); //Reload object before send to printer
 			$printer->orderprinter = 1;
 			echo "<script>";
 			echo "var orderprinter1esc='";
-			$ret = $printer->sendToPrinter($invoice, getDolGlobalInt('TAKEPOS_TEMPLATE_TO_USE_FOR_ORDERS'.$_SESSION["takeposterminal"]), getDolGlobalInt('TAKEPOS_ORDER_PRINTER1_TO_USE'.$_SESSION["takeposterminal"])); // PRINT TO PRINTER 1
+			$ret = $printer->sendToPrinter($invoice, getDolGlobalInt('FLUXPOS_TEMPLATE_TO_USE_FOR_ORDERS'.$_SESSION["fluxposterminal"]), getDolGlobalInt('FLUXPOS_ORDER_PRINTER1_TO_USE'.$_SESSION["fluxposterminal"])); // PRINT TO PRINTER 1
 			echo "';</script>";
 		}
 		$sql = "UPDATE ".MAIN_DB_PREFIX."facturedet set special_code='4' where special_code='1' and fk_facture = ".((int) $invoice->id); // Set as printed
@@ -1399,12 +1399,12 @@ if (empty($reshook)) {
 				$order_receipt_printer2 .= '</td></tr>';
 			}
 		}
-		if (((isModEnabled('receiptprinter') && getDolGlobalInt('TAKEPOS_PRINTER_TO_USE'.$term) > 0) || getDolGlobalString('TAKEPOS_PRINT_METHOD') == "receiptprinter" || getDolGlobalString('TAKEPOS_PRINT_METHOD') == "takeposconnector") && $linestoprint > 0) {
+		if (((isModEnabled('receiptprinter') && getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term) > 0) || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "receiptprinter" || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "takeposconnector") && $linestoprint > 0) {
 			$invoice->fetch($placeid); //Reload object before send to printer
 			$printer->orderprinter = 2;
 			echo "<script>";
 			echo "var orderprinter2esc='";
-			$ret = $printer->sendToPrinter($invoice, getDolGlobalInt('TAKEPOS_TEMPLATE_TO_USE_FOR_ORDERS'.$_SESSION["takeposterminal"]), getDolGlobalInt('TAKEPOS_ORDER_PRINTER2_TO_USE'.$_SESSION["takeposterminal"])); // PRINT TO PRINTER 2
+			$ret = $printer->sendToPrinter($invoice, getDolGlobalInt('FLUXPOS_TEMPLATE_TO_USE_FOR_ORDERS'.$_SESSION["fluxposterminal"]), getDolGlobalInt('FLUXPOS_ORDER_PRINTER2_TO_USE'.$_SESSION["fluxposterminal"])); // PRINT TO PRINTER 2
 			echo "';</script>";
 		}
 		$sql = "UPDATE ".MAIN_DB_PREFIX."facturedet set special_code='4' where special_code='2' and fk_facture = ".((int) $invoice->id); // Set as printed
@@ -1431,12 +1431,12 @@ if (empty($reshook)) {
 				$order_receipt_printer3 .= '</td></tr>';
 			}
 		}
-		if (((isModEnabled('receiptprinter') && getDolGlobalInt('TAKEPOS_PRINTER_TO_USE'.$term) > 0) || getDolGlobalString('TAKEPOS_PRINT_METHOD') == "receiptprinter" || getDolGlobalString('TAKEPOS_PRINT_METHOD') == "takeposconnector") && $linestoprint > 0 && $printer !== null) {
+		if (((isModEnabled('receiptprinter') && getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term) > 0) || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "receiptprinter" || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "takeposconnector") && $linestoprint > 0 && $printer !== null) {
 			$invoice->fetch($placeid); //Reload object before send to printer
 			$printer->orderprinter = 3;
 			echo "<script>";
 			echo "var orderprinter3esc='";
-			$ret = $printer->sendToPrinter($invoice, getDolGlobalInt('TAKEPOS_TEMPLATE_TO_USE_FOR_ORDERS'.$_SESSION["takeposterminal"]), getDolGlobalInt('TAKEPOS_ORDER_PRINTER3_TO_USE'.$_SESSION["takeposterminal"])); // PRINT TO PRINTER 3
+			$ret = $printer->sendToPrinter($invoice, getDolGlobalInt('FLUXPOS_TEMPLATE_TO_USE_FOR_ORDERS'.$_SESSION["fluxposterminal"]), getDolGlobalInt('FLUXPOS_ORDER_PRINTER3_TO_USE'.$_SESSION["fluxposterminal"])); // PRINT TO PRINTER 3
 			echo "';</script>";
 		}
 		$sql = "UPDATE ".MAIN_DB_PREFIX."facturedet set special_code='4' where special_code='3' and fk_facture = ".((int) $invoice->id); // Set as printed
@@ -1445,7 +1445,7 @@ if (empty($reshook)) {
 	}
 
 	$sectionwithinvoicelink = '';
-	if (($action == "valid" || $action == "history" || $action == 'creditnote' || ($action == 'addline' && $invoice->status == $invoice::STATUS_CLOSED)) && $user->hasRight('takepos', 'run')) {
+	if (($action == "valid" || $action == "history" || $action == 'creditnote' || ($action == 'addline' && $invoice->status == $invoice::STATUS_CLOSED)) && $user->hasRight('fluxpos', 'run')) {
 		$sectionwithinvoicelink .= '<!-- Section with invoice link -->'."\n";
 		$sectionwithinvoicelink .= '<span style="font-size:120%;" class="center inline-block marginbottomonly">';
 		if ($invoice->status == $invoice::STATUS_DRAFT) {
@@ -1467,7 +1467,7 @@ if (empty($reshook)) {
 		$customprinttemplateallowed = true;
 
 		// BAR RESTAURANT specific menu
-		if (getDolGlobalString('TAKEPOS_BAR_RESTAURANT')) {
+		if (getDolGlobalString('FLUXPOS_BAR_RESTAURANT')) {
 			// Button to print receipt before payment
 			$customprinterallowed = true;
 			$customprinttemplateallowed = true;
@@ -1480,42 +1480,42 @@ if (empty($reshook)) {
 		}
 
 		if ($invoice->status == $invoice::STATUS_CLOSED) {
-			if (getDolGlobalInt('TAKEPOS_PRINT_INVOICE_DOC_INSTEAD_OF_RECEIPT')) {
+			if (getDolGlobalInt('FLUXPOS_PRINT_INVOICE_DOC_INSTEAD_OF_RECEIPT')) {
 				$sectionwithinvoicelink .= ' <a target="_blank" class="button" href="' . DOL_URL_ROOT . '/document.php?token=' . newToken() . '&modulepart=facture&file=' . $invoice->ref . '/' . $invoice->ref . '.pdf">'.$langs->trans("Invoice").'</a>';
 			} else {
 				// This section should be same than into index.php
-				if (getDolGlobalString('TAKEPOS_PRINT_METHOD') == "takeposconnector") {
+				if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "takeposconnector") {
 					// Used when the external addon takeposconnector is installed. Deprecated.
-					if (getDolGlobalString('TAKEPOS_PRINT_SERVER') && filter_var(getDolGlobalString('TAKEPOS_PRINT_SERVER'), FILTER_VALIDATE_URL) == true) {
-						// If TAKEPOS_PRINT_SERVER is an URL
+					if (getDolGlobalString('FLUXPOS_PRINT_SERVER') && filter_var(getDolGlobalString('FLUXPOS_PRINT_SERVER'), FILTER_VALIDATE_URL) == true) {
+						// If FLUXPOS_PRINT_SERVER is an URL
 						$sectionwithinvoicelink .= ' <button id="buttonprint" type="button" onclick="PrintByESCPOSOld('.$placeid.')">'.$langs->trans('PrintTicket').'</button>';
 					} else {
-						// If TAKEPOS_PRINT_SERVER is an IP
-						// Print by calling the receipt.php to get HTML content and send the HTML content to TAKEPOS_PRINT_SERVER:8111/print
+						// If FLUXPOS_PRINT_SERVER is an IP
+						// Print by calling the receipt.php to get HTML content and send the HTML content to FLUXPOS_PRINT_SERVER:8111/print
 						$sectionwithinvoicelink .= ' <button id="buttonprint" type="button" onclick="PrintHTMLToSlashPrint('.$placeid.')">'.$langs->trans('PrintTicket').'</button>';
 					}
-				} elseif ($customprinterallowed && $customprinttemplateallowed && (isModEnabled('receiptprinter') && getDolGlobalInt('TAKEPOS_PRINTER_TO_USE'.$term) > 0) || getDolGlobalString('TAKEPOS_PRINT_METHOD') == "receiptprinter") {		// @phpstan-ignore-line
+				} elseif ($customprinterallowed && $customprinttemplateallowed && (isModEnabled('receiptprinter') && getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term) > 0) || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "receiptprinter") {		// @phpstan-ignore-line
 					// Button Print Receipt on special custom printer using custom template
-					$nameOfPrinter = dol_getIdFromCode($db, getDolGlobalInt('TAKEPOS_PRINTER_TO_USE'.$term), 'printer_receipt', 'rowid', 'name', 1);
+					$nameOfPrinter = dol_getIdFromCode($db, getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term), 'printer_receipt', 'rowid', 'name', 1);
 					$sectionwithinvoicelink .= ' <button id="buttonprint" type="button" onclick="PrintByESCPOS('.$placeid.')" title="'.dolPrintHTMLForAttribute($langs->trans("SentToPrinter").' '.$nameOfPrinter).'">'.$langs->trans('PrintTicket').'</button>';
 				} else {
 					// Button Print Receipt on browser
 					$sectionwithinvoicelink .= ' <button id="buttonprint" type="button" onclick="PrintByBrowser('.$placeid.')">'.$langs->trans('PrintTicket').'</button>';
 
 					// Additional buttons
-					if ($customprinttemplateallowed && getDolGlobalString('TAKEPOS_PRINT_WITHOUT_DETAILS')) {
+					if ($customprinttemplateallowed && getDolGlobalString('FLUXPOS_PRINT_WITHOUT_DETAILS')) {
 						$sectionwithinvoicelink .= ' <button id="buttonprint" type="button" onclick="PrintBox('.$placeid.', \'without_details\')">'.$langs->trans('PrintWithoutDetails').'</button>';
 					}
-					if ($customprinttemplateallowed && getDolGlobalString('TAKEPOS_GIFT_RECEIPT')) {
+					if ($customprinttemplateallowed && getDolGlobalString('FLUXPOS_GIFT_RECEIPT')) {
 						$sectionwithinvoicelink .= ' <button id="buttonprint" type="button" onclick="PrintByBrowser('.$placeid.', 1)">'.$langs->trans('GiftReceipt').'</button>';
 					}
 				}
 			}
-			if (getDolGlobalString('TAKEPOS_EMAIL_TEMPLATE_INVOICE') && getDolGlobalInt('TAKEPOS_EMAIL_TEMPLATE_INVOICE') > 0) {
+			if (getDolGlobalString('FLUXPOS_EMAIL_TEMPLATE_INVOICE') && getDolGlobalInt('FLUXPOS_EMAIL_TEMPLATE_INVOICE') > 0) {
 				$sectionwithinvoicelink .= ' <button id="buttonsend" type="button" onclick="SendTicket('.$placeid.')">'.$langs->trans('SendTicket').'</button>';
 			}
 
-			if ($remaintopay <= 0 && getDolGlobalString('TAKEPOS_AUTO_PRINT_TICKETS') && $action != "history") {
+			if ($remaintopay <= 0 && getDolGlobalString('FLUXPOS_AUTO_PRINT_TICKETS') && $action != "history") {
 				$sectionwithinvoicelink .= '<script type="text/javascript">console.log("Emulate click on #buttonprint"); $("#buttonprint").click();</script>';
 			}
 		}
@@ -1531,18 +1531,18 @@ $form = new Form($db);
 
 // llxHeader
 if (defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE')) {
-	$title = 'TakePOS - Dolibarr '.DOL_VERSION;
+	$title = 'FluxPos - Dolibarr '.DOL_VERSION;
 	if (getDolGlobalString('MAIN_APPLICATION_TITLE')) {
-		$title = 'TakePOS - ' . getDolGlobalString('MAIN_APPLICATION_TITLE');
+		$title = 'FluxPos - ' . getDolGlobalString('MAIN_APPLICATION_TITLE');
 	}
-	$head = '<meta name="apple-mobile-web-app-title" content="TakePOS"/>
+	$head = '<meta name="apple-mobile-web-app-title" content="FluxPos"/>
 	<meta name="apple-mobile-web-app-capable" content="yes">
 	<meta name="mobile-web-app-capable" content="yes">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>';
 	$arrayofcss = array(
-		'/takepos/css/pos.css.php',
+		'/fluxpos/css/pos.css.php',
 	);
-	$arrayofjs = array('/takepos/js/jquery.colorbox-min.js');
+	$arrayofjs = array('/fluxpos/js/jquery.colorbox-min.js');
 	$disablejs = 0;
 	$disablehead = 0;
 	top_htmlhead($head, $title, $disablejs, $disablehead, $arrayofjs, $arrayofcss);
@@ -1579,7 +1579,7 @@ $(document).ready(function() {
 		selectedtext=$('#'+selectedline).find("td:first").html();
 		<?php
 		if (defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE')) {
-			print '$("#phonediv1").load("'.DOL_URL_ROOT.'/takepos/public/auto_order.php?action=editline&token='.newToken().'&placeid="+placeid+"&selectedline="+selectedline, function() {
+			print '$("#phonediv1").load("'.dol_buildpath('/fluxpos/public/auto_order.php', 1).'?action=editline&token='.newToken().'&placeid="+placeid+"&selectedline="+selectedline, function() {
 			});';
 		}
 		?>
@@ -1594,11 +1594,11 @@ $(document).ready(function() {
 <?php
 
 if ($action == "order" && !empty($order_receipt_printer1)) {
-	if (filter_var(getDolGlobalString('TAKEPOS_PRINT_SERVER'), FILTER_VALIDATE_URL) == true) {
+	if (filter_var(getDolGlobalString('FLUXPOS_PRINT_SERVER'), FILTER_VALIDATE_URL) == true) {
 		?>
 		$.ajax({
 			type: "POST",
-			url: '<?php print getDolGlobalString('TAKEPOS_PRINT_SERVER'); ?>/printer/index.php',
+			url: '<?php print getDolGlobalString('FLUXPOS_PRINT_SERVER'); ?>/printer/index.php',
 			data: 'invoice='+orderprinter1esc
 		});
 		<?php
@@ -1606,7 +1606,7 @@ if ($action == "order" && !empty($order_receipt_printer1)) {
 		?>
 		$.ajax({
 			type: "POST",
-			url: 'http://<?php print getDolGlobalString('TAKEPOS_PRINT_SERVER'); ?>:8111/print',
+			url: 'http://<?php print getDolGlobalString('FLUXPOS_PRINT_SERVER'); ?>:8111/print',
 			data: '<?php
 			print $headerorder.$order_receipt_printer1.$footerorder; ?>'
 		});
@@ -1615,11 +1615,11 @@ if ($action == "order" && !empty($order_receipt_printer1)) {
 }
 
 if ($action == "order" && !empty($order_receipt_printer2)) {
-	if (filter_var(getDolGlobalString('TAKEPOS_PRINT_SERVER'), FILTER_VALIDATE_URL) == true) {
+	if (filter_var(getDolGlobalString('FLUXPOS_PRINT_SERVER'), FILTER_VALIDATE_URL) == true) {
 		?>
 		$.ajax({
 			type: "POST",
-			url: '<?php print getDolGlobalString('TAKEPOS_PRINT_SERVER'); ?>/printer/index.php?printer=2',
+			url: '<?php print getDolGlobalString('FLUXPOS_PRINT_SERVER'); ?>/printer/index.php?printer=2',
 			data: 'invoice='+orderprinter2esc
 		});
 		<?php
@@ -1627,7 +1627,7 @@ if ($action == "order" && !empty($order_receipt_printer2)) {
 		?>
 		$.ajax({
 			type: "POST",
-			url: 'http://<?php print getDolGlobalString('TAKEPOS_PRINT_SERVER'); ?>:8111/print2',
+			url: 'http://<?php print getDolGlobalString('FLUXPOS_PRINT_SERVER'); ?>:8111/print2',
 			data: '<?php
 			print $headerorder.$order_receipt_printer2.$footerorder; ?>'
 		});
@@ -1636,11 +1636,11 @@ if ($action == "order" && !empty($order_receipt_printer2)) {
 }
 
 if ($action == "order" && !empty($order_receipt_printer3)) {
-	if (filter_var(getDolGlobalString('TAKEPOS_PRINT_SERVER'), FILTER_VALIDATE_URL) == true) {
+	if (filter_var(getDolGlobalString('FLUXPOS_PRINT_SERVER'), FILTER_VALIDATE_URL) == true) {
 		?>
 		$.ajax({
 			type: "POST",
-			url: '<?php print getDolGlobalString('TAKEPOS_PRINT_SERVER'); ?>/printer/index.php?printer=3',
+			url: '<?php print getDolGlobalString('FLUXPOS_PRINT_SERVER'); ?>/printer/index.php?printer=3',
 			data: 'invoice='+orderprinter3esc
 		});
 		<?php
@@ -1659,7 +1659,7 @@ if ($action == "temp" && !empty($ticket_printer1)) {
 	?>
 	$.ajax({
 		type: "POST",
-		url: 'http://<?php print getDolGlobalString('TAKEPOS_PRINT_SERVER'); ?>:8111/print',
+		url: 'http://<?php print getDolGlobalString('FLUXPOS_PRINT_SERVER'); ?>:8111/print',
 		data: '<?php
 		print $header_soc.$header_ticket.$body_ticket.$ticket_printer1.$ticket_total.$footer_ticket; ?>'
 	});
@@ -1697,7 +1697,7 @@ function PrintByBrowser(id, gift) {
 	return true;
 }
 
-/* Print of configured printer when TAKEPOS_PRINT_SERVER is IP  */
+/* Print of configured printer when FLUXPOS_PRINT_SERVER is IP  */
 function PrintHTMLToSlashPrint(id){
 	var receipt;
 	console.log("PrintHTMLToSlashPrint" + id);
@@ -1705,17 +1705,17 @@ function PrintHTMLToSlashPrint(id){
 		receipt=data.replace(/([^>\r\n]?)(\r\n|\n\r|\r|\n)/g, '');
 		$.ajax({
 			type: "POST",
-			url: 'http://<?php print getDolGlobalString('TAKEPOS_PRINT_SERVER'); ?>:8111/print',
+			url: 'http://<?php print getDolGlobalString('FLUXPOS_PRINT_SERVER'); ?>:8111/print',
 			data: receipt
 		});
 	});
 	return true;
 }
 
-/* Print of configured printer when TAKEPOS_PRINT_SERVER is URL, using the ESCPOS driver */
+/* Print of configured printer when FLUXPOS_PRINT_SERVER is URL, using the ESCPOS driver */
 function PrintByESCPOSOld(id){
 	console.log("PrintByESCPOSOld id=" + id);
-	$.get("<?php echo DOL_URL_ROOT; ?>/takepos/ajax/ajax.php?action=printinvoiceticket&token=<?php echo currentToken(); ?>&term=<?php echo urlencode(isset($_SESSION["takeposterminal"]) ? $_SESSION["takeposterminal"] : ''); ?>&id="+id, function(data, status) {
+	$.get("<?php echo dol_buildpath('/fluxpos/ajax/ajax.php', 1) ?>?action=printinvoiceticket&token=<?php echo currentToken(); ?>&term=<?php echo urlencode(isset($_SESSION["fluxposterminal"]) ? $_SESSION["fluxposterminal"] : ''); ?>&id="+id, function(data, status) {
 		// The answer must be the base64url ESC/POS ticket. Anything else (login page after session loss, PHP error...) must not be sent to the printer.
 		data = $.trim(data);
 		if (!/^[A-Za-z0-9_-]+$/.test(data)) {
@@ -1726,7 +1726,7 @@ function PrintByESCPOSOld(id){
 		}
 		$.ajax({
 			type: "POST",
-			url: '<?php print getDolGlobalString('TAKEPOS_PRINT_SERVER'); ?>/printer/index.php',
+			url: '<?php print getDolGlobalString('FLUXPOS_PRINT_SERVER'); ?>/printer/index.php',
 			data: 'invoice='+data
 		});
 	});
@@ -1734,17 +1734,17 @@ function PrintByESCPOSOld(id){
 }
 
 <?php
-$nameOfPrinter = dol_getIdFromCode($db, getDolGlobalInt('TAKEPOS_PRINTER_TO_USE'.$term), 'printer_receipt', 'rowid', 'name', 1);
+$nameOfPrinter = dol_getIdFromCode($db, getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term), 'printer_receipt', 'rowid', 'name', 1);
 ?>
 // Call the ajax to execute the printinvoiceticket action, using the ESCPOS driver
 // With some external module another method may be called.
 function PrintByESCPOS(id) {
-	console.log("PrintByESCPOS Printing invoice ticket by calling takepos/aja/ajax.php id=" + id);
+	console.log("PrintByESCPOS Printing invoice ticket by calling fluxpos/aja/ajax.php id=" + id);
 
 	$.ajax({
 		type: "GET",
 		data: { token: '<?php echo currentToken(); ?>' },
-		url: "<?php print DOL_URL_ROOT.'/takepos/ajax/ajax.php?action=printinvoiceticket&token='.currentToken().'&term='.urlencode(isset($_SESSION["takeposterminal"]) ? $_SESSION["takeposterminal"] : '').'&id='; ?>" + id,
+		url: "<?php print dol_buildpath('/fluxpos/ajax/ajax.php', 1).'?action=printinvoiceticket&token='.currentToken().'&term='.urlencode(isset($_SESSION["fluxposterminal"]) ? $_SESSION["fluxposterminal"] : '').'&id='; ?>" + id,
 		success: function(){
 				showPrintResultPopup('<?php echo dol_escape_js($langs->trans("SentToPrinter").' '.$nameOfPrinter); ?>', 2000);
 			},
@@ -1757,10 +1757,10 @@ function PrintByESCPOS(id) {
 
 // Show the message in div popup
 function showPrintResultPopup(message, duration) {
-	 $("#dialogforpopuptakepos").show().text(message).fadeIn();
+	 $("#dialogforpopupfluxpos").show().text(message).fadeIn();
 
 	setTimeout(function(){
-		$("#dialogforpopuptakepos").fadeOut().hide();
+		$("#dialogforpopupfluxpos").fadeOut().hide();
 	}, duration);
 }
 
@@ -1768,13 +1768,13 @@ function showPrintResultPopup(message, duration) {
 
 // Call url to generate a credit note (with same lines) from existing invoice
 function CreditNote() {
-	$("#poslines").load("<?php print DOL_URL_ROOT; ?>/takepos/invoice.php?action=creditnote&token=<?php echo newToken() ?>&invoiceid="+placeid, function() {	});
+	$("#poslines").load("<?php print dol_buildpath('/fluxpos/invoice.php', 1) ?>?action=creditnote&token=<?php echo newToken() ?>&invoiceid="+placeid, function() {	});
 	return true;
 }
 
 // Call url to add notes
 function SetNote() {
-	$("#poslines").load("<?php print DOL_URL_ROOT; ?>/takepos/invoice.php?action=addnote&token=<?php echo newToken() ?>&invoiceid="+placeid+"&idline="+selectedline, { "addnote": $("#textinput").val() });
+	$("#poslines").load("<?php print dol_buildpath('/fluxpos/invoice.php', 1) ?>?action=addnote&token=<?php echo newToken() ?>&invoiceid="+placeid+"&idline="+selectedline, { "addnote": $("#textinput").val() });
 	return true;
 }
 
@@ -1786,7 +1786,7 @@ $( document ).ready(function() {
 	$s = $langs->trans("Customer");
 	if ($invoice->id > 0 && ($invoice->socid != getDolGlobalString($constforcompanyid))) {
 		$s = $soc->name;
-		if (getDolGlobalInt('TAKEPOS_CHOOSE_CONTACT')) {
+		if (getDolGlobalInt('FLUXPOS_CHOOSE_CONTACT')) {
 			$contactids = $invoice->getIdContact('external', 'BILLING');
 			$contactid = $contactids[0];
 			if ($contactid > 0) {
@@ -1795,7 +1795,7 @@ $( document ).ready(function() {
 				$s .= " - " . $contact->getFullName($langs);
 			}
 		}
-	} elseif (getDolGlobalInt("TAKEPOS_NO_GENERIC_THIRDPARTY")) {
+	} elseif (getDolGlobalInt("FLUXPOS_NO_GENERIC_THIRDPARTY")) {
 		print '$("#idcustomer").val("");';
 	}
 	?>
@@ -1803,7 +1803,7 @@ $( document ).ready(function() {
 	$("#customerandsales").html('');
 	$("#shoppingcart").html('');
 
-	<?php if (getDolGlobalInt('TAKEPOS_CHOOSE_CONTACT') == 0) { ?>
+	<?php if (getDolGlobalInt('FLUXPOS_CHOOSE_CONTACT') == 0) { ?>
 		$("#customerandsales").append('<a class="valignmiddle tdoverflowmax100 minwidth100" id="customer" onclick="Customer();" title="<?php print dol_escape_js(dol_escape_htmltag((string) $s)); ?>"><span class="fas fa-building paddingrightonly"></span><?php print dol_escape_js((string) $s); ?></a>');
 	<?php } else { ?>
 		$("#customerandsales").append('<a class="valignmiddle tdoverflowmax300 minwidth100" id="contact" onclick="Contact();" title="<?php print dol_escape_js(dol_escape_htmltag((string) $s)); ?>"><span class="fas fa-building paddingrightonly"></span><?php print dol_escape_js((string) $s); ?></a>');
@@ -1812,13 +1812,13 @@ $( document ).ready(function() {
 	<?php
 	$sql = "SELECT rowid, datec, ref FROM ".MAIN_DB_PREFIX."facture";
 	$sql .= " WHERE entity IN (".getEntity('invoice').")";
-	if (!getDolGlobalString('TAKEPOS_CAN_EDIT_IF_ALREADY_VALIDATED')) {
+	if (!getDolGlobalString('FLUXPOS_CAN_EDIT_IF_ALREADY_VALIDATED')) {
 		// By default, only invoices with a ref not already defined can in list of open invoice we can edit.
-		$sql .= " AND ref LIKE '(PROV-POS".$db->escape(isset($_SESSION["takeposterminal"]) ? $_SESSION["takeposterminal"] : '')."-0%'";
+		$sql .= " AND ref LIKE '(PROV-POS".$db->escape(isset($_SESSION["fluxposterminal"]) ? $_SESSION["fluxposterminal"] : '')."-0%'";
 	} else {
-		// If TAKEPOS_CAN_EDIT_IF_ALREADY_VALIDATED set, we show also draft invoice that already has a reference defined
-		$sql .= " AND pos_source = '".$db->escape((string) $_SESSION["takeposterminal"])."'";
-		$sql .= " AND module_source = 'takepos'";
+		// If FLUXPOS_CAN_EDIT_IF_ALREADY_VALIDATED set, we show also draft invoice that already has a reference defined
+		$sql .= " AND pos_source = '".$db->escape((string) $_SESSION["fluxposterminal"])."'";
+		$sql .= " AND module_source IN ('fluxpos', 'takepos')";
 	}
 
 	$sql .= $db->order('datec', 'ASC');
@@ -1828,7 +1828,7 @@ $( document ).ready(function() {
 		while ($obj = $db->fetch_object($resql)) {
 			echo '$("#shoppingcart").append(\'';
 			echo '<a class="valignmiddle" title="'.dol_escape_js($langs->trans("SaleStartedAt", dol_print_date($db->jdate($obj->datec), '%H:%M', 'tzuser')).' - '.$obj->ref).'" onclick="place=\\\'';
-			$num_sale = str_replace(")", "", str_replace("(PROV-POS".$_SESSION["takeposterminal"]."-", "", $obj->ref));
+			$num_sale = str_replace(")", "", str_replace("(PROV-POS".$_SESSION["fluxposterminal"]."-", "", $obj->ref));
 			echo $num_sale;
 			if (str_replace("-", "", $num_sale) > $max_sale) {
 				$max_sale = str_replace("-", "", $num_sale);
@@ -1855,10 +1855,10 @@ $( document ).ready(function() {
 	$s = '';
 
 	$idwarehouse = 0;
-	$constantforkey = 'CASHDESK_NO_DECREASE_STOCK'. (isset($_SESSION["takeposterminal"]) ? $_SESSION["takeposterminal"] : '');
+	$constantforkey = 'FLUXPOS_NO_DECREASE_STOCK'. (isset($_SESSION["fluxposterminal"]) ? $_SESSION["fluxposterminal"] : '');
 	if (isModEnabled('stock')) {
 		if (getDolGlobalString($constantforkey) != "1") {
-			$constantforkey = 'CASHDESK_ID_WAREHOUSE'. (isset($_SESSION["takeposterminal"]) ? $_SESSION["takeposterminal"] : '');
+			$constantforkey = 'FLUXPOS_ID_WAREHOUSE'. (isset($_SESSION["fluxposterminal"]) ? $_SESSION["fluxposterminal"] : '');
 			$idwarehouse = getDolGlobalInt($constantforkey);
 			if ($idwarehouse > 0) {
 				$s = '<span class="small">';
@@ -1932,20 +1932,20 @@ $( document ).ready(function() {
 
 
 <?php
-if (getDolGlobalString('TAKEPOS_CUSTOMER_DISPLAY')) {
+if (getDolGlobalString('FLUXPOS_CUSTOMER_DISPLAY')) {
 	echo "function CustomerDisplay(){";
 	echo "var line1='".$CUSTOMER_DISPLAY_line1."'.substring(0,20);";
 	echo "line1=line1.padEnd(20);";
 	echo "var line2='".$CUSTOMER_DISPLAY_line2."'.substring(0,20);";
 	echo "line2=line2.padEnd(20);";
-	if (getDolGlobalString('TAKEPOS_CONNECTOR_TO_WHB_CUSTOMER_DISPLAY')) {
+	if (getDolGlobalString('FLUXPOS_CONNECTOR_TO_WHB_CUSTOMER_DISPLAY')) {
 		echo 'webSocketCustomerDisplay.send(line1);';
 		echo 'webSocketCustomerDisplay.send(line2);';
 	} else {
 		echo "$.ajax({
 			type: 'GET',
 			data: { text: line1+line2 },
-			url: '".getDolGlobalString('TAKEPOS_PRINT_SERVER')."/display/index.php',
+			url: '".getDolGlobalString('FLUXPOS_PRINT_SERVER')."/display/index.php',
 		});";
 	}
 	echo "}";
@@ -1964,7 +1964,7 @@ if (!empty($conf->use_javascript_ajax)) {
 
 $usediv = (GETPOST('format') == 'div');
 
-print '<!-- invoice.php place='.(int) $place.' invoice='.$invoice->ref.' usediv='.json_encode($usediv).', mobilepage='.(empty($mobilepage) ? '' : $mobilepage).' $_SESSION["basiclayout"]='.(empty($_SESSION["basiclayout"]) ? '' : $_SESSION["basiclayout"]).' conf TAKEPOS_BAR_RESTAURANT='.getDolGlobalString('TAKEPOS_BAR_RESTAURANT').' -->'."\n";
+print '<!-- invoice.php place='.(int) $place.' invoice='.$invoice->ref.' usediv='.json_encode($usediv).', mobilepage='.(empty($mobilepage) ? '' : $mobilepage).' $_SESSION["basiclayout"]='.(empty($_SESSION["basiclayout"]) ? '' : $_SESSION["basiclayout"]).' conf FLUXPOS_BAR_RESTAURANT='.getDolGlobalString('FLUXPOS_BAR_RESTAURANT').' -->'."\n";
 print '<div class="div-table-responsive-no-min invoice">';
 if ($usediv) {
 	print '<div id="tablelines">';
@@ -1974,10 +1974,10 @@ if ($usediv) {
 
 $buttontocreatecreditnote = '';
 if (($action == "valid" || $action == "history" || $action == "addline")
-	&& $invoice->type != Facture::TYPE_CREDIT_NOTE && !getDolGlobalString('TAKEPOS_NO_CREDITNOTE') && $invoice->status == $invoice::STATUS_CLOSED) {
+	&& $invoice->type != Facture::TYPE_CREDIT_NOTE && !getDolGlobalString('FLUXPOS_NO_CREDITNOTE') && $invoice->status == $invoice::STATUS_CLOSED) {
 	$buttontocreatecreditnote .= ' &nbsp; <!-- Show button to create a credit note -->'."\n";
 	$buttontocreatecreditnote .= '<button id="buttonprint" type="button" onclick="ModalBox(\'ModalCreditNote\')">'.$langs->trans('CreateCreditNote').'</button>';
-	if (getDolGlobalInt('TAKEPOS_PRINT_INVOICE_DOC_INSTEAD_OF_RECEIPT')) {
+	if (getDolGlobalInt('FLUXPOS_PRINT_INVOICE_DOC_INSTEAD_OF_RECEIPT')) {
 		$buttontocreatecreditnote .= ' <a target="_blank" class="button" href="' . DOL_URL_ROOT . '/document.php?token=' . newToken() . '&modulepart=facture&file=' . urlencode($invoice->ref . '/' . $invoice->ref . '.pdf').'">'.$langs->trans("Invoice").'</a>';
 	}
 }
@@ -1985,7 +1985,7 @@ if (($action == "valid" || $action == "history" || $action == "addline")
 // Show the ref of invoice
 if ($sectionwithinvoicelink && ($mobilepage == "invoice" || $mobilepage == "")) {
 	print '<!-- Print table line with link to invoice ref -->';
-	if (getDolGlobalString('TAKEPOS_SHOW_HT')) {
+	if (getDolGlobalString('FLUXPOS_SHOW_HT')) {
 		print '<tr><td colspan="5" class="paddingtopimp paddingbottomimp" style="padding-top: 10px !important; padding-bottom: 10px !important;">';
 		print $sectionwithinvoicelink;
 		print $buttontocreatecreditnote;
@@ -2010,8 +2010,8 @@ if (empty($mobilepage) || $mobilepage == "invoice") {
 	print '<input type="hidden" name="thirdpartyid" id="thirdpartyid" value="'.$invoice->socid.'">';
 }
 if (!$usediv) {
-	if (getDolGlobalString('TAKEPOS_BAR_RESTAURANT')) {
-		$sql = "SELECT floor, label FROM ".MAIN_DB_PREFIX."takepos_floor_tables where rowid = ".((int) $place);
+	if (getDolGlobalString('FLUXPOS_BAR_RESTAURANT')) {
+		$sql = "SELECT floor, label FROM ".MAIN_DB_PREFIX."fluxpos_floor_tables where rowid = ".((int) $place);
 		$resql = $db->query($sql);
 		$obj = $db->fetch_object($resql);
 		if ($obj) {
@@ -2030,30 +2030,30 @@ if (!$usediv) {
 
 // Complete header by hook
 $parameters = array();
-$reshook = $hookmanager->executeHooks('completeTakePosInvoiceHeader', $parameters, $invoice, $action);    // Note that $action and $object may have been modified by some hooks
+$reshook = $hookmanager->executeHooks('completeFluxPosInvoiceHeader', $parameters, $invoice, $action);    // Note that $action and $object may have been modified by some hooks
 if ($reshook < 0) {
 	setEventMessages($hookmanager->error, $hookmanager->errors, 'errors');
 }
 print $hookmanager->resPrint;
 
 if (empty($_SESSION["basiclayout"]) || $_SESSION["basiclayout"] != 1) {
-	if (getDolGlobalInt("TAKEPOS_SHOW_SUBPRICE")) {
+	if (getDolGlobalInt("FLUXPOS_SHOW_SUBPRICE")) {
 		print '<td class="linecolqty right">'.$langs->trans('PriceUHT').'</td>';
 	}
 	print '<td class="linecolqty right">'.$langs->trans('ReductionShort').'</td>';
 	print '<td class="linecolqty right">'.$langs->trans('Qty').'</td>';
-	if (getDolGlobalString('TAKEPOS_SHOW_HT')) {
+	if (getDolGlobalString('FLUXPOS_SHOW_HT')) {
 		print '<td class="linecolht right nowraponall">';
 		print '<span class="opacitymedium small">' . $langs->trans('TotalHTShort') . '</span><br>';
 		// In phone version only show when it is invoice page
 		if (empty($mobilepage) || $mobilepage == "invoice") {
 			print '<span id="linecolht-span-total" style="font-size:1.3em; font-weight: bold;">' . price($invoice->total_ht, 1, '', 1, -1, -1, $conf->currency) . '</span>';
-			if (isModEnabled('multicurrency') && !empty($_SESSION["takeposcustomercurrency"]) && $conf->currency != $_SESSION["takeposcustomercurrency"]) {
+			if (isModEnabled('multicurrency') && !empty($_SESSION["fluxposcustomercurrency"]) && $conf->currency != $_SESSION["fluxposcustomercurrency"]) {
 				//Only show customer currency if multicurrency module is enabled, if currency selected and if this currency selected is not the same as main currency
 				include_once DOL_DOCUMENT_ROOT . '/multicurrency/class/multicurrency.class.php';
 				$multicurrency = new MultiCurrency($db);
-				$multicurrency->fetch(0, $_SESSION["takeposcustomercurrency"]);
-				print '<br><span id="linecolht-span-total" style="font-size:0.9em; font-style:italic;">(' . price($invoice->total_ht * $multicurrency->rate->rate) . ' ' . $_SESSION["takeposcustomercurrency"] . ')</span>';
+				$multicurrency->fetch(0, $_SESSION["fluxposcustomercurrency"]);
+				print '<br><span id="linecolht-span-total" style="font-size:0.9em; font-style:italic;">(' . price($invoice->total_ht * $multicurrency->rate->rate) . ' ' . $_SESSION["fluxposcustomercurrency"] . ')</span>';
 			}
 		}
 		print '</td>';
@@ -2063,12 +2063,12 @@ if (empty($_SESSION["basiclayout"]) || $_SESSION["basiclayout"] != 1) {
 	// In phone version only show when it is invoice page
 	if (empty($mobilepage) || $mobilepage == "invoice") {
 		print '<span id="linecolht-span-total" style="font-size:1.3em; font-weight: bold;">'.price($invoice->total_ttc, 1, '', 1, -1, -1, $conf->currency).'</span>';
-		if (isModEnabled('multicurrency') && !empty($_SESSION["takeposcustomercurrency"]) && $conf->currency != $_SESSION["takeposcustomercurrency"]) {
+		if (isModEnabled('multicurrency') && !empty($_SESSION["fluxposcustomercurrency"]) && $conf->currency != $_SESSION["fluxposcustomercurrency"]) {
 			//Only show customer currency if multicurrency module is enabled, if currency selected and if this currency selected is not the same as main currency
 			include_once DOL_DOCUMENT_ROOT.'/multicurrency/class/multicurrency.class.php';
 			$multicurrency = new MultiCurrency($db);
-			$multicurrency->fetch(0, $_SESSION["takeposcustomercurrency"]);
-			print '<br><span id="linecolht-span-total" style="font-size:0.9em; font-style:italic;">('.price($invoice->total_ttc * $multicurrency->rate->rate).' '.$_SESSION["takeposcustomercurrency"].')</span>';
+			$multicurrency->fetch(0, $_SESSION["fluxposcustomercurrency"]);
+			print '<br><span id="linecolht-span-total" style="font-size:0.9em; font-style:italic;">('.price($invoice->total_ttc * $multicurrency->rate->rate).' '.$_SESSION["fluxposcustomercurrency"].')</span>';
 		}
 	}
 	print '</td>';
@@ -2093,7 +2093,7 @@ if (!empty($_SESSION["basiclayout"]) && $_SESSION["basiclayout"] == 1) {
 			}
 			$htmlforlines .= ' onclick="LoadProducts('.$row['id'].');">';
 			if (defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE')) {
-				$htmlforlines .= '<img class="imgwrapper" width="33%" src="'.DOL_URL_ROOT.'/takepos/public/auto_order.php?genimg=cat&query=cat&id='.$row['id'].'"><br>';
+				$htmlforlines .= '<img class="imgwrapper" width="33%" src="'.dol_buildpath('/fluxpos/public/auto_order.php', 1).'?genimg=cat&query=cat&id='.$row['id'].'"><br>';
 			} else {
 				$htmlforlines .= '<td class="left">';
 			}
@@ -2125,7 +2125,7 @@ if (!empty($_SESSION["basiclayout"]) && $_SESSION["basiclayout"] == 1) {
 			$htmlforlines .= ' onclick="AddProduct(\''.$place.'\', '.$row->id.')"';
 			$htmlforlines .= '>';
 			if (defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE')) {
-				$htmlforlines .= '<img class="imgwrapper" width="33%" src="'.DOL_URL_ROOT.'/takepos/public/auto_order.php?genimg=pro&query=pro&id='.$row->id.'"><br>';
+				$htmlforlines .= '<img class="imgwrapper" width="33%" src="'.dol_buildpath('/fluxpos/public/auto_order.php', 1).'?genimg=pro&query=pro&id='.$row->id.'"><br>';
 				$htmlforlines .= $row->label.' '.price($row->price_ttc, 1, $langs, 1, -1, -1, $conf->currency);
 				$htmlforlines .= '</div>'."\n";
 			} else {
@@ -2140,7 +2140,7 @@ if (!empty($_SESSION["basiclayout"]) && $_SESSION["basiclayout"] == 1) {
 	}
 
 	if ($mobilepage == "places") {
-		$sql = "SELECT rowid, entity, label, leftpos, toppos, floor FROM ".MAIN_DB_PREFIX."takepos_floor_tables";
+		$sql = "SELECT rowid, entity, label, leftpos, toppos, floor FROM ".MAIN_DB_PREFIX."fluxpos_floor_tables";
 		$resql = $db->query($sql);
 
 		$rows = array();
@@ -2203,7 +2203,7 @@ if ($placeid > 0) {
 
 				// complete line by hook
 				$parameters = array('line' => $line);
-				$reshook = $hookmanager->executeHooks('completeTakePosInvoiceParentLine', $parameters, $invoice, $action);    // Note that $action and $object may have been modified by some hooks
+				$reshook = $hookmanager->executeHooks('completeFluxPosInvoiceParentLine', $parameters, $invoice, $action);    // Note that $action and $object may have been modified by some hooks
 				if ($reshook < 0) {
 					setEventMessages($hookmanager->error, $hookmanager->errors, 'errors');
 				}
@@ -2240,7 +2240,7 @@ if ($placeid > 0) {
 				}
 			}
 			$tooltiptext = '';
-			if (!getDolGlobalString('TAKEPOS_SHOW_N_FIRST_LINES')) {
+			if (!getDolGlobalString('FLUXPOS_SHOW_N_FIRST_LINES')) {
 				if ($line->product_ref) {
 					$tooltiptext .= '<b>'.$langs->trans("Ref").'</b> : '.$line->product_ref.'<br>';
 					$tooltiptext .= '<b>'.$langs->trans("Label").'</b> : '.$line->product_label.'<br>';
@@ -2257,9 +2257,9 @@ if ($placeid > 0) {
 						$tooltiptext .= $line->desc;
 					}
 				}
-				if (getDolGlobalInt('TAKEPOS_SHOW_PRODUCT_REFERENCE') == 1) {
+				if (getDolGlobalInt('FLUXPOS_SHOW_PRODUCT_REFERENCE') == 1) {
 					$htmlforlines .= $form->textwithpicto($line->product_label ? '<b>' . $line->product_ref . '</b> - ' . $line->product_label : dolGetFirstLineOfText($line->desc, 1), $tooltiptext);
-				} elseif (getDolGlobalInt('TAKEPOS_SHOW_PRODUCT_REFERENCE') == 2) {
+				} elseif (getDolGlobalInt('FLUXPOS_SHOW_PRODUCT_REFERENCE') == 2) {
 					$htmlforlines .= $form->textwithpicto($line->product_ref ? '<b>'.$line->product_ref.'<b>' : dolGetFirstLineOfText($line->desc, 1), $tooltiptext);
 				} else {
 					$htmlforlines .= $form->textwithpicto($line->product_label ? $line->product_label : ($line->product_ref ? $line->product_ref : dolGetFirstLineOfText($line->desc, 1)), $tooltiptext);
@@ -2283,7 +2283,7 @@ if ($placeid > 0) {
 					if ($line->product_label && $line->desc) {
 						$htmlforlines .= '<br>';
 					}
-					$firstline = dolGetFirstLineOfText($line->desc, getDolGlobalInt('TAKEPOS_SHOW_N_FIRST_LINES'));
+					$firstline = dolGetFirstLineOfText($line->desc, getDolGlobalInt('FLUXPOS_SHOW_N_FIRST_LINES'));
 					if ($firstline != $line->desc) {
 						$htmlforlines .= $form->textwithpicto(dolGetFirstLineOfText($line->desc), $line->desc);
 					} else {
@@ -2324,13 +2324,13 @@ if ($placeid > 0) {
 
 				// complete line by hook
 				$parameters = array('line' => $line);
-				$reshook = $hookmanager->executeHooks('completeTakePosInvoiceLine', $parameters, $invoice, $action);    // Note that $action and $object may have been modified by some hooks
+				$reshook = $hookmanager->executeHooks('completeFluxPosInvoiceLine', $parameters, $invoice, $action);    // Note that $action and $object may have been modified by some hooks
 				if ($reshook < 0) {
 					setEventMessages($hookmanager->error, $hookmanager->errors, 'errors');
 				}
 				$htmlforlines .= $hookmanager->resPrint;
 
-				if (getDolGlobalInt("TAKEPOS_SHOW_SUBPRICE")) {
+				if (getDolGlobalInt("FLUXPOS_SHOW_SUBPRICE")) {
 					$htmlforlines .= '<td class="right">'.price($line->subprice).'</td>';
 				}
 				$htmlforlines .= '<td class="right">'.vatrate(price2num($line->remise_percent), true).'</td>';
@@ -2339,8 +2339,8 @@ if ($placeid > 0) {
 				$htmlforlines .= '<td class="right nowraponall">';
 				$htmlforlines .= $line->qty;
 				if (isModEnabled('stock') && $user->hasRight('stock', 'mouvement', 'lire')) {
-					$constantforkey = 'CASHDESK_ID_WAREHOUSE'.$_SESSION["takeposterminal"];
-					if (getDolGlobalString($constantforkey) && $line->fk_product > 0 && !getDolGlobalString('TAKEPOS_HIDE_STOCK_ON_LINE')) {
+					$constantforkey = 'FLUXPOS_ID_WAREHOUSE'.$_SESSION["fluxposterminal"];
+					if (getDolGlobalString($constantforkey) && $line->fk_product > 0 && !getDolGlobalString('FLUXPOS_HIDE_STOCK_ON_LINE')) {
 						$productChildrenNb = 0;
 						if (getDolGlobalInt('PRODUIT_SOUSPRODUITS')) {
 							if (empty($line->product) || !($line->product->id > 0)) {
@@ -2386,26 +2386,26 @@ if ($placeid > 0) {
 				}
 
 				$htmlforlines .= '</td>';
-				if (getDolGlobalInt('TAKEPOS_SHOW_HT')) {
+				if (getDolGlobalInt('FLUXPOS_SHOW_HT')) {
 					$htmlforlines .= '<td class="right classfortooltip" title="'.$moreinfo.'">';
 					$htmlforlines .= price($line->total_ht, 1, '', 1, -1, -1, $conf->currency);
-					if (isModEnabled('multicurrency') && !empty($_SESSION["takeposcustomercurrency"]) && $conf->currency != $_SESSION["takeposcustomercurrency"]) {
+					if (isModEnabled('multicurrency') && !empty($_SESSION["fluxposcustomercurrency"]) && $conf->currency != $_SESSION["fluxposcustomercurrency"]) {
 						//Only show customer currency if multicurrency module is enabled, if currency selected and if this currency selected is not the same as main currency
 						include_once DOL_DOCUMENT_ROOT.'/multicurrency/class/multicurrency.class.php';
 						$multicurrency = new MultiCurrency($db);
-						$multicurrency->fetch(0, $_SESSION["takeposcustomercurrency"]);
-						$htmlforlines .= '<br><span id="linecolht-span-total" style="font-size:0.9em; font-style:italic;">('.price($line->total_ht * $multicurrency->rate->rate).' '.$_SESSION["takeposcustomercurrency"].')</span>';
+						$multicurrency->fetch(0, $_SESSION["fluxposcustomercurrency"]);
+						$htmlforlines .= '<br><span id="linecolht-span-total" style="font-size:0.9em; font-style:italic;">('.price($line->total_ht * $multicurrency->rate->rate).' '.$_SESSION["fluxposcustomercurrency"].')</span>';
 					}
 					$htmlforlines .= '</td>';
 				}
 				$htmlforlines .= '<td class="right classfortooltip" title="'.$moreinfo.'">';
 				$htmlforlines .= price($line->total_ttc, 1, '', 1, -1, -1, $conf->currency);
-				if (isModEnabled('multicurrency') && !empty($_SESSION["takeposcustomercurrency"]) && $conf->currency != $_SESSION["takeposcustomercurrency"]) {
+				if (isModEnabled('multicurrency') && !empty($_SESSION["fluxposcustomercurrency"]) && $conf->currency != $_SESSION["fluxposcustomercurrency"]) {
 					//Only show customer currency if multicurrency module is enabled, if currency selected and if this currency selected is not the same as main currency
 					include_once DOL_DOCUMENT_ROOT.'/multicurrency/class/multicurrency.class.php';
 					$multicurrency = new MultiCurrency($db);
-					$multicurrency->fetch(0, $_SESSION["takeposcustomercurrency"]);
-					$htmlforlines .= '<br><span id="linecolht-span-total" style="font-size:0.9em; font-style:italic;">('.price($line->total_ttc * $multicurrency->rate->rate).' '.$_SESSION["takeposcustomercurrency"].')</span>';
+					$multicurrency->fetch(0, $_SESSION["fluxposcustomercurrency"]);
+					$htmlforlines .= '<br><span id="linecolht-span-total" style="font-size:0.9em; font-style:italic;">('.price($line->total_ttc * $multicurrency->rate->rate).' '.$_SESSION["fluxposcustomercurrency"].')</span>';
 				}
 				$htmlforlines .= '</td>';
 			}
@@ -2418,7 +2418,7 @@ if ($placeid > 0) {
 		print '<tr class="drag drop oddeven"><td class="left"><span class="opacitymedium">'.$langs->trans("Empty").'</span></td><td></td>';
 		if (empty($_SESSION["basiclayout"]) || $_SESSION["basiclayout"] != 1) {
 			print '<td></td><td></td>';
-			if (getDolGlobalString('TAKEPOS_SHOW_HT')) {
+			if (getDolGlobalString('FLUXPOS_SHOW_HT')) {
 				print '<td></td>';
 			}
 		}
@@ -2428,7 +2428,7 @@ if ($placeid > 0) {
 	print '<tr class="drag drop oddeven"><td class="left"><span class="opacitymedium">'.$langs->trans("Empty").'</span></td><td></td>';
 	if (empty($_SESSION["basiclayout"]) || $_SESSION["basiclayout"] != 1) {
 		print '<td></td><td></td>';
-		if (getDolGlobalString('TAKEPOS_SHOW_HT')) {
+		if (getDolGlobalString('FLUXPOS_SHOW_HT')) {
 			print '<td></td>';
 		}
 	}

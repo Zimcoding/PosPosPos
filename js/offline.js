@@ -16,8 +16,8 @@
  */
 
 /**
- *	\file       htdocs/takepos/js/offline.js
- *	\brief      Offline support for TakePOS: catalog cache into IndexedDB, online/offline
+ *	\file       htdocs/fluxpos/js/offline.js
+ *	\brief      Offline support for FluxPos: catalog cache into IndexedDB, online/offline
  *				status and offline order entry with background synchronization.
  *
  *				Phase 1 (read only): the product catalog (categories, products, prices)
@@ -39,16 +39,16 @@
  *				receipt printer at the same moment.
  */
 
-var TakePOSOfflineDBName = 'takepos';
-var TakePOSOfflineDBVersion = 1;
+var FluxPosOfflineDBName = 'fluxpos';
+var FluxPosOfflineDBVersion = 1;
 
 
 /**
- * Open the TakePOS offline IndexedDB database.
+ * Open the FluxPos offline IndexedDB database.
  *
  * @returns {Promise<IDBDatabase>} Promise of the database connection
  */
-function openTakePOSOfflineDB() {
+function openFluxPosOfflineDB() {
 	'use strict';
 
 	return new Promise(function (resolve, reject) {
@@ -56,7 +56,7 @@ function openTakePOSOfflineDB() {
 			reject(new Error('IndexedDB is not supported by this browser'));
 			return;
 		}
-		var request = window.indexedDB.open(TakePOSOfflineDBName, TakePOSOfflineDBVersion);
+		var request = window.indexedDB.open(FluxPosOfflineDBName, FluxPosOfflineDBVersion);
 		request.onupgradeneeded = function (event) {
 			var db = event.target.result;
 			if (!db.objectStoreNames.contains('catalog')) {
@@ -81,7 +81,7 @@ function openTakePOSOfflineDB() {
 function takePOSOfflineStoreGet(key) {
 	'use strict';
 
-	return openTakePOSOfflineDB().then(function (db) {
+	return openFluxPosOfflineDB().then(function (db) {
 		return new Promise(function (resolve, reject) {
 			var transaction = db.transaction('catalog', 'readonly');
 			var request = transaction.objectStore('catalog').get(key);
@@ -107,7 +107,7 @@ function takePOSOfflineStoreGet(key) {
 function takePOSOfflineStoreDelete(key) {
 	'use strict';
 
-	return openTakePOSOfflineDB().then(function (db) {
+	return openFluxPosOfflineDB().then(function (db) {
 		return new Promise(function (resolve, reject) {
 			var transaction = db.transaction('catalog', 'readwrite');
 			transaction.objectStore('catalog')['delete'](key);
@@ -131,7 +131,7 @@ function takePOSOfflineStoreDelete(key) {
 function takePOSOfflineStoreKeys(prefix) {
 	'use strict';
 
-	return openTakePOSOfflineDB().then(function (db) {
+	return openFluxPosOfflineDB().then(function (db) {
 		return new Promise(function (resolve, reject) {
 			var transaction = db.transaction('catalog', 'readonly');
 			var request = transaction.objectStore('catalog').getAllKeys();
@@ -164,7 +164,7 @@ function takePOSOfflineStoreKeys(prefix) {
 function takePOSOfflineStorePut(key, value) {
 	'use strict';
 
-	return openTakePOSOfflineDB().then(function (db) {
+	return openFluxPosOfflineDB().then(function (db) {
 		return new Promise(function (resolve, reject) {
 			var transaction = db.transaction('catalog', 'readwrite');
 			transaction.objectStore('catalog').put(value, key);
@@ -180,23 +180,23 @@ function takePOSOfflineStorePut(key, value) {
 }
 
 
-var TakePOSOffline = {
-	takeposbaseurl: (typeof takeposbaseuri != 'undefined') ? takeposbaseuri : '/takepos/',
-	takeposnewtoken: (typeof takeposnewtoken != 'undefined') ? takeposnewtoken : '',
-	takeposcurrency: (typeof takeposcurrency != 'undefined') ? takeposcurrency : '',
-	takeposlang: (typeof takeposlang != 'undefined') ? takeposlang : {},
+var FluxPosOffline = {
+	fluxposbaseurl: (typeof fluxposbaseuri != 'undefined') ? fluxposbaseuri : '/fluxpos/',
+	fluxposnewtoken: (typeof fluxposnewtoken != 'undefined') ? fluxposnewtoken : '',
+	fluxposcurrency: (typeof fluxposcurrency != 'undefined') ? fluxposcurrency : '',
+	fluxposlang: (typeof fluxposlang != 'undefined') ? fluxposlang : {},
 
 	/**
-	 * Return a translated string passed by index.php (takeposlang), or a fallback text.
+	 * Return a translated string passed by index.php (fluxposlang), or a fallback text.
 	 *
-	 * @param  {string} key      Key into takeposlang
+	 * @param  {string} key      Key into fluxposlang
 	 * @param  {string} fallback Text used when the key is not provided by index.php
 	 * @returns {string} The translated text
 	 */
 	t: function (key, fallback) {
 		'use strict';
 
-		return (this.takeposlang && this.takeposlang[key]) ? this.takeposlang[key] : fallback;
+		return (this.fluxposlang && this.fluxposlang[key]) ? this.fluxposlang[key] : fallback;
 	},
 
 	/**
@@ -221,9 +221,9 @@ var TakePOSOffline = {
 		'use strict';
 
 		try {
-			return new Intl.NumberFormat(undefined, { style: 'currency', currency: this.takeposcurrency, minimumFractionDigits: 2 }).format(amount);
+			return new Intl.NumberFormat(undefined, { style: 'currency', currency: this.fluxposcurrency, minimumFractionDigits: 2 }).format(amount);
 		} catch (error) {
-			return (Math.round(amount * 100) / 100).toFixed(2) + ' ' + this.takeposcurrency;
+			return (Math.round(amount * 100) / 100).toFixed(2) + ' ' + this.fluxposcurrency;
 		}
 	},
 
@@ -445,25 +445,25 @@ var TakePOSOffline = {
 			html += '<input type="hidden" name="invoiceid" id="invoiceid" value="">';
 			html += '<input type="hidden" name="thirdpartyid" id="thirdpartyid" value="' + ((cart && cart.socid) ? parseInt(cart.socid, 10) : 0) + '">';
 			html += '<input type="hidden" name="offlinecart" id="offlinecart" value="1">';
-			html += '<table class="takeposofflinecart">';
+			html += '<table class="fluxposofflinecart">';
 			html += '<tr class="liste_titre nodrag nodrop"><td class="linecoldescription"></td><td class="linecolqty right">' + self.escapeHtml(self.t('Qty', 'Qty')) + '</td><td class="linecolht right"><span class="opacitymedium small">' + self.escapeHtml(self.t('TotalTTCShort', 'Total')) + '</span></td></tr>';
 			if (!lines.length) {
 				html += '<tr class="drag drop oddeven"><td class="left"><span class="opacitymedium">' + self.escapeHtml(self.t('Empty', 'Empty')) + '</span></td><td></td><td></td></tr>';
 			}
 			for (i = lines.length - 1; i >= 0; i--) {
 				line = lines[i];
-				html += '<tr class="drag drop oddeven posinvoiceline takeposofflinecartline">';
-				html += '<td class="left"><span class="takeposofflinelabel">' + self.escapeHtml(line.label) + '</span></td>';
-				html += '<td class="right nowraponall takeposofflineqty">';
+				html += '<tr class="drag drop oddeven posinvoiceline fluxposofflinecartline">';
+				html += '<td class="left"><span class="fluxposofflinelabel">' + self.escapeHtml(line.label) + '</span></td>';
+				html += '<td class="right nowraponall fluxposofflineqty">';
 				if (!validated) {
-					html += '<button type="button" class="takeposofflineqtybtn" onclick="TakePOSOffline.changeQty(' + line.rowid + ', -1);">-</button>';
+					html += '<button type="button" class="fluxposofflineqtybtn" onclick="FluxPosOffline.changeQty(' + line.rowid + ', -1);">-</button>';
 				}
-				html += '<span class="takeposofflineqtyval">' + self.escapeHtml(line.qty) + '</span>';
+				html += '<span class="fluxposofflineqtyval">' + self.escapeHtml(line.qty) + '</span>';
 				if (!validated) {
-					html += '<button type="button" class="takeposofflineqtybtn" onclick="TakePOSOffline.changeQty(' + line.rowid + ', 1);">+</button>';
+					html += '<button type="button" class="fluxposofflineqtybtn" onclick="FluxPosOffline.changeQty(' + line.rowid + ', 1);">+</button>';
 				}
 				html += '</td>';
-				html += '<td class="right takeposofflinetotal">' + self.formatAmount(line.price_ttc * line.qty) + '</td>';
+				html += '<td class="right fluxposofflinetotal">' + self.formatAmount(line.price_ttc * line.qty) + '</td>';
 				html += '</tr>';
 			}
 			html += '<tr class="liste_total"><td colspan="2" class="right">' + self.escapeHtml(self.t('TotalTTCShort', 'Total')) + '</td><td class="right">' + self.formatAmount(total) + '</td></tr>';
@@ -472,24 +472,24 @@ var TakePOSOffline = {
 			// Payments validated on the terminal
 			if (validated) {
 				var paid = 0;
-				html += '<div class="takeposofflinepayments">';
+				html += '<div class="fluxposofflinepayments">';
 				for (i = 0; i < payments.length; i++) {
 					posnochange = (payments[i].pay == 'LIQ' && payments[i].excess) ? ' - ' + self.escapeHtml(self.t('Change', 'Change')) + ' ' + self.formatAmount(payments[i].excess) : '';
-					html += '<div class="takeposofflinepayment">' + self.escapeHtml(self.t('PaymentTypeShort' + payments[i].pay, payments[i].pay)) + ' : <span class="takeposofflinepaymentamount">' + self.formatAmount(payments[i].amount) + posnochange + '</span></div>';
+					html += '<div class="fluxposofflinepayment">' + self.escapeHtml(self.t('PaymentTypeShort' + payments[i].pay, payments[i].pay)) + ' : <span class="fluxposofflinepaymentamount">' + self.formatAmount(payments[i].amount) + posnochange + '</span></div>';
 					paid += parseFloat(payments[i].amount) || 0;
 				}
 				html += '</div>';
 				if (Math.round(total * 100) / 100 > Math.round(paid * 100) / 100) {
-					html += '<div class="takeposofflinepayments remaining">' + self.escapeHtml(self.t('RemainToPay', 'Remain to pay')) + ' : <span class="takeposofflinepaymentamount">' + self.formatAmount(total - paid) + '</span></div>';
+					html += '<div class="fluxposofflinepayments remaining">' + self.escapeHtml(self.t('RemainToPay', 'Remain to pay')) + ' : <span class="fluxposofflinepaymentamount">' + self.formatAmount(total - paid) + '</span></div>';
 				}
 			}
 
 			if (validated) {
-				html += '<div class="takeposofflinenotice">' + 'This sale is validated. It has been safely stored with its payments: its invoice number and its receipt will be issued by the server as soon as the synchronization can be done.' + '</div>';
+				html += '<div class="fluxposofflinenotice">' + 'This sale is validated. It has been safely stored with its payments: its invoice number and its receipt will be issued by the server as soon as the synchronization can be done.' + '</div>';
 			} else if (lines.length) {
-				html += '<div class="takeposofflinenotice">' + (navigator.onLine ? 'This order is synchronized to the server in background. Payment will be available as soon as the synchronization is done.' : 'This order is stored on this terminal and will be synchronized to the server when the connection is back.') + '</div>';
+				html += '<div class="fluxposofflinenotice">' + (navigator.onLine ? 'This order is synchronized to the server in background. Payment will be available as soon as the synchronization is done.' : 'This order is stored on this terminal and will be synchronized to the server when the connection is back.') + '</div>';
 			} else {
-				html += '<div class="takeposofflinenotice opacitymedium">Offline mode: a new order can be captured, it will be synchronized to the server when the connection is back. An order already registered on the server is shown again when the connection is back.</div>';
+				html += '<div class="fluxposofflinenotice opacitymedium">Offline mode: a new order can be captured, it will be synchronized to the server when the connection is back. An order already registered on the server is shown again when the connection is back.</div>';
 			}
 			jQuery('#poslines').html(html);
 			return true;
@@ -518,12 +518,12 @@ var TakePOSOffline = {
 		'use strict';
 
 		if (!('serviceWorker' in navigator)) {
-			console.log('TakePOS offline: service workers are not supported');
+			console.log('FluxPos offline: service workers are not supported');
 			return;
 		}
 		window.addEventListener('load', function () {
-			navigator.serviceWorker.register(TakePOSOffline.takeposbaseurl + 'serviceworker.js').catch(function (error) {
-				console.log('TakePOS offline: service worker registration failed', error);
+			navigator.serviceWorker.register(FluxPosOffline.fluxposbaseurl + 'serviceworker.js').catch(function (error) {
+				console.log('FluxPos offline: service worker registration failed', error);
 			});
 		});
 	},
@@ -542,7 +542,7 @@ var TakePOSOffline = {
 		}
 		var self = this;
 		var socid = parseInt(jQuery('#thirdpartyid').val(), 10) || 0;
-		var url = this.takeposbaseurl + 'ajax/ajax.php?action=getCatalog&token=' + this.takeposnewtoken + '&thirdpartyid=' + socid;
+		var url = this.fluxposbaseurl + 'ajax/ajax.php?action=getCatalog&token=' + this.fluxposnewtoken + '&thirdpartyid=' + socid;
 
 		return jQuery.getJSON(url).then(function (data) {
 			var puts = [];
@@ -560,11 +560,11 @@ var TakePOSOffline = {
 			puts.push(takePOSOfflineStorePut('lastsync', Math.floor(Date.now() / 1000)));
 
 			return Promise.all(puts).then(function () {
-				console.log('TakePOS offline: catalog synchronized for offline use');
+				console.log('FluxPos offline: catalog synchronized for offline use');
 				return true;
 			});
 		}).catch(function (error) {
-			console.log('TakePOS offline: catalog synchronization failed', error);
+			console.log('FluxPos offline: catalog synchronization failed', error);
 			return false;
 		});
 	},
@@ -706,7 +706,7 @@ var TakePOSOffline = {
 								lines.push({ id: cart.lines[i].rowid, qty: cart.lines[i].qty });
 							}
 						}
-						var url = self.takeposbaseurl + 'ajax/ajax.php?action=syncOfflineOrder&token=' + self.takeposnewtoken;
+						var url = self.fluxposbaseurl + 'ajax/ajax.php?action=syncOfflineOrder&token=' + self.fluxposnewtoken;
 						return jQuery.ajax(url, {
 							method: 'POST',
 							contentType: 'application/json; charset=utf-8',
@@ -720,10 +720,10 @@ var TakePOSOffline = {
 							dataType: 'json'
 						}).then(function (data) {
 							if (data && data.error) {
-								console.log('TakePOS offline: synchronization of the order of place ' + cart.place + ' failed: ' + data.error);
+								console.log('FluxPos offline: synchronization of the order of place ' + cart.place + ' failed: ' + data.error);
 								return false;
 							}
-							console.log('TakePOS offline: order of place ' + cart.place + ' synchronized to the server' + (data && data.ref ? ' (invoice ' + data.ref + (data.paid ? ', paid' : '') + ')' : ''));
+							console.log('FluxPos offline: order of place ' + cart.place + ' synchronized to the server' + (data && data.ref ? ' (invoice ' + data.ref + (data.paid ? ', paid' : '') + ')' : ''));
 							return takePOSOfflineStoreDelete(key).then(function () {
 								if (plc === currentplace && typeof Refresh == 'function') {
 									// Reload the order of the current place from the server
@@ -737,7 +737,7 @@ var TakePOSOffline = {
 			});
 			return promise;
 		}).catch(function (error) {
-			console.log('TakePOS offline: background order synchronization failed', error);
+			console.log('FluxPos offline: background order synchronization failed', error);
 			return false;
 		}).then(function (result) {
 			self._syncing = false;
@@ -755,7 +755,7 @@ var TakePOSOffline = {
 	updateOfflineStatus: function () {
 		'use strict';
 
-		var element = document.getElementById('takeposofflinestatus');
+		var element = document.getElementById('fluxposofflinestatus');
 		var self = this;
 		if (!element) {
 			return;

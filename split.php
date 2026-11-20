@@ -18,8 +18,8 @@
  */
 
 /**
- *	\file       htdocs/takepos/split.php
- *	\ingroup	takepos
+ *	\file       htdocs/fluxpos/split.php
+ *	\ingroup	fluxpos
  *	\brief      Page with the content of the popup to split sale
  */
 
@@ -49,12 +49,12 @@ require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
  * @var Translate $langs
  * @var User $user
  */
-$langs->loadLangs(array("main", "bills", "cashdesk", "banks"));
+$langs->loadLangs(array("main", "bills", "fluxpos@fluxpos", "banks"));
 
 $action = GETPOST('action', 'aZ09');
 $place = (GETPOST('place', 'aZ09') ? GETPOST('place', 'aZ09') : 0);
 
-if (!$user->hasRight('takepos', 'run')) {
+if (!$user->hasRight('fluxpos', 'run')) {
 	accessforbidden();
 }
 
@@ -63,35 +63,35 @@ if (!$user->hasRight('takepos', 'run')) {
  * Actions
  */
 
-if ($action == "split" && $user->hasRight('takepos', 'run')) {
+if ($action == "split" && $user->hasRight('fluxpos', 'run')) {
 	$line = GETPOSTINT('line');
 	$split = GETPOSTINT('split');
 	$invoice = null;
 	$placeid = 0;
 	// The line can only be taken from the draft invoice of this terminal it is moved from
-	$sourceref = '(PROV-POS'.$_SESSION["takeposterminal"].'-'.($split == 1 ? $place : 'SPLIT').')';
+	$sourceref = '(PROV-POS'.$_SESSION["fluxposterminal"].'-'.($split == 1 ? $place : 'SPLIT').')';
 	if ($split == 1) { // Split line
 		$invoice = new Facture($db);
-		$ret = $invoice->fetch(0, '(PROV-POS'.$_SESSION["takeposterminal"].'-SPLIT)');
+		$ret = $invoice->fetch(0, '(PROV-POS'.$_SESSION["fluxposterminal"].'-SPLIT)');
 		if ($ret > 0) {
 			$placeid = $invoice->id;
 		} else {
-			$constforcompanyid = 'CASHDESK_ID_THIRDPARTY'.$_SESSION["takeposterminal"];
+			$constforcompanyid = 'FLUXPOS_ID_THIRDPARTY'.$_SESSION["fluxposterminal"];
 			$invoice->socid = getDolGlobalInt($constforcompanyid);
 			$invoice->date = dol_now();
-			$invoice->module_source = 'takepos';
-			$invoice->pos_source = $_SESSION["takeposterminal"];
-			$invoice->entity = !empty($_SESSION["takeposinvoiceentity"]) ? $_SESSION["takeposinvoiceentity"] : $conf->entity;
+			$invoice->module_source = 'fluxpos';
+			$invoice->pos_source = $_SESSION["fluxposterminal"];
+			$invoice->entity = !empty($_SESSION["fluxposinvoiceentity"]) ? $_SESSION["fluxposinvoiceentity"] : $conf->entity;
 			if ($invoice->socid <= 0) {
 				$langs->load('errors');
-				dol_htmloutput_errors($langs->trans("ErrorModuleSetupNotComplete", "TakePos"), [], 1);
+				dol_htmloutput_errors($langs->trans("ErrorModuleSetupNotComplete", "FluxPos"), [], 1);
 			} else {
 				$placeid = $invoice->create($user);
 				if ($placeid < 0) {
 					dol_htmloutput_errors($invoice->error, $invoice->errors, 1);
 				}
 
-				$sql = "UPDATE ".MAIN_DB_PREFIX."facture SET ref='(PROV-POS".$_SESSION["takeposterminal"]."-SPLIT)'";
+				$sql = "UPDATE ".MAIN_DB_PREFIX."facture SET ref='(PROV-POS".$_SESSION["fluxposterminal"]."-SPLIT)'";
 				$sql .= " WHERE rowid = ".((int) $placeid);
 				$db->query($sql);
 			}
@@ -107,26 +107,26 @@ if ($action == "split" && $user->hasRight('takepos', 'run')) {
 		if ($place == "SPLIT") {
 			$place = "0";
 		} // Avoid move line to the same place (from SPLIT to SPLIT place)
-		$ret = $invoice->fetch(0, '(PROV-POS'.$_SESSION["takeposterminal"].'-'.$place.')');
+		$ret = $invoice->fetch(0, '(PROV-POS'.$_SESSION["fluxposterminal"].'-'.$place.')');
 		if ($ret > 0) {
 			$placeid = $invoice->id;
 		} else {
-			$constforcompanyid = 'CASHDESK_ID_THIRDPARTY'.$_SESSION["takeposterminal"];
+			$constforcompanyid = 'FLUXPOS_ID_THIRDPARTY'.$_SESSION["fluxposterminal"];
 			$invoice->socid = getDolGlobalInt($constforcompanyid);
 			$invoice->date = dol_now();
-			$invoice->module_source = 'takepos';
-			$invoice->pos_source = $_SESSION["takeposterminal"];
-			$invoice->entity = !empty($_SESSION["takeposinvoiceentity"]) ? $_SESSION["takeposinvoiceentity"] : $conf->entity;
+			$invoice->module_source = 'fluxpos';
+			$invoice->pos_source = $_SESSION["fluxposterminal"];
+			$invoice->entity = !empty($_SESSION["fluxposinvoiceentity"]) ? $_SESSION["fluxposinvoiceentity"] : $conf->entity;
 			if ($invoice->socid <= 0) {
 				$langs->load('errors');
-				dol_htmloutput_errors($langs->trans("ErrorModuleSetupNotComplete", "TakePos"), [], 1);
+				dol_htmloutput_errors($langs->trans("ErrorModuleSetupNotComplete", "FluxPos"), [], 1);
 			} else {
 				$placeid = $invoice->create($user);
 				if ($placeid < 0) {
 					dol_htmloutput_errors($invoice->error, $invoice->errors, 1);
 				}
 
-				$sql = "UPDATE ".MAIN_DB_PREFIX."facture SET ref='(PROV-POS".$_SESSION["takeposterminal"]."-".$place.")'";
+				$sql = "UPDATE ".MAIN_DB_PREFIX."facture SET ref='(PROV-POS".$_SESSION["fluxposterminal"]."-".$place.")'";
 				$sql .= " WHERE rowid = ".((int) $placeid);
 				$db->query($sql);
 			}
@@ -139,10 +139,10 @@ if ($action == "split" && $user->hasRight('takepos', 'run')) {
 		}
 	}
 	if ($invoice !== null) {
-		$invoice->fetch(0, '(PROV-POS'.$_SESSION["takeposterminal"].'-SPLIT)');
+		$invoice->fetch(0, '(PROV-POS'.$_SESSION["fluxposterminal"].'-SPLIT)');
 		$invoice->update_price();
 
-		$invoice->fetch(0, '(PROV-POS'.$_SESSION["takeposterminal"].'-'.$place.')');
+		$invoice->fetch(0, '(PROV-POS'.$_SESSION["fluxposterminal"].'-'.$place.')');
 		$invoice->update_price();
 	}
 }
@@ -156,7 +156,7 @@ $invoice = new Facture($db);
 if (isset($invoiceid) && $invoiceid > 0) {
 	$invoice->fetch($invoiceid);
 } else {
-	$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."facture where ref = '".$db->escape("(PROV-POS".$_SESSION["takeposterminal"]."-".$place.")")."'";
+	$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."facture where ref = '".$db->escape("(PROV-POS".$_SESSION["fluxposterminal"]."-".$place.")")."'";
 	$resql = $db->query($sql);
 	$obj = $db->fetch_object($resql);
 	if ($obj) {
@@ -169,9 +169,9 @@ if (isset($invoiceid) && $invoiceid > 0) {
 	}
 }
 
-$arrayofcss = array('/takepos/css/pos.css.php');
-if (getDolGlobalInt('TAKEPOS_COLOR_THEME') == 1) {
-	$arrayofcss[] = '/takepos/css/colorful.css';
+$arrayofcss = array('/fluxpos/css/pos.css.php');
+if (getDolGlobalInt('FLUXPOS_COLOR_THEME') == 1) {
+	$arrayofcss[] = '/fluxpos/css/colorful.css';
 }
 $arrayofjs = array();
 
@@ -187,7 +187,7 @@ $arrayOfValidPaymentModes = array();
 $arrayOfValidBankAccount = array();
 
 ?>
-<body class="takepossplitphp">
+<body class="fluxpossplitphp">
 
 <script>
 function Split(selectedline, split) {

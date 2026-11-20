@@ -19,8 +19,8 @@
  */
 
 /**
- *	\file       htdocs/takepos/freezone.php
- *	\ingroup    takepos
+ *	\file       htdocs/fluxpos/freezone.php
+ *	\ingroup    fluxpos
  *	\brief      Popup to enter a free line
  */
 
@@ -57,7 +57,7 @@ global $mysoc;
  * @var User $user
  */
 
-$langs->loadLangs(array("bills", "cashdesk"));
+$langs->loadLangs(array("bills", "fluxpos@fluxpos"));
 
 $place = (GETPOST('place', 'aZ09') ? GETPOST('place', 'aZ09') : '0'); // $place is id of table for Bar or Restaurant
 
@@ -66,7 +66,7 @@ $invoiceid = GETPOSTINT('invoiceid');
 $idline = GETPOSTINT('idline');
 $action = GETPOST('action', 'aZ09');
 
-if (!$user->hasRight('takepos', 'run')) {
+if (!$user->hasRight('fluxpos', 'run')) {
 	accessforbidden();
 }
 
@@ -75,12 +75,12 @@ $invoice = new Facture($db);
 if ($invoiceid > 0) {
 	$invoice->fetch($invoiceid);
 } else {
-	$invoice->fetch(0, '(PROV-POS'.$_SESSION['takeposterminal'].'-'.$place.')');
+	$invoice->fetch(0, '(PROV-POS'.$_SESSION['fluxposterminal'].'-'.$place.')');
 }
 
 
 // get default vat rate
-$constforcompanyid = 'CASHDESK_ID_THIRDPARTY'.$_SESSION['takeposterminal'];
+$constforcompanyid = 'FLUXPOS_ID_THIRDPARTY'.$_SESSION['fluxposterminal'];
 $soc = new Societe($db);
 if ($invoice->socid > 0) {
 	$soc->fetch($invoice->socid);
@@ -94,7 +94,7 @@ $vatRateDefault = get_default_tva($mysoc, $soc);
  * View
  */
 
-$arrayofcss = array('/takepos/css/pos.css.php');
+$arrayofcss = array('/fluxpos/css/pos.css.php');
 $arrayofjs = array();
 
 top_htmlhead('', '', 0, 0, $arrayofjs, $arrayofcss);
@@ -122,7 +122,7 @@ top_htmlhead('', '', 0, 0, $arrayofjs, $arrayofcss);
 	 */
 	function Save() {
 		console.log("We click so we call page invoice.php with invoiceid=<?php echo $invoiceid; ?>, place=<?php echo $place; ?>, amount="+$("#number").val()+", tva_tx="+vatRate);
-		parent.$("#poslines").load("<?php echo DOL_URL_ROOT; ?>/takepos/invoice.php?action=freezone&token=<?php echo newToken(); ?>&invoiceid=<?php echo $invoiceid; ?>&place=<?php echo $place; ?>&number="+$("#number").val()+"&tva_tx="+vatRate, {desc:$("#desc").val()});
+		parent.$("#poslines").load("<?php echo dol_buildpath('/fluxpos/invoice.php', 1) ?>?action=freezone&token=<?php echo newToken(); ?>&invoiceid=<?php echo $invoiceid; ?>&place=<?php echo $place; ?>&number="+$("#number").val()+"&tva_tx="+vatRate, {desc:$("#desc").val()});
 		parent.$.colorbox.close();
 	}
 
@@ -134,20 +134,20 @@ top_htmlhead('', '', 0, 0, $arrayofjs, $arrayofcss);
 <br>
 <center>
 <form>
-<input type="text" id="desc" name="desc" class="takepospay" style="width:40%;" placeholder="<?php echo $langs->trans('Description'); ?>">
+<input type="text" id="desc" name="desc" class="fluxpospay" style="width:40%;" placeholder="<?php echo $langs->trans('Description'); ?>">
 <?php
-if ($action == "freezone" && $user->hasRight('takepos', 'run')) {
-	echo '<input type="text" id="number" name="number" class="takepospay" style="width:15%;" placeholder="'.$langs->trans(getDolGlobalString("TAKEPOS_CHANGE_PRICE_HT") ? 'AmountHT' : 'AmountTTC').'">';
+if ($action == "freezone" && $user->hasRight('fluxpos', 'run')) {
+	echo '<input type="text" id="number" name="number" class="fluxpospay" style="width:15%;" placeholder="'.$langs->trans(getDolGlobalString("FLUXPOS_CHANGE_PRICE_HT") ? 'AmountHT' : 'AmountTTC').'">';
 }
-if ($action == "addnote" && $user->hasRight('takepos', 'run')) {
+if ($action == "addnote" && $user->hasRight('fluxpos', 'run')) {
 	echo '<input type="hidden" id="number" name="number" value="'.$idline.'">';
 }
 ?>
-<input type="hidden" name="place" class="takepospay" value="<?php echo $place; ?>">
-<input type="submit" class="button takepospay clearboth" value="OK" onclick="Save(); return false;">
+<input type="hidden" name="place" class="fluxpospay" value="<?php echo $place; ?>">
+<input type="submit" class="button fluxpospay clearboth" value="OK" onclick="Save(); return false;">
 </form>
 <?php
-if ($action == 'freezone' && !getDolGlobalString("TAKEPOS_USE_DEFAULT_VATRATE_FOR_FREEZONE") && $user->hasRight('takepos', 'run')) {
+if ($action == 'freezone' && !getDolGlobalString("FLUXPOS_USE_DEFAULT_VATRATE_FOR_FREEZONE") && $user->hasRight('fluxpos', 'run')) {
 	require_once DOL_DOCUMENT_ROOT.'/core/class/html.form.class.php';
 
 	$form = new Form($db);
