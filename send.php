@@ -19,8 +19,8 @@
  */
 
 /**
- *	\file       htdocs/takepos/send.php
- *	\ingroup	takepos
+ *	\file       htdocs/fluxpos/send.php
+ *	\ingroup	fluxpos
  *	\brief      Page with the content of the popup to enter payments
  */
 
@@ -57,16 +57,16 @@ $facid = GETPOSTINT('facid');
 $action = GETPOST('action', 'aZ09');
 $email = GETPOST('email', 'alpha');
 
-if (!$user->hasRight('takepos', 'run')) {
+if (!$user->hasRight('fluxpos', 'run')) {
 	accessforbidden();
 }
 
-$langs->loadLangs(array("main", "bills", "cashdesk"));
+$langs->loadLangs(array("main", "bills", "fluxpos@fluxpos"));
 
 $invoice = new Facture($db);
 $result = $invoice->fetch($facid);
 // Only an invoice of the POS, in an entity of the user, can be sent from the POS
-if ($result <= 0 || $invoice->module_source != 'takepos' || !in_array($invoice->entity, explode(',', getEntity('invoice')))) {
+if ($result <= 0 || !in_array($invoice->module_source, array('fluxpos', 'takepos')) || !in_array($invoice->entity, explode(',', getEntity('invoice')))) {
 	accessforbidden();
 }
 
@@ -80,14 +80,14 @@ $error = 0;
  * Actions
  */
 
-if ($action == "send" && $user->hasRight('takepos', 'run')) {
+if ($action == "send" && $user->hasRight('fluxpos', 'run')) {
 	top_httphead('text/html');
 
 	include_once DOL_DOCUMENT_ROOT.'/core/class/CMailFile.class.php';
 	include_once DOL_DOCUMENT_ROOT.'/core/class/html.formmail.class.php';
 	$formmail = new FormMail($db);
 	$outputlangs = new Translate('', $conf);
-	$model_id = getDolGlobalInt('TAKEPOS_EMAIL_TEMPLATE_INVOICE');
+	$model_id = getDolGlobalInt('FLUXPOS_EMAIL_TEMPLATE_INVOICE');
 	$arraydefaultmessage = $formmail->getEMailTemplate($db, 'facture_send', $user, $outputlangs, $model_id);
 
 	// Subject
@@ -99,11 +99,11 @@ if ($action == "send" && $user->hasRight('takepos', 'run')) {
 	$joinFileName = [];
 	$joinFileMime = [];
 
-	if (!getDolGlobalString('TAKEPOS_SEND_INVOICE_AS_PDF')) {
-		$nojs = 1;	// used by include of takepos/receipt.php
+	if (!getDolGlobalString('FLUXPOS_SEND_INVOICE_AS_PDF')) {
+		$nojs = 1;	// used by include of fluxpos/receipt.php
 
 		ob_start(); // turn on output receipt
-		include DOL_DOCUMENT_ROOT.'/takepos/receipt.php';
+		include DOL_DOCUMENT_ROOT.'/fluxpos/receipt.php';
 		$receipt = ob_get_contents(); // get the contents of the output buffer
 		ob_end_clean();
 	} else {
@@ -131,7 +131,7 @@ if ($action == "send" && $user->hasRight('takepos', 'run')) {
 	$msg .= "</html>";
 
 	// Send email
-	$mail = new CMailFile($subject, $sendto, $email_from, $msg, $joinFile, $joinFileMime, $joinFileName, '', '', 0, 1, '', '', '', '', '', '', DOL_DATA_ROOT.'/documents/takepos/temp');
+	$mail = new CMailFile($subject, $sendto, $email_from, $msg, $joinFile, $joinFileMime, $joinFileName, '', '', 0, 1, '', '', '', '', '', '', DOL_DATA_ROOT.'/documents/fluxpos/temp');
 
 	if ($mail->error || !empty($mail->errors)) {
 		setEventMessages($mail->error, $mail->errors, 'errors');
@@ -189,7 +189,7 @@ if ($action == "send" && $user->hasRight('takepos', 'run')) {
  * View
  */
 
-$arrayofcss = array('/takepos/css/pos.css.php');
+$arrayofcss = array('/fluxpos/css/pos.css.php');
 $arrayofjs  = array();
 $head = '';
 
@@ -203,7 +203,7 @@ function SendMail() {
 	$.ajax({
 		type: "GET",
 		data: { token: '<?php echo currentToken(); ?>' },
-		url: '<?php print DOL_URL_ROOT.'/takepos/send.php?action=send&token='.newToken().'&facid='.((int) $facid).'&email='; ?>' + encodeURIComponent($("#email").val()),
+		url: '<?php print DOL_URL_ROOT.'/fluxpos/send.php?action=send&token='.newToken().'&facid='.((int) $facid).'&email='; ?>' + encodeURIComponent($("#email").val()),
 		success: function(response) {
 			console.log("Email sent");
 			alert("Email sent");

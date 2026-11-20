@@ -24,8 +24,8 @@
  */
 
 /**
- *	\file       htdocs/takepos/receipt.php
- *	\ingroup    takepos
+ *	\file       htdocs/fluxpos/receipt.php
+ *	\ingroup    fluxpos
  *	\brief      Page to show a receipt.
  */
 
@@ -66,7 +66,7 @@ if (!isset($action)) {
 include_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
 include_once DOL_DOCUMENT_ROOT.'/blockedlog/lib/blockedlog.lib.php';
 
-$langs->loadLangs(array("main", "bills", "cashdesk", "companies"));
+$langs->loadLangs(array("main", "bills", "fluxpos@fluxpos", "companies"));
 
 $place = (GETPOST('place', 'aZ09') ? GETPOST('place', 'aZ09') : 0); // $place is id of table for Bar or Restaurant
 
@@ -75,7 +75,7 @@ $facid = GETPOSTINT('facid');
 $action = GETPOST('action', 'aZ09');
 $gift = GETPOSTINT('gift');
 
-if (!$user->hasRight('takepos', 'run')) {
+if (!$user->hasRight('fluxpos', 'run')) {
 	accessforbidden();
 }
 
@@ -93,9 +93,9 @@ if (!$user->hasRight('takepos', 'run')) {
 
 top_htmlhead('', '', 2);
 
-if (!$facid && (string) $place != '' && !empty($_SESSION["takeposterminal"])) {
+if (!$facid && (string) $place != '' && !empty($_SESSION["fluxposterminal"])) {
 	$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."facture";
-	$sql .= " WHERE ref = '(PROV-POS".$db->escape($_SESSION["takeposterminal"]."-".$place).")'";
+	$sql .= " WHERE ref = '(PROV-POS".$db->escape($_SESSION["fluxposterminal"]."-".$place).")'";
 	$sql .= " AND entity IN (".getEntity('invoice').")";
 
 	$resql = $db->query($sql);
@@ -109,11 +109,11 @@ $object = new Facture($db);
 if ($facid > 0 && !GETPOST('specimen')) {
 	$result = $object->fetch($facid);
 	// Only an invoice of the POS, in an entity of the user, can be printed from the POS
-	if ($result <= 0 || $object->module_source != 'takepos' || !in_array($object->entity, explode(',', getEntity('invoice')))) {
+	if ($result <= 0 || !in_array($object->module_source, array('fluxpos', 'takepos')) || !in_array($object->entity, explode(',', getEntity('invoice')))) {
 		accessforbidden();
 	}
 } else {
-	$object->initAsSpecimen('takepos');
+	$object->initAsSpecimen('fluxpos');
 }
 
 print '<body>';
@@ -145,22 +145,22 @@ if (!GETPOST('specimen') && empty($nojs)) {
 // Call to external receipt modules factory if it exists and if we can (not allowed in some cases)
 if (isALNERunningVersion()) {
 	// If LNE version, we force parameters.
-	$conf->global->TAKEPOS_SHOW_HT_RECEIPT = 1;
-	$conf->global->TAKEPOS_TICKET_VAT_GROUPPED = 1;
-	$conf->global->TAKEPOS_PRINT_PAYMENT_METHOD = 1;
-	$conf->global->TAKEPOS_GIFT_RECEIPT = 0;
-	$conf->global->TAKEPOS_PRINT_WITHOUT_DETAILS = 0;
+	$conf->global->FLUXPOS_SHOW_HT_RECEIPT = 1;
+	$conf->global->FLUXPOS_TICKET_VAT_GROUPPED = 1;
+	$conf->global->FLUXPOS_PRINT_PAYMENT_METHOD = 1;
+	$conf->global->FLUXPOS_GIFT_RECEIPT = 0;
+	$conf->global->FLUXPOS_PRINT_WITHOUT_DETAILS = 0;
 } else {
 	$parameters = array();
-	$hookmanager->initHooks(array('takeposfrontend'));
-	$reshook = $hookmanager->executeHooks('TakeposReceipt', $parameters, $object);
+	$hookmanager->initHooks(array('fluxposfrontend'));
+	$reshook = $hookmanager->executeHooks('FluxPosReceipt', $parameters, $object);
 	if (!empty($hookmanager->resPrint)) {
 		print $hookmanager->resPrint;
-		return;	// Receipt page can be called by the takepos/send.php page that use ob_start/end so we must use return and not exit to stop page
+		return;	// Receipt page can be called by the fluxpos/send.php page that use ob_start/end so we must use return and not exit to stop page
 	}
 }
 
-// IMPORTANT: This file is sended to 'Takepos Printing' application. Keep basic file. No external files as css, js... If you need images use absolute path.
+// IMPORTANT: This file is sended to 'FluxPos Printing' application. Keep basic file. No external files as css, js... If you need images use absolute path.
 ?>
 
 <style>
@@ -200,13 +200,13 @@ if (GETPOST('specimen')) {
 </center>
 <br>
 <?php
-$constFreeText = 'TAKEPOS_HEADER'.(empty($_SESSION['takeposterminal']) ? '0' : $_SESSION['takeposterminal']);
-if (getDolGlobalString('TAKEPOS_HEADER') || getDolGlobalString($constFreeText)) {
+$constFreeText = 'FLUXPOS_HEADER'.(empty($_SESSION['fluxposterminal']) ? '0' : $_SESSION['fluxposterminal']);
+if (getDolGlobalString('FLUXPOS_HEADER') || getDolGlobalString($constFreeText)) {
 	$newfreetext = '';
 	$substitutionarray = getCommonSubstitutionArray($langs);
 	complete_substitutions_array($substitutionarray, $langs, $object);
-	if (getDolGlobalString('TAKEPOS_HEADER')) {
-		$newfreetext .= make_substitutions(getDolGlobalString('TAKEPOS_HEADER'), $substitutionarray);
+	if (getDolGlobalString('FLUXPOS_HEADER')) {
+		$newfreetext .= make_substitutions(getDolGlobalString('FLUXPOS_HEADER'), $substitutionarray);
 	}
 	if (getDolGlobalString($constFreeText)) {
 		$newfreetext .= make_substitutions(getDolGlobalString($constFreeText), $substitutionarray);
@@ -233,8 +233,8 @@ if ($object->status == Facture::STATUS_DRAFT) {
 <p class="right">
 <?php
 // Invoice Ref
-if (getDolGlobalString('TAKEPOS_RECEIPT_NAME')) {
-	print getDolGlobalString('TAKEPOS_RECEIPT_NAME') . " ";
+if (getDolGlobalString('FLUXPOS_RECEIPT_NAME')) {
+	print getDolGlobalString('FLUXPOS_RECEIPT_NAME') . " ";
 } else {
 	print $langs->trans("InvoiceRef")." ";
 }
@@ -252,13 +252,13 @@ if ($object->status == Facture::STATUS_DRAFT || empty($facid) || GETPOST('specim
 // POS terminal
 print "<br>\n";
 print $langs->trans("Terminal").' '.(GETPOST('specimen') ? '99' : ($object->pos_source ? $object->pos_source : 'Backoffice'));
-if (getDolGlobalString('TAKEPOS_SHOW_CUSTOMER')) {
-	if ($object->socid != getDolGlobalInt('CASHDESK_ID_THIRDPARTY'.$_SESSION["takeposterminal"])) {
+if (getDolGlobalString('FLUXPOS_SHOW_CUSTOMER')) {
+	if ($object->socid != getDolGlobalInt('FLUXPOS_ID_THIRDPARTY'.$_SESSION["fluxposterminal"])) {
 		$soc = new Societe($db);
 		if ($object->socid > 0) {
 			$soc->fetch($object->socid);
 		} else {
-			$soc->fetch(getDolGlobalInt('CASHDESK_ID_THIRDPARTY'.$_SESSION["takeposterminal"]));
+			$soc->fetch(getDolGlobalInt('FLUXPOS_ID_THIRDPARTY'.$_SESSION["fluxposterminal"]));
 		}
 		print "<br>".$langs->trans("Customer").': '.$soc->name;
 	}
@@ -267,7 +267,7 @@ if (getDolGlobalString('TAKEPOS_SHOW_CUSTOMER')) {
 print "<br>\n";
 print $langs->trans('Date').": ".dol_print_date($object->date ? $object->date : dol_now(), 'day');
 // Date of printing
-if (isALNERunningVersion() || !getDolGlobalString('TAKEPOS_HIDE_DATE_OF_PRINTING')) {
+if (isALNERunningVersion() || !getDolGlobalString('FLUXPOS_HIDE_DATE_OF_PRINTING')) {
 	print "<br>\n";
 	print $langs->trans("DateOfPrinting").': '.dol_print_date(dol_now(), 'dayhour', 'tzuserrel');
 }
@@ -312,7 +312,7 @@ if ($object->status != $object::STATUS_CLOSED) {
 } else {
 	if ($isADuplicata) {
 		print '<br><b>*** '.$langs->transnoentities("DUPLICATA");
-		if (getDolGlobalString('TAKEPOS_SHOW_PRINT_COUNTER_ON_RECEIPT')) {
+		if (getDolGlobalString('FLUXPOS_SHOW_PRINT_COUNTER_ON_RECEIPT')) {
 			print ' (no '.($object->pos_print_counter - 1).')';
 		}
 		print ' ***</b>';
@@ -330,7 +330,7 @@ if ($object->status != $object::STATUS_CLOSED) {
 		<th class="right"><?php if ($gift != 1) {
 			print $langs->trans("Price");
 						  } ?></th>
-		<?php if (getDolGlobalString('TAKEPOS_SHOW_HT_RECEIPT')) { ?>
+		<?php if (getDolGlobalString('FLUXPOS_SHOW_HT_RECEIPT')) { ?>
 		<th class="right"><?php if ($gift != 1) {
 			print $langs->trans("TotalHT");
 						  } ?></th>
@@ -348,7 +348,7 @@ if ($object->status != $object::STATUS_CLOSED) {
 		print '<td>' . GETPOST('label', 'alphanohtml') . '</td>';
 		print '<td class="right">' . $qty . '</td>';
 		print '<td class="right">' . price(price2num($object->total_ttc / $qty, 'MU'), 1) . '</td>';
-		if (getDolGlobalString('TAKEPOS_SHOW_HT_RECEIPT')) {
+		if (getDolGlobalString('FLUXPOS_SHOW_HT_RECEIPT')) {
 			print '<td class="right">' . price($object->total_ht, 1) . '</td>';
 		}
 		print '<td class="right">' . price($object->total_ttc, 1) . '</td>';
@@ -370,7 +370,7 @@ if ($object->status != $object::STATUS_CLOSED) {
 				echo price(price2num($line->total_ttc / $line->qty, 'MT'), 1);
 							  } ?></td>
 			<?php
-			if (getDolGlobalString('TAKEPOS_SHOW_HT_RECEIPT')) { ?>
+			if (getDolGlobalString('FLUXPOS_SHOW_HT_RECEIPT')) { ?>
 						<td class="right"><?php if ($gift != 1) {
 							echo price($line->total_ht, 1);
 										  } ?></td>
@@ -397,7 +397,7 @@ if ($object->status != $object::STATUS_CLOSED) {
 					  } ?></td>
 </tr>
 <?php
-if (getDolGlobalString('TAKEPOS_TICKET_VAT_GROUPPED')) {
+if (getDolGlobalString('FLUXPOS_TICKET_VAT_GROUPPED')) {
 	$vat_groups = array();
 	foreach ($object->lines as $line) {
 		if (!array_key_exists((string) $line->tva_tx, $vat_groups)) {
@@ -454,21 +454,21 @@ if (($mysoc->localtax1_assuj == "1" && $mysoc->useLocalTax(1)) || price2num($obj
 					  } ?></th>
 </tr>
 <?php
-if (isModEnabled('multicurrency') && !empty($_SESSION["takeposcustomercurrency"]) && $_SESSION["takeposcustomercurrency"] != "" && $conf->currency != $_SESSION["takeposcustomercurrency"]) {
+if (isModEnabled('multicurrency') && !empty($_SESSION["fluxposcustomercurrency"]) && $_SESSION["fluxposcustomercurrency"] != "" && $conf->currency != $_SESSION["fluxposcustomercurrency"]) {
 	//Only show customer currency if multicurrency module is enabled, if currency selected and if this currency selected is not the same as main currency
 	include_once DOL_DOCUMENT_ROOT.'/multicurrency/class/multicurrency.class.php';
 	$multicurrency = new MultiCurrency($db);
-	$multicurrency->fetch(0, $_SESSION["takeposcustomercurrency"]);
+	$multicurrency->fetch(0, $_SESSION["fluxposcustomercurrency"]);
 	echo '<tr><th class="right">';
 	if ($gift != 1) {
-		echo ''.$langs->trans("TotalTTC").' '.$_SESSION["takeposcustomercurrency"].'</th><td class="right">'.price($object->total_ttc * $multicurrency->rate->rate, 1, '', 1, - 1, - 1, $_SESSION["takeposcustomercurrency"])."\n";
+		echo ''.$langs->trans("TotalTTC").' '.$_SESSION["fluxposcustomercurrency"].'</th><td class="right">'.price($object->total_ttc * $multicurrency->rate->rate, 1, '', 1, - 1, - 1, $_SESSION["fluxposcustomercurrency"])."\n";
 	}
 	echo '</th></tr>';
 }
 
 // We force the feature when LNE is on, whatever is setup. When a payment is done, we always want to see it on receipt.
 if (isALNERunningVersion()) {
-	$conf->global->TAKEPOS_PRINT_PAYMENT_METHOD = 1;
+	$conf->global->FLUXPOS_PRINT_PAYMENT_METHOD = 1;
 	if ($object->status == $object::STATUS_CLOSED) {
 		print '<tr><th class="right"></th><td>';
 		print '--- '.$langs->trans("Paid").' ---';
@@ -476,7 +476,7 @@ if (isALNERunningVersion()) {
 	}
 }
 
-if (getDolGlobalString('TAKEPOS_PRINT_PAYMENT_METHOD')) {
+if (getDolGlobalString('FLUXPOS_PRINT_PAYMENT_METHOD')) {
 	if (empty($facid)) {
 		// Case of a specimen, we output demo data
 		echo '<tr>';
@@ -545,16 +545,16 @@ if (getDolGlobalString('TAKEPOS_PRINT_PAYMENT_METHOD')) {
 <br>
 <br>
 <?php
-$constFreeText = 'TAKEPOS_FOOTER'.(empty($_SESSION['takeposterminal']) ? '0' : $_SESSION['takeposterminal']);
-if (getDolGlobalString('TAKEPOS_FOOTER') || getDolGlobalString($constFreeText)) {
+$constFreeText = 'FLUXPOS_FOOTER'.(empty($_SESSION['fluxposterminal']) ? '0' : $_SESSION['fluxposterminal']);
+if (getDolGlobalString('FLUXPOS_FOOTER') || getDolGlobalString($constFreeText)) {
 	$newfreetext = '';
 	$substitutionarray = getCommonSubstitutionArray($langs);
 	complete_substitutions_array($substitutionarray, $langs, $object);
 	if (getDolGlobalString($constFreeText)) {
 		$newfreetext .= make_substitutions(getDolGlobalString($constFreeText), $substitutionarray);
 	}
-	if (getDolGlobalString('TAKEPOS_FOOTER')) {
-		$newfreetext .= make_substitutions(getDolGlobalString('TAKEPOS_FOOTER'), $substitutionarray);
+	if (getDolGlobalString('FLUXPOS_FOOTER')) {
+		$newfreetext .= make_substitutions(getDolGlobalString('FLUXPOS_FOOTER'), $substitutionarray);
 	}
 	print $newfreetext;
 }

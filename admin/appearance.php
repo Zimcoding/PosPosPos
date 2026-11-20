@@ -19,9 +19,9 @@
  */
 
 /**
- *	\file       htdocs/takepos/admin/appearance.php
- *	\ingroup    takepos
- *	\brief      Setup page for TakePos module
+ *	\file       htdocs/fluxpos/admin/appearance.php
+ *	\ingroup    fluxpos
+ *	\brief      Setup page for FluxPos module
  */
 
 // Load Dolibarr environment
@@ -29,7 +29,7 @@ require '../../main.inc.php'; // Load $user and permissions
 require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/product/class/html.formproduct.class.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/pdf.lib.php';
-require_once DOL_DOCUMENT_ROOT."/core/lib/takepos.lib.php";
+require_once dol_buildpath('/fluxpos/lib/fluxpos.lib.php');
 
 /**
  * @var Conf $conf
@@ -44,7 +44,7 @@ if (!$user->admin) {
 	accessforbidden();
 }
 
-$langs->loadLangs(array("admin", "cashdesk", "commercial"));
+$langs->loadLangs(array("admin", "fluxpos@fluxpos", "commercial"));
 
 /*
  * Actions
@@ -54,13 +54,13 @@ $error = 0;
 if (GETPOST('action', 'alpha') == 'set') {
 	$db->begin();
 
-	$res = dolibarr_set_const($db, "TAKEPOS_COLOR_THEME", GETPOST('TAKEPOS_COLOR_THEME', 'alpha'), 'chaine', 0, '', $conf->entity);
-	$res = dolibarr_set_const($db, "TAKEPOS_LINES_TO_SHOW", GETPOST('TAKEPOS_LINES_TO_SHOW', 'alpha'), 'chaine', 0, '', $conf->entity);
-	if (GETPOSTISSET('TAKEPOS_SHOW_PRODUCT_REFERENCE')) {
-		$res = dolibarr_set_const($db, "TAKEPOS_SHOW_PRODUCT_REFERENCE", GETPOST('TAKEPOS_SHOW_PRODUCT_REFERENCE', 'alpha'), 'chaine', 0, '', $conf->entity);
+	$res = dolibarr_set_const($db, "FLUXPOS_COLOR_THEME", GETPOST('FLUXPOS_COLOR_THEME', 'alpha'), 'chaine', 0, '', $conf->entity);
+	$res = dolibarr_set_const($db, "FLUXPOS_LINES_TO_SHOW", GETPOST('FLUXPOS_LINES_TO_SHOW', 'alpha'), 'chaine', 0, '', $conf->entity);
+	if (GETPOSTISSET('FLUXPOS_SHOW_PRODUCT_REFERENCE')) {
+		$res = dolibarr_set_const($db, "FLUXPOS_SHOW_PRODUCT_REFERENCE", GETPOST('FLUXPOS_SHOW_PRODUCT_REFERENCE', 'alpha'), 'chaine', 0, '', $conf->entity);
 	}
 
-	dol_syslog("admin/cashdesk: level ".GETPOST('level', 'alpha'));
+	dol_syslog("admin/fluxpos: level ".GETPOST('level', 'alpha'));
 
 	if (!($res > 0)) {
 		$error++;
@@ -83,13 +83,13 @@ if (GETPOST('action', 'alpha') == 'set') {
 $form = new Form($db);
 $formproduct = new FormProduct($db);
 
-llxHeader('', $langs->trans("CashDeskSetup"), '', '', 0, 0, '', '', '', 'mod-takepos page-admin_appearance');
+llxHeader('', $langs->trans("CashDeskSetup"), '', '', 0, 0, '', '', '', 'mod-fluxpos page-admin_appearance');
 
 $linkback = '<a href="'.dolBuildUrl(DOL_URL_ROOT.'/admin/modules.php', ['restore_lastsearch_values' => 1]).'">'.img_picto($langs->trans("BackToModuleList"), 'back', 'class="pictofixedwidth"').'<span class="hideonsmartphone">'.$langs->trans("BackToModuleList").'</span></a>';
 
-print load_fiche_titre($langs->trans("CashDeskSetup").' (TakePOS)', $linkback, 'title_setup');
-$head = takepos_admin_prepare_head();
-print dol_get_fiche_head($head, 'appearance', 'TakePOS', -1, 'cash-register');
+print load_fiche_titre($langs->trans("CashDeskSetup").' (FluxPos)', $linkback, 'title_setup');
+$head = fluxpos_admin_prepare_head();
+print dol_get_fiche_head($head, 'appearance', 'FluxPos', -1, 'cash-register');
 
 print '<form action="'.$_SERVER["PHP_SELF"].'?terminal='.(empty($terminal) ? 1 : $terminal).'" method="post">';
 print '<input type="hidden" name="token" value="'.newToken().'">';
@@ -107,22 +107,22 @@ print '<tr class="oddeven"><td>';
 print $langs->trans("ColorTheme");
 print '</td><td>';
 $array = array(0=>"Eldy", 1=>$langs->trans("Colorful"));
-print $form->selectarray('TAKEPOS_COLOR_THEME', $array, (!getDolGlobalString('TAKEPOS_COLOR_THEME') ? '0' : $conf->global->TAKEPOS_COLOR_THEME), 0);
+print $form->selectarray('FLUXPOS_COLOR_THEME', $array, (!getDolGlobalString('FLUXPOS_COLOR_THEME') ? '0' : $conf->global->FLUXPOS_COLOR_THEME), 0);
 print "</td></tr>\n";
 
 // Don't display category section
 print '<tr class="oddeven"><td>';
 print $langs->trans('HideCategories');
 print '</td><td>';
-print ajax_constantonoff("TAKEPOS_HIDE_CATEGORIES", array(), $conf->entity, 0, 0, 1, 0);
+print ajax_constantonoff("FLUXPOS_HIDE_CATEGORIES", array(), $conf->entity, 0, 0, 1, 0);
 print "</td></tr>\n";
 
 // Hide category images to speed up
-if (!getDolGlobalString('TAKEPOS_HIDE_CATEGORIES')) {
+if (!getDolGlobalString('FLUXPOS_HIDE_CATEGORIES')) {
 	print '<tr class="oddeven"><td>';
 	print $langs->trans('HideCategoryImages');
 	print '</td><td>';
-	print ajax_constantonoff("TAKEPOS_HIDE_CATEGORY_IMAGES", array(), $conf->entity, 0, 0, 1, 0);
+	print ajax_constantonoff("FLUXPOS_HIDE_CATEGORY_IMAGES", array(), $conf->entity, 0, 0, 1, 0);
 	print "</td></tr>\n";
 }
 
@@ -130,7 +130,7 @@ if (!getDolGlobalString('TAKEPOS_HIDE_CATEGORIES')) {
 print '<tr class="oddeven"><td>';
 print $langs->trans('HideProductImages');
 print '</td><td>';
-print ajax_constantonoff("TAKEPOS_HIDE_PRODUCT_IMAGES", array(), $conf->entity, 0, 0, 1, 0);
+print ajax_constantonoff("FLUXPOS_HIDE_PRODUCT_IMAGES", array(), $conf->entity, 0, 0, 1, 0);
 print "</td></tr>\n";
 
 // View reference or label of products
@@ -138,8 +138,8 @@ print '<tr class="oddeven"><td>';
 print $langs->trans('ShowProductReference');
 print '</td><td>';
 $array = array("0"=>$langs->trans("Label"), 1=>$langs->trans("Ref").'+'.$langs->trans("Label"), 2=>$langs->trans("Ref"));
-print $form->selectarray('TAKEPOS_SHOW_PRODUCT_REFERENCE', $array, getDolGlobalInt('TAKEPOS_SHOW_PRODUCT_REFERENCE', 2), 0);
-//print ajax_constantonoff("TAKEPOS_SHOW_PRODUCT_REFERENCE", array(), $conf->entity, 0, 0, 1, 0);
+print $form->selectarray('FLUXPOS_SHOW_PRODUCT_REFERENCE', $array, getDolGlobalInt('FLUXPOS_SHOW_PRODUCT_REFERENCE', 2), 0);
+//print ajax_constantonoff("FLUXPOS_SHOW_PRODUCT_REFERENCE", array(), $conf->entity, 0, 0, 1, 0);
 print "</td></tr>\n";
 
 // Lines to show
@@ -147,28 +147,28 @@ print '<tr class="oddeven"><td>';
 print $langs->trans("NumberOfLinesToShow");
 print '</td><td>';
 $array = array(1=>"1", 2=>"2", 3=>"3", 4=>"4", 5=>"5", 6=>"6");
-print $form->selectarray('TAKEPOS_LINES_TO_SHOW', $array, getDolGlobalInt('TAKEPOS_LINES_TO_SHOW', 2), 0);
+print $form->selectarray('FLUXPOS_LINES_TO_SHOW', $array, getDolGlobalInt('FLUXPOS_LINES_TO_SHOW', 2), 0);
 print "</td></tr>\n";
 
 // Hide stock on line
 print '<tr class="oddeven"><td>';
 print $langs->trans('HideStockOnLine');
 print '</td><td>';
-print ajax_constantonoff("TAKEPOS_HIDE_STOCK_ON_LINE", array(), $conf->entity, 0, 0, 1, 0);
+print ajax_constantonoff("FLUXPOS_HIDE_STOCK_ON_LINE", array(), $conf->entity, 0, 0, 1, 0);
 print "</td></tr>\n";
 
 // Only the products in stock
 print '<tr class="oddeven"><td>';
 print $langs->trans('ShowOnlyProductInStock');
 print '</td><td>';
-print ajax_constantonoff("TAKEPOS_PRODUCT_IN_STOCK", array(), $conf->entity, 0, 0, 1, 0);
+print ajax_constantonoff("FLUXPOS_PRODUCT_IN_STOCK", array(), $conf->entity, 0, 0, 1, 0);
 print "</td></tr>\n";
 
 // View description of the categories
 print '<tr class="oddeven"><td>';
 print $langs->trans('ShowCategoryDescription');
 print '</td><td>';
-print ajax_constantonoff("TAKEPOS_SHOW_CATEGORY_DESCRIPTION", array(), $conf->entity, 0, 0, 1, 0);
+print ajax_constantonoff("FLUXPOS_SHOW_CATEGORY_DESCRIPTION", array(), $conf->entity, 0, 0, 1, 0);
 print "</td></tr>\n";
 
 print '</table>';

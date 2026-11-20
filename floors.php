@@ -18,8 +18,8 @@
  */
 
 /**
- *	\file       htdocs/takepos/floors.php
- *	\ingroup    takepos
+ *	\file       htdocs/fluxpos/floors.php
+ *	\ingroup    fluxpos
  *	\brief      Page to edit floors and tables.
  */
 
@@ -48,15 +48,15 @@ require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
  * @var User $user
  */
 
-$langs->loadLangs(array("bills", "orders", "commercial", "cashdesk"));
+$langs->loadLangs(array("bills", "orders", "commercial", "fluxpos@fluxpos"));
 
 if (GETPOSTISSET('floor')) {
 	$floor = GETPOSTINT('floor');
 } else {
 	// No floor requested: open the lowest floor that has tables (floor 1 for tables created before v20, floor 0 since), or floor 1 when there is no table yet
 	$floor = 1;
-	$sql = "SELECT MIN(floor) as minfloor FROM ".MAIN_DB_PREFIX."takepos_floor_tables";
-	$sql .= " WHERE entity IN (".getEntity('takepos').")";
+	$sql = "SELECT MIN(floor) as minfloor FROM ".MAIN_DB_PREFIX."fluxpos_floor_tables";
+	$sql .= " WHERE entity IN (".getEntity('fluxpos').")";
 	$resql = $db->query($sql);
 	if ($resql) {
 		$obj = $db->fetch_object($resql);
@@ -75,7 +75,7 @@ $place = (GETPOST('place', 'aZ09') ? GETPOST('place', 'aZ09') : 0); // $place is
 $newname = GETPOST('newname', 'alpha');
 $mode = GETPOST('mode', 'alpha');
 
-if (!$user->hasRight('takepos', 'run')) {
+if (!$user->hasRight('fluxpos', 'run')) {
 	accessforbidden();
 }
 
@@ -84,19 +84,19 @@ if (!$user->hasRight('takepos', 'run')) {
  * Actions
  */
 
-if ($action == "getTables" && $user->hasRight('takepos', 'run')) {
+if ($action == "getTables" && $user->hasRight('fluxpos', 'run')) {
 	$rows = array();
 
 	$sql = "SELECT rowid, entity, label, leftpos, toppos, floor";
-	$sql .= " FROM ".MAIN_DB_PREFIX."takepos_floor_tables";
-	$sql .= " WHERE floor = ".((int) $floor)." AND entity IN (".getEntity('takepos').")";
+	$sql .= " FROM ".MAIN_DB_PREFIX."fluxpos_floor_tables";
+	$sql .= " WHERE floor = ".((int) $floor)." AND entity IN (".getEntity('fluxpos').")";
 
 	$resql = $db->query($sql);
 	while ($row = $db->fetch_array($resql)) {
 		$tmpplace = (int) $row['rowid'];
 
 		$invoice = new Facture($db);
-		$result = $invoice->fetch(0, '(PROV-POS'.$_SESSION['takeposterminal'].'-'.$tmpplace.')');
+		$result = $invoice->fetch(0, '(PROV-POS'.$_SESSION['fluxposterminal'].'-'.$tmpplace.')');
 		if ($result > 0) {
 			$row['occupied'] = "red";
 		}
@@ -109,7 +109,7 @@ if ($action == "getTables" && $user->hasRight('takepos', 'run')) {
 	exit;
 }
 
-if ($action == "update" && $user->hasRight('takepos', 'run')) {
+if ($action == "update" && $user->hasRight('fluxpos', 'run')) {
 	if ($left > 95) {
 		$left = 95;
 	}
@@ -117,24 +117,24 @@ if ($action == "update" && $user->hasRight('takepos', 'run')) {
 		$top = 95;
 	}
 	if ($left > 3 or $top > 4) {
-		$db->query("UPDATE ".MAIN_DB_PREFIX."takepos_floor_tables SET leftpos = ".((int) $left).", toppos = ".((int) $top)." WHERE rowid = ".((int) $place));
+		$db->query("UPDATE ".MAIN_DB_PREFIX."fluxpos_floor_tables SET leftpos = ".((int) $left).", toppos = ".((int) $top)." WHERE rowid = ".((int) $place));
 	} else {
-		$db->query("DELETE from ".MAIN_DB_PREFIX."takepos_floor_tables WHERE rowid = ".((int) $place));
+		$db->query("DELETE from ".MAIN_DB_PREFIX."fluxpos_floor_tables WHERE rowid = ".((int) $place));
 	}
 }
 
-if ($action == "updatename" && $user->hasRight('takepos', 'run')) {
+if ($action == "updatename" && $user->hasRight('fluxpos', 'run')) {
 	$newname = preg_replace("/[^a-zA-Z0-9\s]/", "", $newname); // Only English chars
 	if (strlen($newname) > 3) {
 		$newname = substr($newname, 0, 3); // Only 3 chars
 	}
-	$resql = $db->query("UPDATE ".MAIN_DB_PREFIX."takepos_floor_tables SET label='".$db->escape($newname)."' WHERE rowid = ".((int) $place));
+	$resql = $db->query("UPDATE ".MAIN_DB_PREFIX."fluxpos_floor_tables SET label='".$db->escape($newname)."' WHERE rowid = ".((int) $place));
 }
 
-if ($action == "add" && $user->hasRight('takepos', 'run')) {
-	$sql = "INSERT INTO ".MAIN_DB_PREFIX."takepos_floor_tables(entity, label, leftpos, toppos, floor) VALUES (".((int) $conf->entity).", '', '45', '45', ".((int) $floor).")";
+if ($action == "add" && $user->hasRight('fluxpos', 'run')) {
+	$sql = "INSERT INTO ".MAIN_DB_PREFIX."fluxpos_floor_tables(entity, label, leftpos, toppos, floor) VALUES (".((int) $conf->entity).", '', '45', '45', ".((int) $floor).")";
 	$asdf = $db->query($sql);
-	$db->query("UPDATE ".MAIN_DB_PREFIX."takepos_floor_tables SET label = rowid WHERE label = ''"); // No empty table names
+	$db->query("UPDATE ".MAIN_DB_PREFIX."fluxpos_floor_tables SET label = rowid WHERE label = ''"); // No empty table names
 }
 
 
@@ -144,11 +144,11 @@ if ($action == "add" && $user->hasRight('takepos', 'run')) {
 
 // Title
 $head = '';
-$title = 'TakePOS - Dolibarr '.DOL_VERSION;
+$title = 'FluxPos - Dolibarr '.DOL_VERSION;
 if (getDolGlobalString('MAIN_APPLICATION_TITLE')) {
-	$title = 'TakePOS - ' . getDolGlobalString('MAIN_APPLICATION_TITLE');
+	$title = 'FluxPos - ' . getDolGlobalString('MAIN_APPLICATION_TITLE');
 }
-$arrayofcss = array('/takepos/css/pos.css.php?a=xxx');
+$arrayofcss = array('/fluxpos/css/pos.css.php?a=xxx');
 
 top_htmlhead($head, $title, 0, 0, array(), $arrayofcss);
 
@@ -181,7 +181,7 @@ function updateplace(idplace, left, top) {
 	console.log("updateplace idplace="+idplace+" left="+left+" top="+top);
 	$.ajax({
 		type: "POST",
-		url: "<?php echo DOL_URL_ROOT.'/takepos/floors.php'; ?>",
+		url: "<?php echo DOL_URL_ROOT.'/fluxpos/floors.php'; ?>",
 		data: { action: "update", left: left, top: top, place: idplace, token: '<?php echo currentToken(); ?>' }
 	}).done(function( msg ) {
 		window.location.href='floors.php?mode=edit&floor=<?php echo urlencode((string) ($floor)); ?>';
@@ -193,7 +193,7 @@ function updatename(rowid) {
 	console.log("updatename rowid="+rowid+" after="+after);
 	$.ajax({
 		type: "POST",
-		url: "<?php echo DOL_URL_ROOT.'/takepos/floors.php'; ?>",
+		url: "<?php echo DOL_URL_ROOT.'/fluxpos/floors.php'; ?>",
 		data: { action: "updatename", place: rowid, newname: after, token: '<?php echo currentToken(); ?>' }
 	}).done(function( msg ) {
 		window.location.href='floors.php?mode=edit&floor=<?php echo urlencode((string) ($floor)); ?>';

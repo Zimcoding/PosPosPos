@@ -19,8 +19,8 @@
  */
 
 /**
- *	\file       htdocs/takepos/pay.php
- *	\ingroup	takepos
+ *	\file       htdocs/fluxpos/pay.php
+ *	\ingroup	fluxpos
  *	\brief      Page with the content of the popup to enter payments
  */
 
@@ -54,7 +54,7 @@ require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
 require_once DOL_DOCUMENT_ROOT.'/stripe/class/stripe.class.php';
 
 // Load translation files required by the page
-$langs->loadLangs(array("main", "bills", "cashdesk", "banks"));
+$langs->loadLangs(array("main", "bills", "fluxpos@fluxpos", "banks"));
 
 $action = GETPOST('action', 'aZ09');
 
@@ -62,9 +62,9 @@ $place = (GETPOST('place', 'aZ09') ? GETPOST('place', 'aZ09') : '0'); // $place 
 
 $invoiceid = GETPOSTINT('invoiceid');
 
-$hookmanager->initHooks(array('takepospay'));
+$hookmanager->initHooks(array('fluxpospay'));
 
-if (!$user->hasRight('takepos', 'run')) {
+if (!$user->hasRight('fluxpos', 'run')) {
 	accessforbidden();
 }
 
@@ -73,7 +73,7 @@ if (!$user->hasRight('takepos', 'run')) {
  * View
  */
 
-$arrayofcss = array('/takepos/css/pos.css.php');
+$arrayofcss = array('/fluxpos/css/pos.css.php');
 $arrayofjs = array();
 
 $head = '';
@@ -82,7 +82,7 @@ $disablejs = 0;
 $disablehead = 0;
 
 $head = '<link rel="stylesheet" href="css/pos.css.php">';
-if (getDolGlobalInt('TAKEPOS_COLOR_THEME') == 1) {
+if (getDolGlobalInt('FLUXPOS_COLOR_THEME') == 1) {
 	$head .= '<link rel="stylesheet" href="css/colorful.css">';
 }
 
@@ -117,7 +117,7 @@ if (isModEnabled('stripe')) {
 	$invoicetmp = new Facture($db);
 	$invoicetmp->fetch($invoiceid);
 	$stripecu = $stripe->getStripeCustomerAccount($invoicetmp->socid, $servicestatus, $site_account); // Get remote Stripe customer 'cus_...' (no remote access to Stripe here)
-	$keyforstripeterminalbank = "CASHDESK_ID_BANKACCOUNT_STRIPETERMINAL".(empty($_SESSION['takeposterminal']) ? '' : $_SESSION['takeposterminal']);
+	$keyforstripeterminalbank = "FLUXPOS_ID_BANKACCOUNT_STRIPETERMINAL".(empty($_SESSION['fluxposterminal']) ? '' : $_SESSION['fluxposterminal']);
 
 	$usestripeterminals = getDolGlobalString('STRIPE_LOCATION');
 
@@ -170,7 +170,7 @@ if ($invoiceid > 0) {
 } else {
 	$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."facture";
 	$sql .= " WHERE entity IN (".getEntity('invoice').")";
-	$sql .= " AND ref = '(PROV-POS".$_SESSION["takeposterminal"]."-".$place.")'";
+	$sql .= " AND ref = '(PROV-POS".$_SESSION["fluxposterminal"]."-".$place.")'";
 	$resql = $db->query($sql);
 	$obj = $db->fetch_object($resql);
 	if ($obj) {
@@ -264,7 +264,7 @@ if ($resql) {
 			$paycode = 'CHEQUE';
 		}
 
-		$accountname = "CASHDESK_ID_BANKACCOUNT_".$paycode.$_SESSION["takeposterminal"];
+		$accountname = "FLUXPOS_ID_BANKACCOUNT_".$paycode.$_SESSION["fluxposterminal"];
 		if (getDolGlobalInt($accountname) > 0) {
 			$arrayOfValidBankAccount[getDolGlobalInt($accountname)] = getDolGlobalInt($accountname);
 			$arrayOfValidPaymentModes[] = $obj;
@@ -287,7 +287,7 @@ if ($invoice->id > 0) {
 }
 $alreadypayed = (is_object($invoice) ? ($invoice->total_ttc - $remaintopay) : 0);
 
-if (!getDolGlobalInt("TAKEPOS_NUMPAD")) {
+if (!getDolGlobalInt("FLUXPOS_NUMPAD")) {
 	print "var received='';";
 } else {
 	print "var received=0;";
@@ -300,7 +300,7 @@ if (!getDolGlobalInt("TAKEPOS_NUMPAD")) {
 	function addreceived(price)
 	{
 		<?php
-		if (!getDolGlobalInt("TAKEPOS_NUMPAD")) {
+		if (!getDolGlobalInt("FLUXPOS_NUMPAD")) {
 			print 'received+=String(price);'."\n";
 		} else {
 			print 'received+=parseFloat(price);'."\n";
@@ -512,13 +512,13 @@ if (!getDolGlobalInt("TAKEPOS_NUMPAD")) {
 		var currencycode = "<?php echo $invoice->multicurrency_code; ?>";
 
 		// Starting sumup app
-		window.open('sumupmerchant://pay/1.0?affiliate-key=<?php echo urlencode(getDolGlobalString('TAKEPOS_SUMUP_AFFILIATE')) ?>&app-id=<?php echo urlencode(getDolGlobalString('TAKEPOS_SUMUP_APPID')) ?>&amount=' + amountpayed + '&currency=' + currencycode + '&title=' + invoiceid + '&callback=<?php echo DOL_MAIN_URL_ROOT ?>/takepos/smpcb.php');
+		window.open('sumupmerchant://pay/1.0?affiliate-key=<?php echo urlencode(getDolGlobalString('FLUXPOS_SUMUP_AFFILIATE')) ?>&app-id=<?php echo urlencode(getDolGlobalString('FLUXPOS_SUMUP_APPID')) ?>&amount=' + amountpayed + '&currency=' + currencycode + '&title=' + invoiceid + '&callback=<?php echo DOL_MAIN_URL_ROOT ?>/fluxpos/smpcb.php');
 
 		var loop = window.setInterval(function () {
 			$.ajax({
 				method: 'POST',
 				data: { token: '<?php echo currentToken(); ?>' },
-				url: '<?php echo DOL_URL_ROOT ?>/takepos/smpcb.php?status' }).done(function (data) {
+				url: '<?php echo DOL_URL_ROOT ?>/fluxpos/smpcb.php?status' }).done(function (data) {
 				console.log(data);
 				if (data === "SUCCESS") {
 					parent.$("#poslines").load("invoice.php?place=<?php echo urlencode($place); ?>&action=valid&token=<?php echo newToken(); ?>&pay=CB&amount=" + amountpayed + "&invoiceid=" + invoiceid, function () {
@@ -536,12 +536,12 @@ if (!getDolGlobalInt("TAKEPOS_NUMPAD")) {
 	}
 
 <?php
-if (getDolGlobalString('TAKEPOS_CUSTOMER_DISPLAY')) {
+if (getDolGlobalString('FLUXPOS_CUSTOMER_DISPLAY')) {
 	echo "var line1='".$langs->trans('TotalTTC')."'.substring(0,20);";
 	echo "line1=line1.padEnd(20);";
 	echo "var line2='".price($invoice->total_ttc, 1, '', 1, -1, -1)."'.substring(0,20);";
 	echo "line2=line2.padEnd(20);";
-	if (getDolGlobalString('TAKEPOS_CONNECTOR_TO_WHB_CUSTOMER_DISPLAY')) {
+	if (getDolGlobalString('FLUXPOS_CONNECTOR_TO_WHB_CUSTOMER_DISPLAY')) {
 		echo 'webSocketCustomerDisplay.onOpen(function() {';
 		echo '	webSocketCustomerDisplay.send(line1);';
 		echo '	webSocketCustomerDisplay.send(line2);';
@@ -550,7 +550,7 @@ if (getDolGlobalString('TAKEPOS_CUSTOMER_DISPLAY')) {
 		echo "$.ajax({
 			type: 'GET',
 			data: { text: line1+line2 },
-			url: '".getDolGlobalString('TAKEPOS_PRINT_SERVER')."/display/index.php',
+			url: '".getDolGlobalString('FLUXPOS_PRINT_SERVER')."/display/index.php',
 		});";
 	}
 }
@@ -558,7 +558,7 @@ if (getDolGlobalString('TAKEPOS_CUSTOMER_DISPLAY')) {
 </script>
 
 <?php
-$sessioncurrency = $_SESSION["takeposcustomercurrency"] ?? '';
+$sessioncurrency = $_SESSION["fluxposcustomercurrency"] ?? '';
 print '<!-- conf->currency = '.$conf->currency.' - sessioncurrency = '.$sessioncurrency.' -->'."\n";
 $multicurrency = null;
 if (isModEnabled('multicurrency') && $sessioncurrency != "" && $conf->currency != $sessioncurrency) {
@@ -571,7 +571,7 @@ if (isModEnabled('multicurrency') && $sessioncurrency != "" && $conf->currency !
 
 <div style="position:relative; padding-top: 20px; left:5%; height:140px; width:90%;">
 	<div class="paymentbordline paymentbordlinetotal center">
-		<span class="takepospay colorwhite"><?php echo $langs->trans('TotalTTC'); ?>: <span id="totaldisplay" class="colorwhite"><?php
+		<span class="fluxpospay colorwhite"><?php echo $langs->trans('TotalTTC'); ?>: <span id="totaldisplay" class="colorwhite"><?php
 		echo price($invoice->total_ttc, 1, '', 1, -1, -1, $conf->currency);
 		if ($multicurrency !== null) {
 			print ' &nbsp; <span id="linecolht-span-total opacitymedium" style="font-size:0.9em; font-style:italic;">(' . price($invoice->total_ht * $multicurrency->rate->rate) . ' ' . $sessioncurrency . ')</span>';
@@ -580,7 +580,7 @@ if (isModEnabled('multicurrency') && $sessioncurrency != "" && $conf->currency !
 	</div>
 	<?php if ($remaintopay != $invoice->total_ttc) { ?>
 		<div class="paymentbordline paymentbordlineremain center">
-			<span class="takepospay colorwhite"><?php echo $langs->trans('RemainToPay'); ?>: <span id="remaintopaydisplay" class="colorwhite"><?php
+			<span class="fluxpospay colorwhite"><?php echo $langs->trans('RemainToPay'); ?>: <span id="remaintopaydisplay" class="colorwhite"><?php
 			echo price($remaintopay, 1, '', 1, -1, -1, $conf->currency);
 			if ($multicurrency !== null) {
 				print ' &nbsp; <span id="linecolht-span-total opacitymedium" style="font-size:0.9em; font-style:italic;">(' . price($remaintopay * $multicurrency->rate->rate) . ' ' . $sessioncurrency . ')</span>';
@@ -589,7 +589,7 @@ if (isModEnabled('multicurrency') && $sessioncurrency != "" && $conf->currency !
 		</div>
 	<?php } ?>
 	<div class="paymentbordline paymentbordlinereceived center">
-		<span class="takepospay colorwhite"><?php echo $invoice->type == $invoice::TYPE_CREDIT_NOTE ? $langs->trans("Refunded") : $langs->trans("Received"); ?>: <span class="change1 colorred"><?php
+		<span class="fluxpospay colorwhite"><?php echo $invoice->type == $invoice::TYPE_CREDIT_NOTE ? $langs->trans("Refunded") : $langs->trans("Received"); ?>: <span class="change1 colorred"><?php
 		echo price(0, 1, '', 1, -1, -1, $conf->currency);
 		if ($multicurrency !== null) {
 			print ' &nbsp; <span id="linecolht-span-total opacitymedium" style="font-size:0.9em; font-style:italic;">(' . price(0 * $multicurrency->rate->rate) . ' ' . $sessioncurrency . ')</span>';
@@ -597,7 +597,7 @@ if (isModEnabled('multicurrency') && $sessioncurrency != "" && $conf->currency !
 		?></span><input type="hidden" id="change1" class="change1" value="0"></span>
 	</div>
 	<div class="paymentbordline paymentbordlinechange center">
-		<span class="takepospay colorwhite"><?php echo $langs->trans("Change"); ?>: <span class="change2 colorwhite"><?php
+		<span class="fluxpospay colorwhite"><?php echo $langs->trans("Change"); ?>: <span class="change2 colorwhite"><?php
 		echo price(0, 1, '', 1, -1, -1, $conf->currency);
 		if ($multicurrency !== null) {
 			print ' &nbsp; <span id="linecolht-span-total opacitymedium" style="font-size:0.9em; font-style:italic;">(' . price(0 * $multicurrency->rate->rate) . ' ' . $sessioncurrency . ')</span>';
@@ -605,12 +605,12 @@ if (isModEnabled('multicurrency') && $sessioncurrency != "" && $conf->currency !
 		?></span><input type="hidden" id="change2" class="change2" value="0"></span>
 	</div>
 	<?php
-	if (getDolGlobalString('TAKEPOS_CAN_FORCE_BANK_ACCOUNT_DURING_PAYMENT')) {
+	if (getDolGlobalString('FLUXPOS_CAN_FORCE_BANK_ACCOUNT_DURING_PAYMENT')) {
 		require_once DOL_DOCUMENT_ROOT.'/core/class/html.form.class.php';
 		print '<div class="paymentbordline paddingtop paddingbottom center">';
 		$filter = '';
 		$form = new Form($db);
-		print '<span class="takepospay colorwhite">'.$langs->trans("BankAccount").': </span>';
+		print '<span class="fluxpospay colorwhite">'.$langs->trans("BankAccount").': </span>';
 		$form->select_comptes(0, 'accountid', 0, $filter, 1, '');
 		print ajax_combobox('selectaccountid');
 		print '</div>';
@@ -633,7 +633,7 @@ array(
 "class" => "poscolordelete"
 ),
 );
-$numpad = getDolGlobalInt('TAKEPOS_NUMPAD');
+$numpad = getDolGlobalInt('FLUXPOS_NUMPAD');
 if (isModEnabled('stripe') && isset($keyforstripeterminalbank) && getDolGlobalString('STRIPE_CARD_PRESENT')) {
 	print '<span id="card-present-alert">';
 	dol_htmloutput_mesg($langs->trans('ConnectingToStripeTerminal', 'Stripe'), [], 'warning', 1);
@@ -647,15 +647,15 @@ print '<button type="button" class="calcbutton" onclick="addreceived('.($numpad 
 	$paycode = $arrayOfValidPaymentModes[0]->code;
 	$payIcon = '';
 	if ($paycode == 'LIQ') {
-		if (!isset($conf->global->TAKEPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('TAKEPOS_NUMPAD_USE_PAYMENT_ICON')) {
+		if (!isset($conf->global->FLUXPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('FLUXPOS_NUMPAD_USE_PAYMENT_ICON')) {
 			$payIcon = 'coins';
 		}
 	} elseif ($paycode == 'CB') {
-		if (!isset($conf->global->TAKEPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('TAKEPOS_NUMPAD_USE_PAYMENT_ICON')) {
+		if (!isset($conf->global->FLUXPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('FLUXPOS_NUMPAD_USE_PAYMENT_ICON')) {
 			$payIcon = 'credit-card';
 		}
 	} elseif ($paycode == 'CHQ') {
-		if (!isset($conf->global->TAKEPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('TAKEPOS_NUMPAD_USE_PAYMENT_ICON')) {
+		if (!isset($conf->global->FLUXPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('FLUXPOS_NUMPAD_USE_PAYMENT_ICON')) {
 			$payIcon = 'money-check';
 		}
 	}
@@ -673,15 +673,15 @@ print '<button type="button" class="calcbutton" onclick="addreceived('.($numpad 
 	$paycode = $arrayOfValidPaymentModes[1]->code;
 	$payIcon = '';
 	if ($paycode == 'LIQ') {
-		if (!isset($conf->global->TAKEPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('TAKEPOS_NUMPAD_USE_PAYMENT_ICON')) {
+		if (!isset($conf->global->FLUXPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('FLUXPOS_NUMPAD_USE_PAYMENT_ICON')) {
 			$payIcon = 'coins';
 		}
 	} elseif ($paycode == 'CB') {
-		if (!isset($conf->global->TAKEPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('TAKEPOS_NUMPAD_USE_PAYMENT_ICON')) {
+		if (!isset($conf->global->FLUXPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('FLUXPOS_NUMPAD_USE_PAYMENT_ICON')) {
 			$payIcon = 'credit-card';
 		}
 	} elseif ($paycode == 'CHQ') {
-		if (!isset($conf->global->TAKEPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('TAKEPOS_NUMPAD_USE_PAYMENT_ICON')) {
+		if (!isset($conf->global->FLUXPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('FLUXPOS_NUMPAD_USE_PAYMENT_ICON')) {
 			$payIcon = 'money-check';
 		}
 	}
@@ -700,15 +700,15 @@ print '<button type="button" class="calcbutton" onclick="addreceived('.($numpad 
 	$paycode = $arrayOfValidPaymentModes[2]->code;
 	$payIcon = '';
 	if ($paycode == 'LIQ') {
-		if (!isset($conf->global->TAKEPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('TAKEPOS_NUMPAD_USE_PAYMENT_ICON')) {
+		if (!isset($conf->global->FLUXPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('FLUXPOS_NUMPAD_USE_PAYMENT_ICON')) {
 			$payIcon = 'coins';
 		}
 	} elseif ($paycode == 'CB') {
-		if (!isset($conf->global->TAKEPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('TAKEPOS_NUMPAD_USE_PAYMENT_ICON')) {
+		if (!isset($conf->global->FLUXPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('FLUXPOS_NUMPAD_USE_PAYMENT_ICON')) {
 			$payIcon = 'credit-card';
 		}
 	} elseif ($paycode == 'CHQ') {
-		if (!isset($conf->global->TAKEPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('TAKEPOS_NUMPAD_USE_PAYMENT_ICON')) {
+		if (!isset($conf->global->FLUXPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('FLUXPOS_NUMPAD_USE_PAYMENT_ICON')) {
 			$payIcon = 'money-check';
 		}
 	}
@@ -728,15 +728,15 @@ while ($i < count($arrayOfValidPaymentModes)) {
 	$paycode = $arrayOfValidPaymentModes[$i]->code;
 	$payIcon = '';
 	if ($paycode == 'LIQ') {
-		if (!isset($conf->global->TAKEPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('TAKEPOS_NUMPAD_USE_PAYMENT_ICON')) {
+		if (!isset($conf->global->FLUXPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('FLUXPOS_NUMPAD_USE_PAYMENT_ICON')) {
 			$payIcon = 'coins';
 		}
 	} elseif ($paycode == 'CB') {
-		if (!isset($conf->global->TAKEPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('TAKEPOS_NUMPAD_USE_PAYMENT_ICON')) {
+		if (!isset($conf->global->FLUXPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('FLUXPOS_NUMPAD_USE_PAYMENT_ICON')) {
 			$payIcon = 'credit-card';
 		}
 	} elseif ($paycode == 'CHQ') {
-		if (!isset($conf->global->TAKEPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('TAKEPOS_NUMPAD_USE_PAYMENT_ICON')) {
+		if (!isset($conf->global->FLUXPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('FLUXPOS_NUMPAD_USE_PAYMENT_ICON')) {
 			$payIcon = 'money-check';
 		}
 	}
@@ -746,7 +746,7 @@ while ($i < count($arrayOfValidPaymentModes)) {
 }
 
 if (isModEnabled('stripe') && isset($keyforstripeterminalbank) && getDolGlobalString('STRIPE_CARD_PRESENT')) {
-	$keyforstripeterminalbank = "CASHDESK_ID_BANKACCOUNT_STRIPETERMINAL".$_SESSION["takeposterminal"];
+	$keyforstripeterminalbank = "FLUXPOS_ID_BANKACCOUNT_STRIPETERMINAL".$_SESSION["fluxposterminal"];
 	print '<span id="StripeTerminal"></span>';
 	if (getDolGlobalString((string) $keyforstripeterminalbank)) {
 		// Nothing
@@ -756,8 +756,8 @@ if (isModEnabled('stripe') && isset($keyforstripeterminalbank) && getDolGlobalSt
 	}
 }
 
-$keyforsumupbank = "CASHDESK_ID_BANKACCOUNT_SUMUP".$_SESSION["takeposterminal"];
-if (getDolGlobalInt("TAKEPOS_ENABLE_SUMUP")) {
+$keyforsumupbank = "FLUXPOS_ID_BANKACCOUNT_SUMUP".$_SESSION["fluxposterminal"];
+if (getDolGlobalInt("FLUXPOS_ENABLE_SUMUP")) {
 	if (getDolGlobalString($keyforsumupbank)) {
 		print '<button type="button" class="calcbutton2" onclick="ValidateSumup();">Sumup</button>';
 	} else {
@@ -782,7 +782,7 @@ foreach ($action_buttons as $button) {
 	print '<button type="button" class="'.$newclass.'" onclick="'.$button["function"].'"><span '.$button["span"].'>'.$button["text"].'</span></button>';
 }
 
-if (getDolGlobalString('TAKEPOS_DELAYED_PAYMENT')) {
+if (getDolGlobalString('FLUXPOS_DELAYED_PAYMENT')) {
 	print '<button type="button" class="calcbutton2" onclick="Validate(\'delayed\')">'.$langs->trans("Reported").'</button>';
 }
 ?>

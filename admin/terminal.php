@@ -21,9 +21,9 @@
  */
 
 /**
- *	\file       htdocs/takepos/admin/terminal.php
- *	\ingroup    takepos
- *	\brief      Setup page for TakePos module
+ *	\file       htdocs/fluxpos/admin/terminal.php
+ *	\ingroup    fluxpos
+ *	\brief      Setup page for FluxPos module
  */
 
 // Load Dolibarr environment
@@ -41,15 +41,15 @@ require_once DOL_DOCUMENT_ROOT.'/product/class/html.formproduct.class.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/pdf.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/blockedlog/lib/blockedlog.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php';
-require_once DOL_DOCUMENT_ROOT."/core/lib/takepos.lib.php";
+require_once dol_buildpath('/fluxpos/lib/fluxpos.lib.php');
 require_once DOL_DOCUMENT_ROOT.'/stripe/class/stripe.class.php';
 
 $terminal = GETPOSTINT('terminal');
 // If socid provided by ajax company selector
-if (GETPOST('CASHDESK_ID_THIRDPARTY'.$terminal.'_id', 'alpha')) {
-	$_GET['CASHDESK_ID_THIRDPARTY'.$terminal] = GETPOST('CASHDESK_ID_THIRDPARTY'.$terminal.'_id', 'alpha');
-	$_POST['CASHDESK_ID_THIRDPARTY'.$terminal] = GETPOST('CASHDESK_ID_THIRDPARTY'.$terminal.'_id', 'alpha');
-	$_REQUEST['CASHDESK_ID_THIRDPARTY'.$terminal] = GETPOST('CASHDESK_ID_THIRDPARTY'.$terminal.'_id', 'alpha');
+if (GETPOST('FLUXPOS_ID_THIRDPARTY'.$terminal.'_id', 'alpha')) {
+	$_GET['FLUXPOS_ID_THIRDPARTY'.$terminal] = GETPOST('FLUXPOS_ID_THIRDPARTY'.$terminal.'_id', 'alpha');
+	$_POST['FLUXPOS_ID_THIRDPARTY'.$terminal] = GETPOST('FLUXPOS_ID_THIRDPARTY'.$terminal.'_id', 'alpha');
+	$_REQUEST['FLUXPOS_ID_THIRDPARTY'.$terminal] = GETPOST('FLUXPOS_ID_THIRDPARTY'.$terminal.'_id', 'alpha');
 }
 
 // Security check
@@ -57,7 +57,7 @@ if (!$user->admin) {
 	accessforbidden();
 }
 
-$langs->loadLangs(array("admin", "cashdesk", "printing", "receiptprinter"));
+$langs->loadLangs(array("admin", "fluxpos@fluxpos", "printing", "receiptprinter"));
 
 $sql = "SELECT code, libelle as label FROM ".MAIN_DB_PREFIX."c_paiement";
 $sql .= " WHERE entity IN (".getEntity('c_paiement').")";
@@ -83,80 +83,80 @@ $error = 0;
 if (GETPOST('action', 'alpha') == 'set') {
 	$db->begin();
 
-	$res = dolibarr_set_const($db, "TAKEPOS_TERMINAL_NAME_".$terminaltouse, (!empty(GETPOST('terminalname'.$terminaltouse, 'restricthtml')) ? GETPOST('terminalname'.$terminaltouse, 'restricthtml') : $langs->trans("TerminalName", $terminaltouse)), 'chaine', 0, '', $conf->entity);
+	$res = dolibarr_set_const($db, "FLUXPOS_TERMINAL_NAME_".$terminaltouse, (!empty(GETPOST('terminalname'.$terminaltouse, 'restricthtml')) ? GETPOST('terminalname'.$terminaltouse, 'restricthtml') : $langs->trans("TerminalName", $terminaltouse)), 'chaine', 0, '', $conf->entity);
 
-	// The default customer is still needed when TAKEPOS_FORBID_SALES_TO_DEFAULT_CUSTOMER is on: TakePOS creates the
+	// The default customer is still needed when FLUXPOS_FORBID_SALES_TO_DEFAULT_CUSTOMER is on: FluxPos creates the
 	// draft invoice on it, and refuses the payment as long as it is the customer of the sale.
 	if (GETPOSTISSET('socid')) {
-		$res = dolibarr_set_const($db, "CASHDESK_ID_THIRDPARTY".$terminaltouse, (GETPOSTINT('socid') > 0 ? GETPOSTINT('socid') : ''), 'chaine', 0, '', $conf->entity);
+		$res = dolibarr_set_const($db, "FLUXPOS_ID_THIRDPARTY".$terminaltouse, (GETPOSTINT('socid') > 0 ? GETPOSTINT('socid') : ''), 'chaine', 0, '', $conf->entity);
 	}
 
 	if (GETPOSTISSET('projectid')) {
-		$res = dolibarr_set_const($db, "CASHDESK_ID_PROJECT".$terminaltouse, (GETPOSTINT('projectid') > 0 ? GETPOSTINT('projectid') : ''), 'chaine', 0, '', $conf->entity);
+		$res = dolibarr_set_const($db, "FLUXPOS_ID_PROJECT".$terminaltouse, (GETPOSTINT('projectid') > 0 ? GETPOSTINT('projectid') : ''), 'chaine', 0, '', $conf->entity);
 	}
-	if (GETPOSTISSET('CASHDESK_ID_BANKACCOUNT_CASH'.$terminaltouse)) {
-		$res = dolibarr_set_const($db, "CASHDESK_ID_BANKACCOUNT_CASH".$terminaltouse, (GETPOST('CASHDESK_ID_BANKACCOUNT_CASH'.$terminaltouse, 'alpha') > 0 ? GETPOST('CASHDESK_ID_BANKACCOUNT_CASH'.$terminaltouse, 'alpha') : ''), 'chaine', 0, '', $conf->entity);
+	if (GETPOSTISSET('FLUXPOS_ID_BANKACCOUNT_CASH'.$terminaltouse)) {
+		$res = dolibarr_set_const($db, "FLUXPOS_ID_BANKACCOUNT_CASH".$terminaltouse, (GETPOST('FLUXPOS_ID_BANKACCOUNT_CASH'.$terminaltouse, 'alpha') > 0 ? GETPOST('FLUXPOS_ID_BANKACCOUNT_CASH'.$terminaltouse, 'alpha') : ''), 'chaine', 0, '', $conf->entity);
 	}
-	if (GETPOSTISSET('CASHDESK_ID_BANKACCOUNT_CHEQUE'.$terminaltouse)) {
-		$res = dolibarr_set_const($db, "CASHDESK_ID_BANKACCOUNT_CHEQUE".$terminaltouse, (GETPOST('CASHDESK_ID_BANKACCOUNT_CHEQUE'.$terminaltouse, 'alpha') > 0 ? GETPOST('CASHDESK_ID_BANKACCOUNT_CHEQUE'.$terminaltouse, 'alpha') : ''), 'chaine', 0, '', $conf->entity);
+	if (GETPOSTISSET('FLUXPOS_ID_BANKACCOUNT_CHEQUE'.$terminaltouse)) {
+		$res = dolibarr_set_const($db, "FLUXPOS_ID_BANKACCOUNT_CHEQUE".$terminaltouse, (GETPOST('FLUXPOS_ID_BANKACCOUNT_CHEQUE'.$terminaltouse, 'alpha') > 0 ? GETPOST('FLUXPOS_ID_BANKACCOUNT_CHEQUE'.$terminaltouse, 'alpha') : ''), 'chaine', 0, '', $conf->entity);
 	}
-	if (GETPOSTISSET('CASHDESK_ID_BANKACCOUNT_CB'.$terminaltouse)) {
-		$res = dolibarr_set_const($db, "CASHDESK_ID_BANKACCOUNT_CB".$terminaltouse, (GETPOST('CASHDESK_ID_BANKACCOUNT_CB'.$terminaltouse, 'alpha') > 0 ? GETPOST('CASHDESK_ID_BANKACCOUNT_CB'.$terminaltouse, 'alpha') : ''), 'chaine', 0, '', $conf->entity);
+	if (GETPOSTISSET('FLUXPOS_ID_BANKACCOUNT_CB'.$terminaltouse)) {
+		$res = dolibarr_set_const($db, "FLUXPOS_ID_BANKACCOUNT_CB".$terminaltouse, (GETPOST('FLUXPOS_ID_BANKACCOUNT_CB'.$terminaltouse, 'alpha') > 0 ? GETPOST('FLUXPOS_ID_BANKACCOUNT_CB'.$terminaltouse, 'alpha') : ''), 'chaine', 0, '', $conf->entity);
 	}
-	if (GETPOSTISSET('CASHDESK_ID_BANKACCOUNT_STRIPETERMINAL'.$terminaltouse)) {
-		$res = dolibarr_set_const($db, "CASHDESK_ID_BANKACCOUNT_STRIPETERMINAL".$terminaltouse, GETPOST('CASHDESK_ID_BANKACCOUNT_STRIPETERMINAL'.$terminaltouse, 'alpha'), 'chaine', 0, '', $conf->entity);
+	if (GETPOSTISSET('FLUXPOS_ID_BANKACCOUNT_STRIPETERMINAL'.$terminaltouse)) {
+		$res = dolibarr_set_const($db, "FLUXPOS_ID_BANKACCOUNT_STRIPETERMINAL".$terminaltouse, GETPOST('FLUXPOS_ID_BANKACCOUNT_STRIPETERMINAL'.$terminaltouse, 'alpha'), 'chaine', 0, '', $conf->entity);
 	}
-	if (GETPOSTISSET('CASHDESK_ID_BANKACCOUNT_SUMUP'.$terminaltouse)) {
-		$res = dolibarr_set_const($db, "CASHDESK_ID_BANKACCOUNT_SUMUP".$terminaltouse, (GETPOST('CASHDESK_ID_BANKACCOUNT_SUMUP'.$terminaltouse, 'alpha') > 0 ? GETPOST('CASHDESK_ID_BANKACCOUNT_SUMUP'.$terminaltouse, 'alpha') : ''), 'chaine', 0, '', $conf->entity);
+	if (GETPOSTISSET('FLUXPOS_ID_BANKACCOUNT_SUMUP'.$terminaltouse)) {
+		$res = dolibarr_set_const($db, "FLUXPOS_ID_BANKACCOUNT_SUMUP".$terminaltouse, (GETPOST('FLUXPOS_ID_BANKACCOUNT_SUMUP'.$terminaltouse, 'alpha') > 0 ? GETPOST('FLUXPOS_ID_BANKACCOUNT_SUMUP'.$terminaltouse, 'alpha') : ''), 'chaine', 0, '', $conf->entity);
 	}
 	foreach ($paiements as $modep) {
 		if (in_array($modep->code, array('LIQ', 'CB', 'CHQ'))) {
 			continue;
 		}
-		$name = "CASHDESK_ID_BANKACCOUNT_".$modep->code.$terminaltouse;
+		$name = "FLUXPOS_ID_BANKACCOUNT_".$modep->code.$terminaltouse;
 		if (GETPOSTISSET($name)) {
 			$res = dolibarr_set_const($db, $name, (GETPOST($name, 'alpha') > 0 ? GETPOST($name, 'alpha') : ''), 'chaine', 0, '', $conf->entity);
 		}
 	}
-	if (GETPOSTISSET('CASHDESK_ID_WAREHOUSE'.$terminaltouse)) {
-		$res = dolibarr_set_const($db, "CASHDESK_ID_WAREHOUSE".$terminaltouse, (GETPOST('CASHDESK_ID_WAREHOUSE'.$terminaltouse, 'alpha') > 0 ? GETPOST('CASHDESK_ID_WAREHOUSE'.$terminaltouse, 'alpha') : ''), 'chaine', 0, '', $conf->entity);
+	if (GETPOSTISSET('FLUXPOS_ID_WAREHOUSE'.$terminaltouse)) {
+		$res = dolibarr_set_const($db, "FLUXPOS_ID_WAREHOUSE".$terminaltouse, (GETPOST('FLUXPOS_ID_WAREHOUSE'.$terminaltouse, 'alpha') > 0 ? GETPOST('FLUXPOS_ID_WAREHOUSE'.$terminaltouse, 'alpha') : ''), 'chaine', 0, '', $conf->entity);
 	}
-	if (GETPOSTISSET('CASHDESK_NO_DECREASE_STOCK'.$terminaltouse)) {
-		$res = dolibarr_set_const($db, "CASHDESK_NO_DECREASE_STOCK".$terminaltouse, GETPOST('CASHDESK_NO_DECREASE_STOCK'.$terminaltouse, 'alpha'), 'chaine', 0, '', $conf->entity);
+	if (GETPOSTISSET('FLUXPOS_NO_DECREASE_STOCK'.$terminaltouse)) {
+		$res = dolibarr_set_const($db, "FLUXPOS_NO_DECREASE_STOCK".$terminaltouse, GETPOST('FLUXPOS_NO_DECREASE_STOCK'.$terminaltouse, 'alpha'), 'chaine', 0, '', $conf->entity);
 	}
-	if (GETPOSTISSET('TAKEPOS_PRINTER_TO_USE'.$terminaltouse)) {
-		$res = dolibarr_set_const($db, "TAKEPOS_PRINTER_TO_USE".$terminaltouse, GETPOST('TAKEPOS_PRINTER_TO_USE'.$terminaltouse, 'alpha'), 'chaine', 0, '', $conf->entity);
+	if (GETPOSTISSET('FLUXPOS_PRINTER_TO_USE'.$terminaltouse)) {
+		$res = dolibarr_set_const($db, "FLUXPOS_PRINTER_TO_USE".$terminaltouse, GETPOST('FLUXPOS_PRINTER_TO_USE'.$terminaltouse, 'alpha'), 'chaine', 0, '', $conf->entity);
 	}
-	if (GETPOSTISSET('TAKEPOS_ORDER_PRINTER1_TO_USE'.$terminaltouse)) {
-		$res = dolibarr_set_const($db, "TAKEPOS_ORDER_PRINTER1_TO_USE".$terminaltouse, GETPOST('TAKEPOS_ORDER_PRINTER1_TO_USE'.$terminaltouse, 'alpha'), 'chaine', 0, '', $conf->entity);
+	if (GETPOSTISSET('FLUXPOS_ORDER_PRINTER1_TO_USE'.$terminaltouse)) {
+		$res = dolibarr_set_const($db, "FLUXPOS_ORDER_PRINTER1_TO_USE".$terminaltouse, GETPOST('FLUXPOS_ORDER_PRINTER1_TO_USE'.$terminaltouse, 'alpha'), 'chaine', 0, '', $conf->entity);
 	}
-	if (GETPOSTISSET('TAKEPOS_ORDER_PRINTER2_TO_USE'.$terminaltouse)) {
-		$res = dolibarr_set_const($db, "TAKEPOS_ORDER_PRINTER2_TO_USE".$terminaltouse, GETPOST('TAKEPOS_ORDER_PRINTER2_TO_USE'.$terminaltouse, 'alpha'), 'chaine', 0, '', $conf->entity);
+	if (GETPOSTISSET('FLUXPOS_ORDER_PRINTER2_TO_USE'.$terminaltouse)) {
+		$res = dolibarr_set_const($db, "FLUXPOS_ORDER_PRINTER2_TO_USE".$terminaltouse, GETPOST('FLUXPOS_ORDER_PRINTER2_TO_USE'.$terminaltouse, 'alpha'), 'chaine', 0, '', $conf->entity);
 	}
-	if (GETPOSTISSET('TAKEPOS_ORDER_PRINTER3_TO_USE'.$terminaltouse)) {
-		$res = dolibarr_set_const($db, "TAKEPOS_ORDER_PRINTER3_TO_USE".$terminaltouse, GETPOST('TAKEPOS_ORDER_PRINTER3_TO_USE'.$terminaltouse, 'alpha'), 'chaine', 0, '', $conf->entity);
+	if (GETPOSTISSET('FLUXPOS_ORDER_PRINTER3_TO_USE'.$terminaltouse)) {
+		$res = dolibarr_set_const($db, "FLUXPOS_ORDER_PRINTER3_TO_USE".$terminaltouse, GETPOST('FLUXPOS_ORDER_PRINTER3_TO_USE'.$terminaltouse, 'alpha'), 'chaine', 0, '', $conf->entity);
 	}
-	if (GETPOSTISSET('TAKEPOS_TEMPLATE_TO_USE_FOR_INVOICES'.$terminaltouse)) {
-		$res = dolibarr_set_const($db, "TAKEPOS_TEMPLATE_TO_USE_FOR_INVOICES".$terminaltouse, GETPOST('TAKEPOS_TEMPLATE_TO_USE_FOR_INVOICES'.$terminaltouse, 'alpha'), 'chaine', 0, '', $conf->entity);
+	if (GETPOSTISSET('FLUXPOS_TEMPLATE_TO_USE_FOR_INVOICES'.$terminaltouse)) {
+		$res = dolibarr_set_const($db, "FLUXPOS_TEMPLATE_TO_USE_FOR_INVOICES".$terminaltouse, GETPOST('FLUXPOS_TEMPLATE_TO_USE_FOR_INVOICES'.$terminaltouse, 'alpha'), 'chaine', 0, '', $conf->entity);
 	}
-	if (GETPOSTISSET('TAKEPOS_TEMPLATE_TO_USE_FOR_ORDERS'.$terminaltouse)) {
-		$res = dolibarr_set_const($db, "TAKEPOS_TEMPLATE_TO_USE_FOR_ORDERS".$terminaltouse, GETPOST('TAKEPOS_TEMPLATE_TO_USE_FOR_ORDERS'.$terminaltouse, 'alpha'), 'chaine', 0, '', $conf->entity);
-	}
-
-	if (GETPOSTISSET('CASHDESK_READER_KEYCODE_FOR_ENTER'.$terminaltouse)) {
-		$res = dolibarr_set_const($db, 'CASHDESK_READER_KEYCODE_FOR_ENTER'.$terminaltouse, (GETPOSTINT('CASHDESK_READER_KEYCODE_FOR_ENTER'.$terminaltouse) > 0 ? GETPOSTINT('CASHDESK_READER_KEYCODE_FOR_ENTER'.$terminaltouse) : ''), 'chaine', 0, '', $conf->entity);
+	if (GETPOSTISSET('FLUXPOS_TEMPLATE_TO_USE_FOR_ORDERS'.$terminaltouse)) {
+		$res = dolibarr_set_const($db, "FLUXPOS_TEMPLATE_TO_USE_FOR_ORDERS".$terminaltouse, GETPOST('FLUXPOS_TEMPLATE_TO_USE_FOR_ORDERS'.$terminaltouse, 'alpha'), 'chaine', 0, '', $conf->entity);
 	}
 
-	if (GETPOSTISSET('TAKEPOS_ADDON'.$terminaltouse)) {
-		$res = dolibarr_set_const($db, "TAKEPOS_ADDON".$terminaltouse, GETPOST('TAKEPOS_ADDON'.$terminaltouse, 'alpha'), 'chaine', 0, '', $conf->entity);
+	if (GETPOSTISSET('FLUXPOS_READER_KEYCODE_FOR_ENTER'.$terminaltouse)) {
+		$res = dolibarr_set_const($db, 'FLUXPOS_READER_KEYCODE_FOR_ENTER'.$terminaltouse, (GETPOSTINT('FLUXPOS_READER_KEYCODE_FOR_ENTER'.$terminaltouse) > 0 ? GETPOSTINT('FLUXPOS_READER_KEYCODE_FOR_ENTER'.$terminaltouse) : ''), 'chaine', 0, '', $conf->entity);
+	}
+
+	if (GETPOSTISSET('FLUXPOS_ADDON'.$terminaltouse)) {
+		$res = dolibarr_set_const($db, "FLUXPOS_ADDON".$terminaltouse, GETPOST('FLUXPOS_ADDON'.$terminaltouse, 'alpha'), 'chaine', 0, '', $conf->entity);
 	}
 
 	// Add free text on each terminal of cash desk
-	if (GETPOSTISSET('TAKEPOS_HEADER'.$terminaltouse)) {
-		$res = dolibarr_set_const($db, 'TAKEPOS_HEADER'.$terminaltouse, GETPOST('TAKEPOS_HEADER'.$terminaltouse, 'restricthtml'), 'chaine', 0, '', $conf->entity);
+	if (GETPOSTISSET('FLUXPOS_HEADER'.$terminaltouse)) {
+		$res = dolibarr_set_const($db, 'FLUXPOS_HEADER'.$terminaltouse, GETPOST('FLUXPOS_HEADER'.$terminaltouse, 'restricthtml'), 'chaine', 0, '', $conf->entity);
 	}
-	if (GETPOSTISSET('TAKEPOS_FOOTER'.$terminaltouse)) {
-		$res = dolibarr_set_const($db, 'TAKEPOS_FOOTER'.$terminaltouse, GETPOST('TAKEPOS_FOOTER'.$terminaltouse, 'restricthtml'), 'chaine', 0, '', $conf->entity);
+	if (GETPOSTISSET('FLUXPOS_FOOTER'.$terminaltouse)) {
+		$res = dolibarr_set_const($db, 'FLUXPOS_FOOTER'.$terminaltouse, GETPOST('FLUXPOS_FOOTER'.$terminaltouse, 'restricthtml'), 'chaine', 0, '', $conf->entity);
 	}
 
 	dol_syslog("admin/terminal.php: level ".GETPOST('level', 'alpha'));
@@ -182,13 +182,13 @@ if (GETPOST('action', 'alpha') == 'set') {
 $form = new Form($db);
 $formproduct = new FormProduct($db);
 
-llxHeader('', $langs->trans("CashDeskSetup"), '', '', 0, 0, '', '', '', 'mod-takepos page-admin_terminal');
+llxHeader('', $langs->trans("CashDeskSetup"), '', '', 0, 0, '', '', '', 'mod-fluxpos page-admin_terminal');
 
 $linkback = '<a href="'.dolBuildUrl(DOL_URL_ROOT.'/admin/modules.php', ['restore_lastsearch_values' => 1]).'">'.img_picto($langs->trans("BackToModuleList"), 'back', 'class="pictofixedwidth"').'<span class="hideonsmartphone">'.$langs->trans("BackToModuleList").'</span></a>';
 
-print load_fiche_titre($langs->trans("CashDeskSetup").' (TakePOS)', $linkback, 'title_setup');
-$head = takepos_admin_prepare_head();
-print dol_get_fiche_head($head, 'terminal'.$terminal, 'TakePOS', -1, 'cash-register');
+print load_fiche_titre($langs->trans("CashDeskSetup").' (FluxPos)', $linkback, 'title_setup');
+$head = fluxpos_admin_prepare_head();
+print dol_get_fiche_head($head, 'terminal'.$terminal, 'FluxPos', -1, 'cash-register');
 print '<br>';
 
 
@@ -205,19 +205,19 @@ print "</tr>\n";
 
 print '<tr class="oddeven"><td class="fieldrequired">'.$langs->trans("TerminalNameDesc").'</td>';
 print '<td>';
-print '<input type="text" name="terminalname'.$terminal.'" value="'.getDolGlobalString("TAKEPOS_TERMINAL_NAME_".$terminal, $langs->trans("TerminalName", $terminal)).'" >';
+print '<input type="text" name="terminalname'.$terminal.'" value="'.getDolGlobalString("FLUXPOS_TERMINAL_NAME_".$terminal, $langs->trans("TerminalName", $terminal)).'" >';
 print '</td></tr>';
 
 print '<tr class="oddeven"><td>'.$langs->trans("ForbidSalesToTheDefaultCustomer").'</td>';
 print '<td>';
-print ajax_constantonoff("TAKEPOS_FORBID_SALES_TO_DEFAULT_CUSTOMER", array(), $conf->entity, 0, 0, 1, 0);
+print ajax_constantonoff("FLUXPOS_FORBID_SALES_TO_DEFAULT_CUSTOMER", array(), $conf->entity, 0, 0, 1, 0);
 print '</td></tr>';
 
 print '<tr class="oddeven"><td class="fieldrequired">'.$langs->trans("CashDeskThirdPartyForSell").'</td>';
 print '<td>';
 print img_picto('', 'company', 'class="pictofixedwidth"');
 $filter = '((s.client:IN:1,2,3) AND (s.status:=:1))';
-print $form->select_company(getDolGlobalInt('CASHDESK_ID_THIRDPARTY'.$terminaltouse), 'socid', $filter, 1, 0, 0, array(), 0, 'maxwidth500 widthcentpercentminusx');
+print $form->select_company(getDolGlobalInt('FLUXPOS_ID_THIRDPARTY'.$terminaltouse), 'socid', $filter, 1, 0, 0, array(), 0, 'maxwidth500 widthcentpercentminusx');
 print '</td></tr>';
 
 $atleastonefound = 0;
@@ -225,27 +225,27 @@ if (isModEnabled("bank")) {
 	print '<tr class="oddeven"><td>'.$langs->trans("CashDeskBankAccountForSell").'</td>';
 	print '<td>';
 	print img_picto('', 'bank_account', 'class="pictofixedwidth"');
-	print $form->select_comptes(getDolGlobalInt('CASHDESK_ID_BANKACCOUNT_CASH'.$terminaltouse), 'CASHDESK_ID_BANKACCOUNT_CASH'.$terminaltouse, 0, "(courant:=:2)", 1, '', 0, 'maxwidth500 widthcentpercentminusxx', 1);
+	print $form->select_comptes(getDolGlobalInt('FLUXPOS_ID_BANKACCOUNT_CASH'.$terminaltouse), 'FLUXPOS_ID_BANKACCOUNT_CASH'.$terminaltouse, 0, "(courant:=:2)", 1, '', 0, 'maxwidth500 widthcentpercentminusxx', 1);
 	print ' <a href="'.DOL_URL_ROOT.'/compta/bank/card.php?action=create&type=2&backtopage='.urlencode($_SERVER["PHP_SELF"].'?terminal='.$terminal).'"><span class="fa fa-plus-circle valignmiddle paddingleft" title="'.$langs->trans("NewBankAccount").'"></span></a>';
-	if (getDolGlobalInt('CASHDESK_ID_BANKACCOUNT_CASH'.$terminaltouse)) {
+	if (getDolGlobalInt('FLUXPOS_ID_BANKACCOUNT_CASH'.$terminaltouse)) {
 		$atleastonefound++;
 	}
 	print '</td></tr>';
 	print '<tr class="oddeven"><td>'.$langs->trans("CashDeskBankAccountForCheque").'</td>';
 	print '<td>';
 	print img_picto('', 'bank_account', 'class="pictofixedwidth"');
-	print $form->select_comptes(getDolGlobalInt('CASHDESK_ID_BANKACCOUNT_CHEQUE'.$terminaltouse), 'CASHDESK_ID_BANKACCOUNT_CHEQUE'.$terminaltouse, 0, "(courant:=:1)", 1, '', 0, 'maxwidth500 widthcentpercentminusxx', 1);
+	print $form->select_comptes(getDolGlobalInt('FLUXPOS_ID_BANKACCOUNT_CHEQUE'.$terminaltouse), 'FLUXPOS_ID_BANKACCOUNT_CHEQUE'.$terminaltouse, 0, "(courant:=:1)", 1, '', 0, 'maxwidth500 widthcentpercentminusxx', 1);
 	print ' <a href="'.DOL_URL_ROOT.'/compta/bank/card.php?action=create&type=1&backtopage='.urlencode($_SERVER["PHP_SELF"].'?terminal='.$terminal).'"><span class="fa fa-plus-circle valignmiddle paddingleft" title="'.$langs->trans("NewBankAccount").'"></span></a>';
-	if (getDolGlobalInt('CASHDESK_ID_BANKACCOUNT_CHEQUE'.$terminaltouse)) {
+	if (getDolGlobalInt('FLUXPOS_ID_BANKACCOUNT_CHEQUE'.$terminaltouse)) {
 		$atleastonefound++;
 	}
 	print '</td></tr>';
 	print '<tr class="oddeven"><td>'.$langs->trans("CashDeskBankAccountForCB").'</td>';
 	print '<td>';
 	print img_picto('', 'bank_account', 'class="pictofixedwidth"');
-	print $form->select_comptes(getDolGlobalInt('CASHDESK_ID_BANKACCOUNT_CB'.$terminaltouse), 'CASHDESK_ID_BANKACCOUNT_CB'.$terminaltouse, 0, "(courant:=:1)", 1, '', 0, 'maxwidth500 widthcentpercentminusxx', 1);
+	print $form->select_comptes(getDolGlobalInt('FLUXPOS_ID_BANKACCOUNT_CB'.$terminaltouse), 'FLUXPOS_ID_BANKACCOUNT_CB'.$terminaltouse, 0, "(courant:=:1)", 1, '', 0, 'maxwidth500 widthcentpercentminusxx', 1);
 	print ' <a href="'.DOL_URL_ROOT.'/compta/bank/card.php?action=create&type=1&backtopage='.urlencode($_SERVER["PHP_SELF"].'?terminal='.$terminal).'"><span class="fa fa-plus-circle valignmiddle paddingleft" title="'.$langs->trans("NewBankAccount").'"></span></a>';
-	if (getDolGlobalInt('CASHDESK_ID_BANKACCOUNT_CB'.$terminaltouse)) {
+	if (getDolGlobalInt('FLUXPOS_ID_BANKACCOUNT_CB'.$terminaltouse)) {
 		$atleastonefound++;
 	}
 	print '</td></tr>';
@@ -283,17 +283,17 @@ if (isModEnabled("bank")) {
 		foreach ($readers as $tmpreader) {
 			$reader[$tmpreader->id] = $tmpreader->label.' ('.$tmpreader->status.')';
 		}
-		print $form->selectarray('CASHDESK_ID_BANKACCOUNT_STRIPETERMINAL'.$terminaltouse, $reader, getDolGlobalString('CASHDESK_ID_BANKACCOUNT_STRIPETERMINAL'.$terminaltouse));
+		print $form->selectarray('FLUXPOS_ID_BANKACCOUNT_STRIPETERMINAL'.$terminaltouse, $reader, getDolGlobalString('FLUXPOS_ID_BANKACCOUNT_STRIPETERMINAL'.$terminaltouse));
 		print '</td></tr>';
 	}
 
-	if (getDolGlobalInt('TAKEPOS_ENABLE_SUMUP')) {
+	if (getDolGlobalInt('FLUXPOS_ENABLE_SUMUP')) {
 		print '<tr class="oddeven"><td>'.$langs->trans("CashDeskBankAccountForSumup").'</td>';
 		print '<td>';
 		print img_picto('', 'bank_account', 'class="pictofixedwidth"');
-		print $form->select_comptes(getDolGlobalInt('CASHDESK_ID_BANKACCOUNT_SUMUP'.$terminaltouse), 'CASHDESK_ID_BANKACCOUNT_SUMUP'.$terminaltouse, 0, "(courant:=:1)", 1, '', 0, 'maxwidth500 widthcentpercentminusxx', 1);
+		print $form->select_comptes(getDolGlobalInt('FLUXPOS_ID_BANKACCOUNT_SUMUP'.$terminaltouse), 'FLUXPOS_ID_BANKACCOUNT_SUMUP'.$terminaltouse, 0, "(courant:=:1)", 1, '', 0, 'maxwidth500 widthcentpercentminusxx', 1);
 		print ' <a href="'.DOL_URL_ROOT.'/compta/bank/card.php?action=create&type=1&backtopage='.urlencode($_SERVER["PHP_SELF"].'?terminal='.$terminal).'"><span class="fa fa-plus-circle valignmiddle paddingleft" title="'.$langs->trans("NewBankAccount").'"></span></a>';
-		if (getDolGlobalInt('CASHDESK_ID_BANKACCOUNT_SUMUP'.$terminaltouse)) {
+		if (getDolGlobalInt('FLUXPOS_ID_BANKACCOUNT_SUMUP'.$terminaltouse)) {
 			$atleastonefound++;
 		}
 		print '</td></tr>';
@@ -304,7 +304,7 @@ if (isModEnabled("bank")) {
 		if (in_array($modep->code, array('LIQ', 'CB', 'CHQ'))) {
 			continue; // Already managed before
 		}
-		$name = "CASHDESK_ID_BANKACCOUNT_".$modep->code.$terminaltouse;
+		$name = "FLUXPOS_ID_BANKACCOUNT_".$modep->code.$terminaltouse;
 		print '<tr class="oddeven"><td>'.$langs->trans("CashDeskBankAccountFor").' '.$langs->trans($modep->label).'</td>';
 		print '<td>';
 		if (getDolGlobalString($name)) {
@@ -327,12 +327,12 @@ if (isModEnabled('stock')) {
 	print $form->textwithpicto($langs->trans("CashDeskDoNotDecreaseStock"), $langs->trans("CashDeskDoNotDecreaseStockHelp"));
 	print '</td>'; // Force warehouse (this is not a default value)
 	print '<td>';
-	//print $form->selectyesno('CASHDESK_NO_DECREASE_STOCK'.$terminal, getDolGlobalInt('CASHDESK_NO_DECREASE_STOCK'.$terminal), 1);
-	print ajax_constantonoff('CASHDESK_NO_DECREASE_STOCK'.$terminal, array(), $conf->entity, 0, 0, 1, 0);
+	//print $form->selectyesno('FLUXPOS_NO_DECREASE_STOCK'.$terminal, getDolGlobalInt('FLUXPOS_NO_DECREASE_STOCK'.$terminal), 1);
+	print ajax_constantonoff('FLUXPOS_NO_DECREASE_STOCK'.$terminal, array(), $conf->entity, 0, 0, 1, 0);
 	print '</td></tr>';
 
 
-	$disabled = getDolGlobalInt('CASHDESK_NO_DECREASE_STOCK'.$terminal);
+	$disabled = getDolGlobalInt('FLUXPOS_NO_DECREASE_STOCK'.$terminal);
 
 
 	print '<tr class="oddeven"><td>';
@@ -343,22 +343,22 @@ if (isModEnabled('stock')) {
 	if (!$disabled) {
 		print '</span>';
 	}
-	if (!$disabled && !getDolGlobalString('CASHDESK_ID_WAREHOUSE'.$terminal)) {
+	if (!$disabled && !getDolGlobalString('FLUXPOS_ID_WAREHOUSE'.$terminal)) {
 		print img_warning($langs->trans("DisableStockChange").' - '.$langs->trans("NoWarehouseDefinedForTerminal"));
 	}
 	print '</td>'; // Force warehouse (this is not a default value)
 	print '<td class="minwidth300">';
 	if (!$disabled) {
 		print img_picto('', 'stock', 'class="pictofixedwidth"');
-		print $formproduct->selectWarehouses(getDolGlobalString('CASHDESK_ID_WAREHOUSE'.$terminal), 'CASHDESK_ID_WAREHOUSE'.$terminal, '', 1, $disabled, 0, '', 0, 0, array(), 'maxwidth500 widthcentpercentminusxx');
+		print $formproduct->selectWarehouses(getDolGlobalString('FLUXPOS_ID_WAREHOUSE'.$terminal), 'FLUXPOS_ID_WAREHOUSE'.$terminal, '', 1, $disabled, 0, '', 0, 0, array(), 'maxwidth500 widthcentpercentminusxx');
 		print ' <a href="'.DOL_URL_ROOT.'/product/stock/card.php?action=create&backtopage='.urlencode($_SERVER["PHP_SELF"].'?&terminal='.$terminal).'"><span class="fa fa-plus-circle valignmiddle"></span></a>';
 	} else {
 		print '<span class="opacitymedium">'.$langs->trans("StockDecreaseForPointOfSaleDisabled").'</span>';
 	}
 	print '</td></tr>';
 
-	// Deprecated: CASHDESK_FORCE_DECREASE_STOCK is now always false. No more required/used.
-	if (isModEnabled('productbatch') && getDolGlobalString('CASHDESK_FORCE_DECREASE_STOCK') && !getDolGlobalString('CASHDESK_NO_DECREASE_STOCK'.$terminal)) {
+	// Deprecated: FLUXPOS_FORCE_DECREASE_STOCK is now always false. No more required/used.
+	if (isModEnabled('productbatch') && getDolGlobalString('FLUXPOS_FORCE_DECREASE_STOCK') && !getDolGlobalString('FLUXPOS_NO_DECREASE_STOCK'.$terminal)) {
 		print '<tr class="oddeven"><td>'.$langs->trans('CashDeskForceDecreaseStockLabel').'</td>';
 		print '<td>';
 		print '<span class="opacitymedium">'.$langs->trans('CashDeskForceDecreaseStockDesc').'</span>';
@@ -372,18 +372,18 @@ if (isModEnabled('project')) {
 	print '<tr class="oddeven"><td>'.$langs->trans("CashDeskDefaultProject").'</td><td>';
 	print img_picto('', 'project', 'class="pictofixedwidth"');
 	// select_projects($socid = -1, $selected = '', $htmlname = 'projectid', $maxlength = 16, $option_only = 0, $show_empty = 1, $discard_closed = 0, $forcefocus = 0, $disabled = 0, $mode = 0, $filterkey = '', $nooutput = 0, $forceaddid = 0, $morecss = '', $htmlid = '', $morefilter = '')
-	$projectid = getDolGlobalInt('CASHDESK_ID_PROJECT'.$terminaltouse);
+	$projectid = getDolGlobalInt('FLUXPOS_ID_PROJECT'.$terminaltouse);
 	print $formproject->select_projects(-1, (string) $projectid, 'projectid', 0, 0, 1, 1, 0, 0, 0, '', 1, 1, 'maxwidth500 widthcentpercentminusxx');
 	print '</td></tr>';
 }
 
 print '<tr class="oddeven"><td>'.$langs->trans('CashDeskReaderKeyCodeForEnter').'</td>';
 print '<td>';
-print '<input type="text" class="width50" name="CASHDESK_READER_KEYCODE_FOR_ENTER'.$terminaltouse.'" value="'.getDolGlobalString('CASHDESK_READER_KEYCODE_FOR_ENTER'.$terminaltouse).'" />';
+print '<input type="text" class="width50" name="FLUXPOS_READER_KEYCODE_FOR_ENTER'.$terminaltouse.'" value="'.getDolGlobalString('FLUXPOS_READER_KEYCODE_FOR_ENTER'.$terminaltouse).'" />';
 print '</td></tr>';
 
 // Numbering module (TODO When this is used ?)
-if (getDolGlobalString('TAKEPOS_ADDON') == "terminal") {
+if (getDolGlobalString('FLUXPOS_ADDON') == "terminal") {
 	print '<tr class="oddeven"><td>';
 	print $langs->trans("BillsNumberingModule");
 	print '<td colspan="2">';
@@ -436,14 +436,14 @@ if (getDolGlobalString('TAKEPOS_ADDON') == "terminal") {
 			}
 		}
 	}
-	print $form->selectarray('TAKEPOS_ADDON'.$terminaltouse, $array, getDolGlobalString('TAKEPOS_ADDON'.$terminaltouse, '0'), 0);
+	print $form->selectarray('FLUXPOS_ADDON'.$terminaltouse, $array, getDolGlobalString('FLUXPOS_ADDON'.$terminaltouse, '0'), 0);
 	print "</td></tr>\n";
 }
 
 
-// Options when using a special printer in TakePOS
+// Options when using a special printer in FluxPos
 $customprinterallowed = true;
-$orderprinterallowed = (getDolGlobalString('TAKEPOS_BAR_RESTAURANT') && getDolGlobalInt('TAKEPOS_ORDER_PRINTERS'));
+$orderprinterallowed = (getDolGlobalString('FLUXPOS_BAR_RESTAURANT') && getDolGlobalInt('FLUXPOS_ORDER_PRINTERS'));
 $customprinttemplateallowed = true;
 include_once DOL_DOCUMENT_ROOT.'/blockedlog/lib/blockedlog.lib.php';
 if (isALNERunningVersion()) {		// No need to show the custom template when isALNERunningVersion is true because it has no effect (disabled by receipt.php).
@@ -453,7 +453,7 @@ if (isALNERunningVersion()) {		// No need to show the custom template when isALN
 
 if (isModEnabled('receiptprinter')) {
 	// Select printer to use with terminal
-	require_once DOL_DOCUMENT_ROOT.'/takepos/class/dolreceiptprinter.class.php';
+	require_once DOL_DOCUMENT_ROOT.'/fluxpos/class/dolreceiptprinter.class.php';
 	$printer = new dolReceiptPrinter($db);
 
 	$printer->listprinters();
@@ -468,29 +468,29 @@ if (isModEnabled('receiptprinter')) {
 	if (!$customprinterallowed) {	// @phpstan-ignore-line
 		print '<span class="opacitymedium">'.$form->textwithpicto($langs->trans("NotAvailable"), $langs->trans("NotAvailableForCountryWhenModuleIsOn", $mysoc->country_code, $langs->transnoentitiesnoconv('Module3200Name'))).'</span>';
 	} else {
-		print $form->selectarray('TAKEPOS_PRINTER_TO_USE'.$terminal, $printers, getDolGlobalInt('TAKEPOS_PRINTER_TO_USE'.$terminal), 1);
+		print $form->selectarray('FLUXPOS_PRINTER_TO_USE'.$terminal, $printers, getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$terminal), 1);
 	}
 	print '</td></tr>';
 
-	if (getDolGlobalString('TAKEPOS_BAR_RESTAURANT') && getDolGlobalInt('TAKEPOS_ORDER_PRINTERS') && $orderprinterallowed) {
+	if (getDolGlobalString('FLUXPOS_BAR_RESTAURANT') && getDolGlobalInt('FLUXPOS_ORDER_PRINTERS') && $orderprinterallowed) {
 		print '<tr class="oddeven"><td>'.$langs->trans("OrderPrinterToUse").' - '.$langs->trans("KitchenPrinter").' 1</td>';
 		print '<td>';
-		print $form->selectarray('TAKEPOS_ORDER_PRINTER1_TO_USE'.$terminal, $printers, getDolGlobalInt('TAKEPOS_ORDER_PRINTER1_TO_USE'.$terminal), 1);
+		print $form->selectarray('FLUXPOS_ORDER_PRINTER1_TO_USE'.$terminal, $printers, getDolGlobalInt('FLUXPOS_ORDER_PRINTER1_TO_USE'.$terminal), 1);
 		print '</td></tr>';
 		print '<tr class="oddeven"><td>'.$langs->trans("OrderPrinterToUse").' - '.$langs->trans("KitchenPrinter").' 2</td>';
 		print '<td>';
-		print $form->selectarray('TAKEPOS_ORDER_PRINTER2_TO_USE'.$terminal, $printers, getDolGlobalInt('TAKEPOS_ORDER_PRINTER2_TO_USE'.$terminal), 1);
+		print $form->selectarray('FLUXPOS_ORDER_PRINTER2_TO_USE'.$terminal, $printers, getDolGlobalInt('FLUXPOS_ORDER_PRINTER2_TO_USE'.$terminal), 1);
 		print '</td></tr>';
 		print '<tr class="oddeven"><td>'.$langs->trans("OrderPrinterToUse").' - '.$langs->trans("KitchenPrinter").' 3</td>';
 		print '<td>';
-		print $form->selectarray('TAKEPOS_ORDER_PRINTER3_TO_USE'.$terminal, $printers, getDolGlobalInt('TAKEPOS_ORDER_PRINTER3_TO_USE'.$terminal), 1);
+		print $form->selectarray('FLUXPOS_ORDER_PRINTER3_TO_USE'.$terminal, $printers, getDolGlobalInt('FLUXPOS_ORDER_PRINTER3_TO_USE'.$terminal), 1);
 		print '</td></tr>';
 	}
 }
 
-if (isModEnabled('receiptprinter') || getDolGlobalString('TAKEPOS_PRINT_METHOD') == "receiptprinter" || getDolGlobalString('TAKEPOS_PRINT_METHOD') == "takeposconnector") {
+if (isModEnabled('receiptprinter') || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "receiptprinter" || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector") {
 	// Select printer to use with terminal
-	require_once DOL_DOCUMENT_ROOT.'/takepos/class/dolreceiptprinter.class.php';
+	require_once DOL_DOCUMENT_ROOT.'/fluxpos/class/dolreceiptprinter.class.php';
 	$printer = new dolReceiptPrinter($db);
 	$printer->listPrintersTemplates();
 	$templates = array();
@@ -506,14 +506,14 @@ if (isModEnabled('receiptprinter') || getDolGlobalString('TAKEPOS_PRINT_METHOD')
 	if (!$customprinttemplateallowed) {
 		print '<span class="opacitymedium">'.$form->textwithpicto($langs->trans("NotAvailable"), $langs->trans("NotAvailableForCountryWhenModuleIsOn", $mysoc->country_code, $langs->transnoentitiesnoconv('Module3200Name'))).'</span>';
 	} else {
-		print $form->selectarray('TAKEPOS_TEMPLATE_TO_USE_FOR_INVOICES'.$terminal, $templates, getDolGlobalInt('TAKEPOS_TEMPLATE_TO_USE_FOR_INVOICES'.$terminal), 1, 0, 0, '', 0, 0, 0, '', 'minwidth150');
+		print $form->selectarray('FLUXPOS_TEMPLATE_TO_USE_FOR_INVOICES'.$terminal, $templates, getDolGlobalInt('FLUXPOS_TEMPLATE_TO_USE_FOR_INVOICES'.$terminal), 1, 0, 0, '', 0, 0, 0, '', 'minwidth150');
 	}
 	print '</td></tr>';
 
-	if (getDolGlobalInt('TAKEPOS_ORDER_PRINTERS') && $orderprinterallowed) {
+	if (getDolGlobalInt('FLUXPOS_ORDER_PRINTERS') && $orderprinterallowed) {
 		print '<tr class="oddeven"><td>'.$langs->trans("OrderTemplateToUse").'</td>';
 		print '<td>';
-		print $form->selectarray('TAKEPOS_TEMPLATE_TO_USE_FOR_ORDERS'.$terminal, $templates, getDolGlobalInt('TAKEPOS_TEMPLATE_TO_USE_FOR_ORDERS'.$terminal), 1, 0, 0, '', 0, 0, 0, '', 'minwidth150');
+		print $form->selectarray('FLUXPOS_TEMPLATE_TO_USE_FOR_ORDERS'.$terminal, $templates, getDolGlobalInt('FLUXPOS_TEMPLATE_TO_USE_FOR_ORDERS'.$terminal), 1, 0, 0, '', 0, 0, 0, '', 'minwidth150');
 		print '</td></tr>';
 	}
 }
@@ -550,7 +550,7 @@ print '<td>';
 print $form->textwithpicto($langs->trans('Header'), $htmltext, 1, 'help', '', 0, 2, 'freetexttooltip').'<br>';
 print '</td>';
 print '<td>';
-$variablename = 'TAKEPOS_HEADER'.$terminaltouse;
+$variablename = 'FLUXPOS_HEADER'.$terminaltouse;
 if (!getDolGlobalInt('PDF_ALLOW_HTML_FOR_FREE_TEXT')) {
 	print '<textarea name="'.$variablename.'" class="flat" cols="120">'.getDolGlobalString($variablename).'</textarea>';
 } else {
@@ -566,7 +566,7 @@ print '<td>';
 print $form->textwithpicto($langs->trans('Footer'), $htmltext, 1, 'help', '', 0, 2, 'freetexttooltip').'<br>';
 print '</td>';
 print '<td>';
-$variablename = 'TAKEPOS_FOOTER'.$terminaltouse;
+$variablename = 'FLUXPOS_FOOTER'.$terminaltouse;
 if (!getDolGlobalInt('PDF_ALLOW_HTML_FOR_FREE_TEXT')) {
 	print '<textarea name="'.$variablename.'" class="flat" cols="120">'.getDolGlobalString($variablename).'</textarea>';
 } else {

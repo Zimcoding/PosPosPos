@@ -23,8 +23,8 @@
  */
 
 /**
- *      \file       htdocs/takepos/admin/orderprinters.php
- *      \ingroup    takepos
+ *      \file       htdocs/fluxpos/admin/orderprinters.php
+ *      \ingroup    fluxpos
  *      \brief      Home page of category area
  */
 
@@ -42,7 +42,7 @@ require_once DOL_DOCUMENT_ROOT.'/core/lib/treeview.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/functions2.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
 
-$langs->loadLangs(array("main", "categories", "takepos", "printing"));
+$langs->loadLangs(array("main", "categories", "fluxpos", "printing"));
 
 $id = GETPOSTINT('id');
 $type = (GETPOST('type', 'aZ09') ? GETPOST('type', 'aZ09') : Categorie::TYPE_PRODUCT);
@@ -74,7 +74,7 @@ if ($action == "SavePrinter1") {
 			$printedcategories = $printedcategories.$cat.";";
 		}
 	}
-	dolibarr_set_const($db, "TAKEPOS_PRINTED_CATEGORIES_1", $printedcategories, 'chaine', 0, '', $conf->entity);
+	dolibarr_set_const($db, "FLUXPOS_PRINTED_CATEGORIES_1", $printedcategories, 'chaine', 0, '', $conf->entity);
 }
 
 if ($action == "SavePrinter2") {
@@ -84,7 +84,7 @@ if ($action == "SavePrinter2") {
 			$printedcategories = $printedcategories.$cat.";";
 		}
 	}
-	dolibarr_set_const($db, "TAKEPOS_PRINTED_CATEGORIES_2", $printedcategories, 'chaine', 0, '', $conf->entity);
+	dolibarr_set_const($db, "FLUXPOS_PRINTED_CATEGORIES_2", $printedcategories, 'chaine', 0, '', $conf->entity);
 }
 
 if ($action == "SavePrinter3") {
@@ -94,7 +94,7 @@ if ($action == "SavePrinter3") {
 			$printedcategories = $printedcategories.$cat.";";
 		}
 	}
-	dolibarr_set_const($db, "TAKEPOS_PRINTED_CATEGORIES_3", $printedcategories, 'chaine', 0, '', $conf->entity);
+	dolibarr_set_const($db, "FLUXPOS_PRINTED_CATEGORIES_3", $printedcategories, 'chaine', 0, '', $conf->entity);
 }
 
 
@@ -114,7 +114,7 @@ $arrayofjs = array(
 );
 $arrayofcss = array('/public/includes/jquery/plugins/jquerytreeview/jquery.treeview.css');
 
-llxHeader('', $title, '', '', 0, 0, $arrayofjs, $arrayofcss, '', 'mod-takepos page-admin_orderprinters');
+llxHeader('', $title, '', '', 0, 0, $arrayofjs, $arrayofcss, '', 'mod-fluxpos page-admin_orderprinters');
 
 
 print load_fiche_titre($langs->trans("OrderPrinters"));
@@ -169,7 +169,7 @@ if ($nbofentries > 0) {
 	print '<tr class="pair"><td colspan="3">';
 	print '<input type="hidden" name="action" value="SavePrinter1">';
 	foreach ($data as $row) {
-		if (strpos(getDolGlobalString('TAKEPOS_PRINTED_CATEGORIES_1'), ';'.$row["rowid"].';') !== false) {
+		if (strpos(getDolGlobalString('FLUXPOS_PRINTED_CATEGORIES_1'), ';'.$row["rowid"].';') !== false) {
 			$checked = 'checked';
 		} else {
 			$checked = '';
@@ -204,7 +204,7 @@ if ($nbofentries > 0) {
 	print '<tr class="pair"><td colspan="3">';
 	print '<input type="hidden" name="action" value="SavePrinter2">';
 	foreach ($data as $row) {
-		if (strpos(getDolGlobalString('TAKEPOS_PRINTED_CATEGORIES_2'), ';'.$row["rowid"].';') !== false) {
+		if (strpos(getDolGlobalString('FLUXPOS_PRINTED_CATEGORIES_2'), ';'.$row["rowid"].';') !== false) {
 			$checked = 'checked';
 		} else {
 			$checked = '';
@@ -239,7 +239,7 @@ if ($nbofentries > 0) {
 	print '<tr class="pair"><td colspan="3">';
 	print '<input type="hidden" name="action" value="SavePrinter3">';
 	foreach ($data as $row) {
-		if (strpos(getDolGlobalString('TAKEPOS_PRINTED_CATEGORIES_3'), ';'.$row["rowid"].';') !== false) {
+		if (strpos(getDolGlobalString('FLUXPOS_PRINTED_CATEGORIES_3'), ';'.$row["rowid"].';') !== false) {
 			$checked = 'checked';
 		} else {
 			$checked = '';

@@ -18,8 +18,8 @@
  */
 
 /**
- *	\file       htdocs/takepos/reduction.php
- *	\ingroup	takepos
+ *	\file       htdocs/fluxpos/reduction.php
+ *	\ingroup	fluxpos
  *	\brief      Page with the content of the popup to enter reductions
  */
 
@@ -56,7 +56,7 @@ $place = (GETPOST('place', 'aZ09') ? GETPOST('place', 'aZ09') : 0); // $place is
 
 $invoiceid = GETPOSTINT('invoiceid');
 
-if (!$user->hasRight('takepos', 'run')) {
+if (!$user->hasRight('fluxpos', 'run')) {
 	accessforbidden();
 }
 
@@ -70,7 +70,7 @@ if ($invoiceid > 0) {
 	$invoice->fetch($invoiceid);
 } else {
 	$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."facture";
-	$sql .= " WHERE ref = '(PROV-POS".$_SESSION["takeposterminal"]."-".$place.")'";
+	$sql .= " WHERE ref = '(PROV-POS".$_SESSION["fluxposterminal"]."-".$place.")'";
 	$sql .= " AND entity IN (".getEntity('invoice').")";
 
 	$resql = $db->query($sql);
@@ -86,14 +86,14 @@ if ($invoiceid > 0) {
 }
 
 $head = '';
-$arrayofcss = array('/takepos/css/pos.css.php');
+$arrayofcss = array('/fluxpos/css/pos.css.php');
 $arrayofjs  = array();
 
 top_htmlhead($head, '', 0, 0, $arrayofjs, $arrayofcss);
 
-$langs->loadLangs(array('main', 'bills', 'cashdesk'));
+$langs->loadLangs(array('main', 'bills', 'fluxpos@fluxpos'));
 
-if (!isset($conf->global->TAKEPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('TAKEPOS_NUMPAD_USE_PAYMENT_ICON')) {
+if (!isset($conf->global->FLUXPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString('FLUXPOS_NUMPAD_USE_PAYMENT_ICON')) {
 	$htmlReductionPercent = '<span class="fa fa-2x fa-percent"></span>';
 	$htmlReductionAmount = '<span class="fa fa-2x fa-money"></span><br>'.$langs->trans('Amount');
 } else {
@@ -238,8 +238,8 @@ if (!isset($conf->global->TAKEPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString
 <div style="position:absolute; top:2%; left:5%; width:91%;">
 <center>
 <?php
-print '<input type="text" class="takepospay width125" id="reduction_total" name="reduction_total" placeholder="'.$langs->trans('Reduction').'" autofocus>';
-if (getDolGlobalString('TAKEPOS_ADD_BUTTON_TO_ENTER_DISCOUNT_WITH_KEYBOARD')) {
+print '<input type="text" class="fluxpospay width125" id="reduction_total" name="reduction_total" placeholder="'.$langs->trans('Reduction').'" autofocus>';
+if (getDolGlobalString('FLUXPOS_ADD_BUTTON_TO_ENTER_DISCOUNT_WITH_KEYBOARD')) {
 	print '<input type="button" class="butAction" value="'.$langs->trans('AmountTTC').'" onclick="return formvalid(\'amount\');">';
 	print '<input type="button" class="butAction" value="'.$langs->trans('Percentage').'" onclick="return formvalid(\'percent\');">';
 }

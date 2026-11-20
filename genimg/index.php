@@ -51,7 +51,7 @@ $w = GETPOSTINT('w');
 $h = GETPOSTINT('h');
 $query = GETPOST('query', 'alpha');
 
-if (!isModEnabled('takepos')) {
+if (!isModEnabled('fluxpos')) {
 	accessforbidden('Module not enabled');
 }
 
@@ -77,7 +77,7 @@ if ($query == "cat") {
 		} else {
 			$filename = $obj['photo'];
 		}
-		$file = DOL_URL_ROOT.'/viewimage.php?cache=1&publictakepos=1&modulepart=category&entity='.$object->entity.'&file='.urlencode($pdir.$filename);
+		$file = DOL_URL_ROOT.'/viewimage.php?cache=1&publicfluxpos=1&modulepart=category&entity='.$object->entity.'&file='.urlencode($pdir.$filename);
 		header('Location: '.$file);
 		exit;
 	}
@@ -101,7 +101,7 @@ if ($query == "cat") {
 			header('Location: '.$file.'&cache=1');
 			exit;
 		} else {
-			header('Location: '.$file.'&cache=1&publictakepos=1&modulepart=product');
+			header('Location: '.$file.'&cache=1&publicfluxpos=1&modulepart=product');
 			exit;
 		}
 	}

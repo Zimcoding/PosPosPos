@@ -20,9 +20,9 @@
  */
 
 /**
- *    \file       htdocs/takepos/index.php
- *    \ingroup    takepos
- *    \brief      Main TakePOS screen
+ *    \file       htdocs/fluxpos/index.php
+ *    \ingroup    fluxpos
+ *    \brief      Main FluxPos screen
  */
 
 // if (! defined('NOREQUIREUSER')) 		define('NOREQUIREUSER','1'); 		// Not disabled cause need to load personalized language
@@ -59,30 +59,30 @@ require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
 require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
 
 
-$langs->loadLangs(array("bills", "orders", "commercial", "cashdesk", "receiptprinter", "banks"));
+$langs->loadLangs(array("bills", "orders", "commercial", "fluxpos@fluxpos", "receiptprinter", "banks"));
 
 $place = (GETPOST('place', 'aZ09') ? GETPOST('place', 'aZ09') : 0); // $place is id of table for Bar or Restaurant or multiple sales
 $action = GETPOST('action', 'aZ09');
 $setterminal = GETPOSTINT('setterminal');
 $setcurrency = GETPOST('setcurrency', 'aZ09');
 
-$hookmanager->initHooks(array('takeposfrontend'));
-if (empty($_SESSION["takeposterminal"])) {
-	if (getDolGlobalInt('TAKEPOS_NUM_TERMINALS') == 1) {
-		$_SESSION["takeposterminal"] = 1; // Use terminal 1 if there is only 1 terminal
-	} elseif (!empty($_COOKIE["takeposterminal"])) {
-		$_SESSION["takeposterminal"] = preg_replace('/[^a-zA-Z0-9_\-]/', '', $_COOKIE["takeposterminal"]); // Restore takeposterminal from previous session
+$hookmanager->initHooks(array('fluxposfrontend'));
+if (empty($_SESSION["fluxposterminal"])) {
+	if (getDolGlobalInt('FLUXPOS_NUM_TERMINALS') == 1) {
+		$_SESSION["fluxposterminal"] = 1; // Use terminal 1 if there is only 1 terminal
+	} elseif (!empty($_COOKIE["fluxposterminal"])) {
+		$_SESSION["fluxposterminal"] = preg_replace('/[^a-zA-Z0-9_\-]/', '', $_COOKIE["fluxposterminal"]); // Restore fluxposterminal from previous session
 	}
 }
 
 if ($setterminal > 0) {
-	$_SESSION["takeposterminal"] = (int) $setterminal;
-	dolSetCookie("takeposterminal", (string) $setterminal, -1); // takeposterminal var in a 1 year cookie
+	$_SESSION["fluxposterminal"] = (int) $setterminal;
+	dolSetCookie("fluxposterminal", (string) $setterminal, -1); // fluxposterminal var in a 1 year cookie
 }
 
 if ($setcurrency != "") {
-	$_SESSION["takeposcustomercurrency"] = $setcurrency;
-	// We will recalculate amount for foreign currency at next call of invoice.php when $_SESSION["takeposcustomercurrency"] differs from invoice->multicurrency_code.
+	$_SESSION["fluxposcustomercurrency"] = $setcurrency;
+	// We will recalculate amount for foreign currency at next call of invoice.php when $_SESSION["fluxposcustomercurrency"] differs from invoice->multicurrency_code.
 }
 
 
@@ -91,23 +91,23 @@ $categorie = new Categorie($db);
 $maxcategbydefaultforthisdevice = 12;
 $maxproductbydefaultforthisdevice = 24;
 
-$MAXCATEG = getDolGlobalInt('TAKEPOS_NB_MAXCATEG', $maxcategbydefaultforthisdevice);
-$MAXPRODUCT = getDolGlobalInt('TAKEPOS_NB_MAXPRODUCT', $maxproductbydefaultforthisdevice);
+$MAXCATEG = getDolGlobalInt('FLUXPOS_NB_MAXCATEG', $maxcategbydefaultforthisdevice);
+$MAXPRODUCT = getDolGlobalInt('FLUXPOS_NB_MAXPRODUCT', $maxproductbydefaultforthisdevice);
 
-$term = empty($_SESSION['takeposterminal']) ? 1 : $_SESSION['takeposterminal'];
+$term = empty($_SESSION['fluxposterminal']) ? 1 : $_SESSION['fluxposterminal'];
 
-$socid = getDolGlobalInt('CASHDESK_ID_THIRDPARTY' . $term);
+$socid = getDolGlobalInt('FLUXPOS_ID_THIRDPARTY' . $term);
 
 
 /*
- $constforcompanyid = 'CASHDESK_ID_THIRDPARTY'.$_SESSION["takeposterminal"];
+ $constforcompanyid = 'FLUXPOS_ID_THIRDPARTY'.$_SESSION["fluxposterminal"];
  $soc = new Societe($db);
  if ($invoice->socid > 0) $soc->fetch($invoice->socid);
  else $soc->fetch(getDolGlobalInt($constforcompanyid));
  */
 
 // Security check
-$result = restrictedArea($user, 'takepos', 0, '');
+$result = restrictedArea($user, 'fluxpos', 0, '');
 
 
 
@@ -119,20 +119,20 @@ $form = new Form($db);
 
 $disablejs = 0;
 $disablehead = 0;
-$arrayofjs = array('/takepos/js/jquery.colorbox-min.js', '/takepos/js/offline.js'); // TODO It seems we don't need colorbox
-$arrayofcss = array('/takepos/css/pos.css.php', '/takepos/css/colorbox.css');
+$arrayofjs = array('/fluxpos/js/jquery.colorbox-min.js', '/fluxpos/js/offline.js'); // TODO It seems we don't need colorbox
+$arrayofcss = array('/fluxpos/css/pos.css.php', '/fluxpos/css/colorbox.css');
 
-if (getDolGlobalInt('TAKEPOS_COLOR_THEME') == 1) {
-	$arrayofcss[] =  '/takepos/css/colorful.css';
+if (getDolGlobalInt('FLUXPOS_COLOR_THEME') == 1) {
+	$arrayofcss[] =  '/fluxpos/css/colorful.css';
 }
 
 
 // Title
-$title = 'TakePOS - Dolibarr '.DOL_VERSION;
+$title = 'FluxPos - Dolibarr '.DOL_VERSION;
 if (getDolGlobalString('MAIN_APPLICATION_TITLE')) {
-	$title = 'TakePOS - ' . getDolGlobalString('MAIN_APPLICATION_TITLE');
+	$title = 'FluxPos - ' . getDolGlobalString('MAIN_APPLICATION_TITLE');
 }
-$head = '<meta name="apple-mobile-web-app-title" content="TakePOS"/>
+$head = '<meta name="apple-mobile-web-app-title" content="FluxPos"/>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>';
@@ -140,16 +140,16 @@ $head = '<meta name="apple-mobile-web-app-title" content="TakePOS"/>
 top_htmlhead($head, $title, $disablejs, $disablehead, $arrayofjs, $arrayofcss);
 
 
-$categories = $categorie->get_full_arbo('product', getDolGlobalInt('TAKEPOS_ROOT_CATEGORY_ID'), 1);
+$categories = $categorie->get_full_arbo('product', getDolGlobalInt('FLUXPOS_ROOT_CATEGORY_ID'), 1);
 
 
 // Search root category to know its level
-//$conf->global->TAKEPOS_ROOT_CATEGORY_ID=0;
+//$conf->global->FLUXPOS_ROOT_CATEGORY_ID=0;
 $levelofrootcategory = 0;
-if (getDolGlobalInt('TAKEPOS_ROOT_CATEGORY_ID') > 0) {
+if (getDolGlobalInt('FLUXPOS_ROOT_CATEGORY_ID') > 0) {
 	foreach ($categories as $key => $categorycursor) {
 		// @phan-suppress-next-line PhanTypeInvalidDimOffset
-		if ($categorycursor['id'] == getDolGlobalInt('TAKEPOS_ROOT_CATEGORY_ID')) {
+		if ($categorycursor['id'] == getDolGlobalInt('FLUXPOS_ROOT_CATEGORY_ID')) {
 			$levelofrootcategory = $categorycursor['level'];
 			break;
 		}
@@ -173,13 +173,13 @@ $subcategories = dol_sort_array($subcategories, 'label');
 ?>
 <?php
 $keyCodeForEnter = '';
-if (!empty($_SESSION['takeposterminal'])) {
-	$keyCodeForEnter = getDolGlobalInt('CASHDESK_READER_KEYCODE_FOR_ENTER'.$_SESSION['takeposterminal']) > 0 ? getDolGlobalString('CASHDESK_READER_KEYCODE_FOR_ENTER'.$_SESSION['takeposterminal']) : '';
+if (!empty($_SESSION['fluxposterminal'])) {
+	$keyCodeForEnter = getDolGlobalInt('FLUXPOS_READER_KEYCODE_FOR_ENTER'.$_SESSION['fluxposterminal']) > 0 ? getDolGlobalString('FLUXPOS_READER_KEYCODE_FOR_ENTER'.$_SESSION['fluxposterminal']) : '';
 }
 ?>
 
-<body class="bodytakepos" style="overflow: hidden;">
-<div id="takeposofflinestatus" class="takeposofflinestatus"></div>
+<body class="bodyfluxpos" style="overflow: hidden;">
+<div id="fluxposofflinestatus" class="fluxposofflinestatus"></div>
 
 <script>
 var categories = <?php echo json_encode($maincategories); ?>;
@@ -191,10 +191,10 @@ var currentsubcategories=[];	// Subcategories of currentcat, shown before its pr
 var pagecategories=0;
 var pageactions=0;
 var place="<?php echo $place; ?>";
-var takeposbaseuri = '<?php echo DOL_URL_ROOT ?>/takepos/';
-var takeposnewtoken = '<?php echo newToken(); ?>';
-var takeposcurrency = '<?php echo $conf->currency; ?>';
-var takeposlang = {
+var fluxposbaseuri = '<?php echo DOL_URL_ROOT ?>/fluxpos/';
+var fluxposnewtoken = '<?php echo newToken(); ?>';
+var fluxposcurrency = '<?php echo $conf->currency; ?>';
+var fluxposlang = {
 	Qty: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("Qty")); ?>',
 	TotalTTCShort: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("TotalTTCShort")); ?>',
 	TotalTTC: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("TotalTTC")); ?>',
@@ -263,7 +263,7 @@ function PrintCategories(first) {
 		}
 		$("#catdivdesc"+i).show();
 		<?php
-		if (getDolGlobalString('TAKEPOS_SHOW_CATEGORY_DESCRIPTION') == 1) { ?>
+		if (getDolGlobalString('FLUXPOS_SHOW_CATEGORY_DESCRIPTION') == 1) { ?>
 			$("#catdesc"+i).html(categories[parseInt(i)+parseInt(first)]['label'].bold() + ' - ' + categories[parseInt(i)+parseInt(first)]['description']);
 		<?php } else { ?>
 			$("#catdesc"+i).text(categories[parseInt(i)+parseInt(first)]['label']);
@@ -304,7 +304,7 @@ function MoreCategories(moreorless) {
 		}
 		$("#catdivdesc"+i).show();
 		<?php
-		if (getDolGlobalString('TAKEPOS_SHOW_CATEGORY_DESCRIPTION') == 1) { ?>
+		if (getDolGlobalString('FLUXPOS_SHOW_CATEGORY_DESCRIPTION') == 1) { ?>
 			$("#catdesc"+i).html(categories[i+(<?php echo($MAXCATEG - 2); ?> * pagecategories)]['label'].bold() + ' - ' + categories[i+(<?php echo($MAXCATEG - 2); ?> * pagecategories)]['description']);
 		<?php } else { ?>
 			$("#catdesc"+i).text(categories[i+(<?php echo($MAXCATEG - 2); ?> * pagecategories)]['label']);
@@ -320,7 +320,7 @@ function MoreCategories(moreorless) {
 // Show a subcategory into the tile ishow of the product grid
 function PrintSubCategory(ishow, val) {
 	$("#prodivdesc"+ishow).show();
-	<?php if (getDolGlobalString('TAKEPOS_SHOW_CATEGORY_DESCRIPTION') == 1) { ?>
+	<?php if (getDolGlobalString('FLUXPOS_SHOW_CATEGORY_DESCRIPTION') == 1) { ?>
 		$("#prodesc"+ishow).html(val.label.bold() + ' - ' + val.description);
 	   $("#probutton"+ishow).html(val.label);
 	<?php } else { ?>
@@ -398,7 +398,7 @@ function LoadProducts(position, issubcat) {
 	}
 
 	// Only show products for sale (tosell=1)
-	$.getJSON('<?php echo DOL_URL_ROOT ?>/takepos/ajax/ajax.php?action=getProducts&token=<?php echo currentToken();?>&thirdpartyid=' + socid + '&category='+currentcat+'&tosell=1&limit='+limit+'&offset=0', function(data) {
+	$.getJSON('<?php echo DOL_URL_ROOT ?>/fluxpos/ajax/ajax.php?action=getProducts&token=<?php echo currentToken();?>&thirdpartyid=' + socid + '&category='+currentcat+'&tosell=1&limit='+limit+'&offset=0', function(data) {
 		console.log("Call ajax.php (in LoadProducts) to get Products of category "+currentcat+" then loop on result to fill image thumbs");
 		console.log("Found "+data.length+" record");
 
@@ -412,7 +412,7 @@ function LoadProducts(position, issubcat) {
 		if (navigator.onLine) {
 			return;
 		}
-		TakePOSOffline.getCategoryProducts(currentcat, socid).then(function(data) {
+		FluxPosOffline.getCategoryProducts(currentcat, socid).then(function(data) {
 			if (data !== null) {
 				FillProductsGrid(data);
 			}
@@ -431,7 +431,7 @@ function FillProductsGrid(data) {
 			console.log(data[idata]);
 
 			if (typeof (data[idata]) == "undefined") {
-				<?php if (!getDolGlobalString('TAKEPOS_HIDE_PRODUCT_IMAGES')) {
+				<?php if (!getDolGlobalString('FLUXPOS_HIDE_PRODUCT_IMAGES')) {
 					echo '$("#prodivdesc"+ishow).hide();';
 					echo '$("#prodesc"+ishow).text("");';
 					echo '$("#proimg"+ishow).attr("title","");';
@@ -456,11 +456,11 @@ function FillProductsGrid(data) {
 				$titlestring .= " + ' - ".dol_escape_js($langs->trans("Barcode").': ')."' + data[idata]['barcode']";
 				?>
 				var titlestring = <?php echo $titlestring; ?>;
-				<?php if (!getDolGlobalString('TAKEPOS_HIDE_PRODUCT_IMAGES')) {
+				<?php if (!getDolGlobalString('FLUXPOS_HIDE_PRODUCT_IMAGES')) {
 					echo '$("#prodivdesc"+ishow).show();';
-					if (getDolGlobalInt('TAKEPOS_SHOW_PRODUCT_REFERENCE') == 1) {
+					if (getDolGlobalInt('FLUXPOS_SHOW_PRODUCT_REFERENCE') == 1) {
 						echo '$("#prodesc"+ishow).html(data[parseInt(idata)][\'ref\'].bold() + \' - \' + data[parseInt(idata)][\'label\']);';
-					} elseif (getDolGlobalInt('TAKEPOS_SHOW_PRODUCT_REFERENCE') == 2) {
+					} elseif (getDolGlobalInt('FLUXPOS_SHOW_PRODUCT_REFERENCE') == 2) {
 						echo '$("#prodesc"+ishow).html(data[parseInt(idata)][\'ref\'].bold());';
 					} else {
 						echo '$("#prodesc"+ishow).html(data[parseInt(idata)][\'label\']);';
@@ -475,7 +475,7 @@ function FillProductsGrid(data) {
 				if (data[parseInt(idata)]['price_formated']) {
 					$("#proprice" + ishow).attr("class", "productprice");
 					<?php
-					if (getDolGlobalInt('TAKEPOS_CHANGE_PRICE_HT')) {
+					if (getDolGlobalInt('FLUXPOS_CHANGE_PRICE_HT')) {
 						?>
 						$("#proprice" + ishow).html(data[parseInt(idata)]['price_formated']);
 						<?php
@@ -550,7 +550,7 @@ function MoreProducts(moreorless) {
 	}
 
 	// Only show products for sale (tosell=1)
-	$.getJSON('<?php echo DOL_URL_ROOT ?>/takepos/ajax/ajax.php?action=getProducts&token=<?php echo currentToken();?>&thirdpartyid=' + socid + '&category='+currentcat+'&tosell=1&limit='+limit+'&offset='+offset, function(data) {
+	$.getJSON('<?php echo DOL_URL_ROOT ?>/fluxpos/ajax/ajax.php?action=getProducts&token=<?php echo currentToken();?>&thirdpartyid=' + socid + '&category='+currentcat+'&tosell=1&limit='+limit+'&offset='+offset, function(data) {
 		console.log("Call ajax.php (in MoreProducts) to get Products of category "+currentcat);
 
 		if (typeof (data[0]) == "undefined" && first >= currentsubcategories.length && moreorless=="more"){ // Return if no more pages
@@ -578,9 +578,9 @@ function MoreProducts(moreorless) {
 				$("#prodiv"+ishow).attr("data-iscat",0);
 			} else {
 				$("#prodivdesc"+ishow).show();
-				<?php if (getDolGlobalInt('TAKEPOS_SHOW_PRODUCT_REFERENCE') == 1) { ?>
+				<?php if (getDolGlobalInt('FLUXPOS_SHOW_PRODUCT_REFERENCE') == 1) { ?>
 					$("#prodesc"+ishow).html(data[parseInt(idata)]['ref'].bold() + ' - ' + data[parseInt(idata)]['label']);
-				<?php } elseif (getDolGlobalInt('TAKEPOS_SHOW_PRODUCT_REFERENCE') == 2) { ?>
+				<?php } elseif (getDolGlobalInt('FLUXPOS_SHOW_PRODUCT_REFERENCE') == 2) { ?>
 					$("#prodesc"+ishow).html(data[parseInt(idata)]['ref'].bold());
 				<?php } else { ?>
 					$("#prodesc"+ishow).html(data[parseInt(idata)]['label']);
@@ -590,7 +590,7 @@ function MoreProducts(moreorless) {
 				if (data[parseInt(idata)]['price_formated']) {
 					$("#proprice" + ishow).attr("class", "productprice");
 					<?php
-					if (getDolGlobalInt('TAKEPOS_CHANGE_PRICE_HT')) {
+					if (getDolGlobalInt('FLUXPOS_CHANGE_PRICE_HT')) {
 						?>
 						$("#proprice" + ishow).html(data[parseInt(idata)]['price_formated']);
 						<?php
@@ -616,7 +616,7 @@ function MoreProducts(moreorless) {
 		if (navigator.onLine) {
 			return;
 		}
-		TakePOSOffline.getCategoryProducts(currentcat, socid).then(function(products) {
+		FluxPosOffline.getCategoryProducts(currentcat, socid).then(function(products) {
 			if (products === null) {
 				return;
 			}
@@ -660,7 +660,7 @@ function ClickProduct(position, qty = 1, qty_std = 0) {
 		// will be synchronized to the server in background). Only an order with no
 		// invoice created yet on the server can be captured while offline.
 		if (!navigator.onLine && ($('#invoiceid').val() || '') == '') {
-			TakePOSOffline.addProduct(idproduct, qty);
+			FluxPosOffline.addProduct(idproduct, qty);
 			ClearSearch(false);
 			return;
 		}
@@ -669,14 +669,14 @@ function ClickProduct(position, qty = 1, qty_std = 0) {
 			// Call page invoice.php to generate the section with product lines
 			  $("#poslines").load("invoice.php?action=addline&token=<?php echo currentToken(); ?>&place="+place+"&idproduct="+idproduct+"&selectedline="+selectedline+"&qty="+qty+"&invoiceid="+invoiceid+(qty_std_inner ? '&qty_std=1' : ''), function() {
 				idproduct = "";
-				<?php if (getDolGlobalString('TAKEPOS_CUSTOMER_DISPLAY')) {
+				<?php if (getDolGlobalString('FLUXPOS_CUSTOMER_DISPLAY')) {
 					echo "CustomerDisplay();";
 				}?>
 			});
 		};
 
 		// call WeighingScale() if product is a product that need to measure weight
-		<?php if (getDolGlobalString('TAKEPOS_WEIGHING_SCALE')) { ?>
+		<?php if (getDolGlobalString('FLUXPOS_WEIGHING_SCALE')) { ?>
 			if ($('#prodiv'+position).data('unit') == 2) {
 				WeighingScale(addInvoiceLine);
 			} else {
@@ -721,7 +721,7 @@ function Contact() {
 function History()
 {
 	console.log("Open box to select the history");
-	$.colorbox({href:"../compta/facture/list.php?contextpage=poslist&search_module_source=takepos", width:"90%", height:"80%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("History"); ?>"});
+	$.colorbox({href:"../compta/facture/list.php?contextpage=poslist&search_module_source=takepos%7Cfluxpos", width:"90%", height:"80%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("History"); ?>"});
 }
 
 function Reduction() {
@@ -735,7 +735,7 @@ function CloseBill() {
 	<?php
 	$parameters = array();
 	$reshook = $hookmanager->executeHooks('paramsForCloseBill', $parameters, $obj, $action);
-	if (getDolGlobalString('TAKEPOS_FORBID_SALES_TO_DEFAULT_CUSTOMER')) {
+	if (getDolGlobalString('FLUXPOS_FORBID_SALES_TO_DEFAULT_CUSTOMER')) {
 		echo "customerAnchorTag = document.querySelector('a[id=\"customer\"]'); ";
 		echo "if (customerAnchorTag && customerAnchorTag.innerText.trim() === '".dol_escape_js($langs->transnoentitiesnoconv("Customer"))."') { ";
 		echo "alert('".dol_escape_js($langs->transnoentitiesnoconv("NoClientErrorMessage"))."'); ";
@@ -755,10 +755,10 @@ function CloseBill() {
 	}
 
 	console.log("Open popup to enter payment on invoiceid="+invoiceid);
-	<?php if (getDolGlobalInt("TAKEPOS_NO_GENERIC_THIRDPARTY")) { ?>
+	<?php if (getDolGlobalInt("FLUXPOS_NO_GENERIC_THIRDPARTY")) { ?>
 		if ($("#idcustomer").val() == "") {
-			alert("<?php echo dol_escape_js($langs->transnoentitiesnoconv('TakePosCustomerMandatory'), 2); ?>");
-			<?php if (getDolGlobalString('TAKEPOS_CHOOSE_CONTACT')) { ?>
+			alert("<?php echo dol_escape_js($langs->transnoentitiesnoconv('FluxPosCustomerMandatory'), 2); ?>");
+			<?php if (getDolGlobalString('FLUXPOS_CHOOSE_CONTACT')) { ?>
 				Contact();
 			<?php } else { ?>
 				Customer();
@@ -767,7 +767,7 @@ function CloseBill() {
 		}
 	<?php }	?>
 	<?php
-	$alternative_payurl = getDolGlobalString('TAKEPOS_ALTERNATIVE_PAYMENT_SCREEN');
+	$alternative_payurl = getDolGlobalString('FLUXPOS_ALTERNATIVE_PAYMENT_SCREEN');
 	if (empty($alternative_payurl)) {
 		$payurl = "pay.php";
 	} else {
@@ -794,7 +794,7 @@ function FreeZone() {
 	$.colorbox({href:"freezone.php?action=freezone&token=<?php echo newToken(); ?>&place="+place+"&invoiceid="+invoiceid, width:"80%", height:"40%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("FreeZone"); ?>"});
 }
 
-function TakeposOrderNotes() {
+function FluxPosOrderNotes() {
 	console.log("Open box to order notes");
 	ModalBox('ModalNote');
 	$("#textinput").focus();
@@ -806,7 +806,7 @@ function Refresh() {
 		// An order already registered on the server cannot be displayed until the
 		// connection is back.
 		console.log("Refresh offline with the local cart of place="+place);
-		TakePOSOffline.renderCart();
+		FluxPosOffline.renderCart();
 		return;
 	}
 	console.log("Refresh by reloading place="+place+" invoiceid="+invoiceid);
@@ -816,18 +816,18 @@ function Refresh() {
 }
 
 function New() {
-	// If we go here,it means $conf->global->TAKEPOS_BAR_RESTAURANT is not defined
+	// If we go here,it means $conf->global->FLUXPOS_BAR_RESTAURANT is not defined
 	invoiceid = $("#invoiceid").val();		// This is a hidden field added by invoice.php
 
 	if (!navigator.onLine) {
 		if ($('#offlinecart').val() == '1' && ($('#invoiceid').val() || '') == '') {
-			TakePOSOffline.getCart().then(function (cart) {
+			FluxPosOffline.getCart().then(function (cart) {
 				if (cart && cart.validated) {
 					window.alert('This sale has been validated on this terminal and is waiting for its synchronization to the server. It cannot be discarded anymore.');
 					return;
 				}
 				// Discard the local cart of the place (nothing was sent to the server yet)
-				TakePOSOffline.clearCart();
+				FluxPosOffline.clearCart();
 			});
 		} else {
 			window.alert('An order already registered on the server cannot be deleted while the terminal is offline.');
@@ -848,7 +848,7 @@ function New() {
 		return;
 	}
 
-	$.getJSON('<?php echo DOL_URL_ROOT ?>/takepos/ajax/ajax.php?action=getInvoice&token=<?php echo currentToken();?>&id='+invoiceid, function(data) {
+	$.getJSON('<?php echo DOL_URL_ROOT ?>/fluxpos/ajax/ajax.php?action=getInvoice&token=<?php echo currentToken();?>&id='+invoiceid, function(data) {
 		var r;
 
 		if (parseInt(data['paye']) === 1) {
@@ -935,14 +935,14 @@ function Search2(keyCodeForEnter, moreorless) {
 				socid = parseInt("<?php echo dol_escape_js($socid); ?>");
 			}
 
-			$.getJSON('<?php echo DOL_URL_ROOT ?>/takepos/ajax/ajax.php?action=search&token=<?php echo currentToken();?>&search_term=' + search_term + '&thirdpartyid=' + socid + '&search_start=' + search_start + '&search_limit=' + search_limit, function (data) {
+			$.getJSON('<?php echo DOL_URL_ROOT ?>/fluxpos/ajax/ajax.php?action=search&token=<?php echo currentToken();?>&search_term=' + search_term + '&thirdpartyid=' + socid + '&search_start=' + search_start + '&search_limit=' + search_limit, function (data) {
 				nbsearchresults = FillSearchResults(data);
 			}).fail(function () {
 				// Offline fallback: search into the catalog cached into IndexedDB
 				if (navigator.onLine) {
 					return;
 				}
-				TakePOSOffline.searchProducts(search_term, socid, search_limit).then(function (cacheddata) {
+				FluxPosOffline.searchProducts(search_term, socid, search_limit).then(function (cacheddata) {
 					nbsearchresults = FillSearchResults(cacheddata);
 					searchAlways(cacheddata);
 				});
@@ -1023,9 +1023,9 @@ function FillSearchResults(data) {
 		$titlestring .= " + ' - ".dol_escape_js($langs->trans("Barcode").': ')."' + data[i]['barcode']";
 		?>
 		var titlestring = <?php echo $titlestring; ?>;
-		<?php if (getDolGlobalInt('TAKEPOS_SHOW_PRODUCT_REFERENCE') == 1) { ?>
+		<?php if (getDolGlobalInt('FLUXPOS_SHOW_PRODUCT_REFERENCE') == 1) { ?>
 			$("#prodesc" + i).html(data[i]['ref'].bold() + ' - ' + data[i]['label']);
-		<?php } elseif (getDolGlobalInt('TAKEPOS_SHOW_PRODUCT_REFERENCE') == 2) { ?>
+		<?php } elseif (getDolGlobalInt('FLUXPOS_SHOW_PRODUCT_REFERENCE') == 2) { ?>
 			$("#prodesc" + i).html(data[i]['ref'].bold());
 		<?php } else { ?>
 			$("#prodesc" + i).html(data[i]['label']);
@@ -1036,7 +1036,7 @@ function FillSearchResults(data) {
 		if (data[i]['price_formated']) {
 			$("#proprice" + i).attr("class", "productprice");
 			<?php
-			if (getDolGlobalInt('TAKEPOS_CHANGE_PRICE_HT')) {
+			if (getDolGlobalInt('FLUXPOS_CHANGE_PRICE_HT')) {
 				?>
 				$("#proprice" + i).html(data[i]['price_formated']);
 				<?php
@@ -1158,30 +1158,30 @@ function Edit(number) {
 }
 
 
-function TakeposPrintingOrder(){
-	console.log("TakeposPrintingOrder output invoice to print order");
+function FluxPosPrintingOrder(){
+	console.log("FluxPosPrintingOrder output invoice to print order");
 	$("#poslines").load("invoice.php?action=order&token=<?php echo currentToken();?>&place="+place, function() {
 		//$('#poslines').scrollTop($('#poslines')[0].scrollHeight);
 	});
 }
 
-function TakeposPrintingTemp(){
-	console.log("TakeposPrintingTemp");
+function FluxPosPrintingTemp(){
+	console.log("FluxPosPrintingTemp");
 	$("#poslines").load("invoice.php?action=temp&token=<?php echo currentToken();?>&place="+place, function() {
 		//$('#poslines').scrollTop($('#poslines')[0].scrollHeight);
 	});
 }
 
 function OpenDrawer(){
-	console.log("OpenDrawer call ajax url http://<?php print getDolGlobalString('TAKEPOS_PRINT_SERVER'); ?>:8111/print");
+	console.log("OpenDrawer call ajax url http://<?php print getDolGlobalString('FLUXPOS_PRINT_SERVER'); ?>:8111/print");
 	$.ajax({
 		type: "POST",
 		data: { token: 'notrequired' },
 		<?php
-		if (getDolGlobalString('TAKEPOS_PRINT_SERVER') && filter_var($conf->global->TAKEPOS_PRINT_SERVER, FILTER_VALIDATE_URL) == true) {
-			echo "url: '".getDolGlobalString('TAKEPOS_PRINT_SERVER', 'localhost')."/printer/drawer.php',";
+		if (getDolGlobalString('FLUXPOS_PRINT_SERVER') && filter_var($conf->global->FLUXPOS_PRINT_SERVER, FILTER_VALIDATE_URL) == true) {
+			echo "url: '".getDolGlobalString('FLUXPOS_PRINT_SERVER', 'localhost')."/printer/drawer.php',";
 		} else {
-			echo "url: 'http://".getDolGlobalString('TAKEPOS_PRINT_SERVER', 'localhost').":8111/print',";
+			echo "url: 'http://".getDolGlobalString('FLUXPOS_PRINT_SERVER', 'localhost').":8111/print',";
 		}
 		?>
 		data: "opendrawer"
@@ -1190,11 +1190,11 @@ function OpenDrawer(){
 
 /* Click on button to open drawer */
 function DolibarrOpenDrawer() {
-	console.log("DolibarrOpenDrawer call ajax url /takepos/ajax/ajax.php?action=opendrawer&token=<?php echo currentToken();?>&term=<?php print urlencode(empty($_SESSION["takeposterminal"]) ? '' : $_SESSION["takeposterminal"]); ?>");
+	console.log("DolibarrOpenDrawer call ajax url /fluxpos/ajax/ajax.php?action=opendrawer&token=<?php echo currentToken();?>&term=<?php print urlencode(empty($_SESSION["fluxposterminal"]) ? '' : $_SESSION["fluxposterminal"]); ?>");
 	$.ajax({
 		type: "GET",
 		data: { token: '<?php echo currentToken(); ?>' },
-		url: "<?php print DOL_URL_ROOT.'/takepos/ajax/ajax.php?action=opendrawer&token='.currentToken().'&term='.urlencode(empty($_SESSION["takeposterminal"]) ? '' : $_SESSION["takeposterminal"]); ?>",
+		url: "<?php print DOL_URL_ROOT.'/fluxpos/ajax/ajax.php?action=opendrawer&token='.currentToken().'&term='.urlencode(empty($_SESSION["fluxposterminal"]) ? '' : $_SESSION["fluxposterminal"]); ?>",
 	});
 }
 
@@ -1208,21 +1208,21 @@ function MoreActions(totalactions) {
 
 function ControlCashOpening()
 {
-	$.colorbox({href:"../compta/cashcontrol/cashcontrol_card.php?action=create&contextpage=takepos", width:"90%", height:"60%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("NewCashFence"); ?>"});
+	$.colorbox({href:"../compta/cashcontrol/cashcontrol_card.php?action=create&contextpage=fluxpos", width:"90%", height:"60%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("NewCashFence"); ?>"});
 }
 
 function CloseCashFence(rowid)
 {
-	$.colorbox({href:"../compta/cashcontrol/cashcontrol_card.php?id="+rowid+"&contextpage=takepos", width:"90%", height:"90%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("NewCashFence"); ?>"});
+	$.colorbox({href:"../compta/cashcontrol/cashcontrol_card.php?id="+rowid+"&contextpage=fluxpos", width:"90%", height:"90%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("NewCashFence"); ?>"});
 }
 
 function CashReport(rowid)
 {
-	$.colorbox({href:"../compta/cashcontrol/report.php?id="+rowid+"&contextpage=takepos", width:"60%", height:"90%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("CashReport"); ?>"});
+	$.colorbox({href:"../compta/cashcontrol/report.php?id="+rowid+"&contextpage=fluxpos", width:"60%", height:"90%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("CashReport"); ?>"});
 }
 
 /*
- * TakePOS Popup
+ * FluxPos Popup
  * Open the <div id='ModalID'>in a popup. Example with ModalID='ModalCreditNote'
  */
 function ModalBox(ModalID)
@@ -1236,7 +1236,7 @@ function DirectPayment(){
 		if ($('#offlinecart').val() == '1' && ($('#invoiceid').val() || '') == '') {
 			// Offline: pay the full sale in cash, the payment and the invoice number
 			// will be registered at the synchronization (same as amount=0 online)
-			TakePOSOffline.validateCart([{ pay: 'LIQ', amount: 0, excess: 0 }]);
+			FluxPosOffline.validateCart([{ pay: 'LIQ', amount: 0, excess: 0 }]);
 		} else {
 			window.alert('Payment of an order already registered on the server requires the connection.');
 		}
@@ -1250,17 +1250,17 @@ function DirectPayment(){
 
 function OpenOfflinePay() {
 	console.log("Open the offline payment dialog for place="+place);
-	if (typeof TakePOSOffline == "undefined") {
+	if (typeof FluxPosOffline == "undefined") {
 		return;
 	}
-	TakePOSOffline.getCart().then(function (cart) {
+	FluxPosOffline.getCart().then(function (cart) {
 		var total = 0;
 		if (cart && cart.lines) {
 			for (var i = 0; i < cart.lines.length; i++) {
 				total += cart.lines[i].price_ttc * cart.lines[i].qty;
 			}
 		}
-		jQuery("#offlinepaytotal").text(TakePOSOffline.t('TotalTTC', 'Total TTC') + " : " + TakePOSOffline.formatAmount(total));
+		jQuery("#offlinepaytotal").text(FluxPosOffline.t('TotalTTC', 'Total TTC') + " : " + FluxPosOffline.formatAmount(total));
 		jQuery("#offlinepayreturned").text("");
 		jQuery("#offlinepayamountLIQ, #offlinepayamountCB, #offlinepayamountCHQ").val("");
 	});
@@ -1286,7 +1286,7 @@ function ValidateOfflinePay() {
 		return;
 	}
 	// Change given on a cash payment (money received instead of the exact total), same rule as pay.php
-	TakePOSOffline.getCart().then(function (cart) {
+	FluxPosOffline.getCart().then(function (cart) {
 		var total = 0;
 		if (cart && cart.lines) {
 			for (i = 0; i < cart.lines.length; i++) {
@@ -1297,7 +1297,7 @@ function ValidateOfflinePay() {
 			payments[0].excess = Math.round((payments[0].amount - total) * 100) / 100;
 		}
 		document.getElementById('ModalOfflinePay').style.display = 'none';
-		TakePOSOffline.validateCart(payments);
+		FluxPosOffline.validateCart(payments);
 	});
 }
 
@@ -1307,12 +1307,12 @@ function FullScreen() {
 
 function WeighingScale(callback) {
 	console.log("Weighing Scale: invoiceid = " + placeid + ", lineid = " + selectedline);
-	<?php if (getDolGlobalString('TAKEPOS_CONNECTOR_TO_WHB_SCALE')) {?>
+	<?php if (getDolGlobalString('FLUXPOS_CONNECTOR_TO_WHB_SCALE')) {?>
 		<?php if (getDolGlobalString('WEIGHINGSCALE_PROTOCOL') == "diag06") { ?>
 			// Protocole Dialog-06, il a besoin du prix unitaire, le demander s'il manque
 			var urlProduct;
 			if (idproduct == "" && selectedline > 0) {
-				urlProduct = "<?php echo DOL_URL_ROOT; ?>/api/index.php/takeposconnector/invoices/" + placeid + "/lines/" + selectedline + "/product";
+				urlProduct = "<?php echo DOL_URL_ROOT; ?>/api/index.php/fluxposconnector/invoices/" + placeid + "/lines/" + selectedline + "/product";
 			} else {
 				urlProduct = "<?php echo DOL_URL_ROOT; ?>/api/index.php/products/" + idproduct;
 			}
@@ -1334,17 +1334,17 @@ function WeighingScale(callback) {
 				}
 			});
 		<?php } else { ?>
-			// Protocole par défaut de takeposconnector: réception continue du poids/stabilité
+			// Protocole par défaut de fluxposconnector: réception continue du poids/stabilité
 			editnumber = globalWeight;
 			$("#poslines").load("invoice.php?token=<?php echo currentToken(); ?>&action=updateqty&place="+place+"&idline="+selectedline+"&number="+editnumber, function() {
 				editnumber="";
 			});
 		<?php } ?>
-	<?php } else { ?> // utilisation du new TakePOS-Connector PHP: envoie "$" à la balance pour avoir le poids
+	<?php } else { ?> // utilisation du new FluxPos-Connector PHP: envoie "$" à la balance pour avoir le poids
 	$.ajax({
 		type: "POST",
 		data: { token: 'notrequired' },
-		url: '<?php print getDolGlobalString('TAKEPOS_PRINT_SERVER'); ?>/scale/index.php',
+		url: '<?php print getDolGlobalString('FLUXPOS_PRINT_SERVER'); ?>/scale/index.php',
 	})
 	.done(function( editnumber ) {
 		$("#poslines").load("invoice.php?token=<?php echo currentToken(); ?>&action=updateqty&place="+place+"&idline="+selectedline+"&number="+editnumber, function() {
@@ -1358,24 +1358,24 @@ $( document ).ready(function() {
 	PrintCategories(0);
 	LoadProducts(0);
 	Refresh();
-	TakePOSOffline.registerServiceWorker();
-	TakePOSOffline.initOfflineStatus();
-	TakePOSOffline.syncCatalog();
-	TakePOSOffline.syncOutbox();	// Replay the orders captured while offline, if any
+	FluxPosOffline.registerServiceWorker();
+	FluxPosOffline.initOfflineStatus();
+	FluxPosOffline.syncCatalog();
+	FluxPosOffline.syncOutbox();	// Replay the orders captured while offline, if any
 	<?php
 	// IF NO TERMINAL SELECTED
-	if (empty($_SESSION["takeposterminal"]) || $_SESSION["takeposterminal"] == "") {
+	if (empty($_SESSION["fluxposterminal"]) || $_SESSION["fluxposterminal"] == "") {
 		print "ModalBox('ModalTerminal');";
 	}
 
-	if (getDolGlobalString('TAKEPOS_CONTROL_CASH_OPENING') && !empty($_SESSION["takeposterminal"])) {
+	if (getDolGlobalString('FLUXPOS_CONTROL_CASH_OPENING') && !empty($_SESSION["fluxposterminal"])) {
 		// Look for any cash control fence created today on this terminal, regardless of its status,
 		// so the auto-open popup only fires on the first cash control of a calendar day. Without this,
 		// refreshing the browser the same day after closing a fence used to immediately re-fire the
 		// popup because the closed fences were filtered out by the status check (#38597).
 		$sql = "SELECT rowid, status FROM ".MAIN_DB_PREFIX."pos_cash_fence WHERE";
 		$sql .= " entity = ".((int) $conf->entity)." AND ";
-		$sql .= " posnumber = ".((int) $_SESSION["takeposterminal"])." AND ";
+		$sql .= " posnumber = ".((int) $_SESSION["fluxposterminal"])." AND ";
 		$sql .= " date_creation > '".$db->idate(dol_get_first_hour(dol_now()))."'";
 		$resql = $db->query($sql);
 		if ($resql) {
@@ -1452,7 +1452,7 @@ $( document ).ready(function() {
 <div class="container">
 
 <?php
-if (!getDolGlobalString('TAKEPOS_HIDE_HEAD_BAR')) {
+if (!getDolGlobalString('FLUXPOS_HIDE_HEAD_BAR')) {
 	?>
 	<div class="header">
 		<div id="topnav" class="topnav">
@@ -1462,8 +1462,8 @@ if (!getDolGlobalString('TAKEPOS_HIDE_HEAD_BAR')) {
 				<span class="fa fa-cash-register"></span>
 				<span class="hideonsmartphone">
 				<?php
-				if (!empty($_SESSION["takeposterminal"])) {
-					echo getDolGlobalString("TAKEPOS_TERMINAL_NAME_".$_SESSION["takeposterminal"], $langs->trans("TerminalName", $_SESSION["takeposterminal"]));
+				if (!empty($_SESSION["fluxposterminal"])) {
+					echo getDolGlobalString("FLUXPOS_TERMINAL_NAME_".$_SESSION["fluxposterminal"], $langs->trans("TerminalName", $_SESSION["fluxposterminal"]));
 				}
 				?>
 				</span>
@@ -1494,10 +1494,10 @@ if (!getDolGlobalString('TAKEPOS_HIDE_HEAD_BAR')) {
 			</div>
 			<div id="topnav-right" class="topnav-right">
 				<?php
-				$reshook = $hookmanager->executeHooks('takepos_login_block_other');
+				$reshook = $hookmanager->executeHooks('fluxpos_login_block_other');
 				if ($reshook == 0) {  //Search method
 					?>
-					<div class="login_block_other takepos">
+					<div class="login_block_other fluxpos">
 					<input type="text" id="search" name="search" class="input-nobottom" onkeyup="Search2('<?php echo dol_escape_js($keyCodeForEnter); ?>', null);" placeholder="<?php echo dol_escape_htmltag($langs->trans("Search")); ?>" autofocus>
 					<a onclick="ClearSearch(false);" class="nohover"><span class="fa fa-backspace"></span></a>
 					<a href="<?php echo DOL_URL_ROOT.'/'; ?>" target="backoffice" rel="opener"><!-- we need rel="opener" here, we are on same domain and we need to be able to reuse this tab several times -->
@@ -1511,7 +1511,7 @@ if (!getDolGlobalString('TAKEPOS_HIDE_HEAD_BAR')) {
 				?>
 				<div class="login_block_user">
 				<?php
-				print top_menu_user(1, DOL_URL_ROOT.'/user/logout.php?token='.newToken().'&urlfrom='.urlencode('/takepos/?setterminal='.((int) $term)));
+				print top_menu_user(1, DOL_URL_ROOT.'/user/logout.php?token='.newToken().'&urlfrom='.urlencode('/fluxpos/?setterminal='.((int) $term)));
 				?>
 				</div>
 			</div>
@@ -1530,7 +1530,7 @@ if (!getDolGlobalString('TAKEPOS_HIDE_HEAD_BAR')) {
 	<div class="modal-content">
 		<div class="modal-header">
 		<?php
-		if (!getDolGlobalString('TAKEPOS_FORCE_TERMINAL_SELECT')) {
+		if (!getDolGlobalString('FLUXPOS_FORCE_TERMINAL_SELECT')) {
 			?>
 			<span class="close" href="#" onclick="document.getElementById('ModalTerminal').style.display = 'none';">&times;</span>
 			<?php
@@ -1538,11 +1538,11 @@ if (!getDolGlobalString('TAKEPOS_HIDE_HEAD_BAR')) {
 		<h3><?php print $langs->trans("TerminalSelect"); ?></h3>
 	</div>
 	<div class="modal-body">
-		<button type="button" class="block" onclick="location.href='index.php?setterminal=1'"><?php print getDolGlobalString("TAKEPOS_TERMINAL_NAME_1", $langs->trans("TerminalName", 1)); ?></button>
+		<button type="button" class="block" onclick="location.href='index.php?setterminal=1'"><?php print getDolGlobalString("FLUXPOS_TERMINAL_NAME_1", $langs->trans("TerminalName", 1)); ?></button>
 		<?php
-		$nbloop = getDolGlobalInt('TAKEPOS_NUM_TERMINALS');
+		$nbloop = getDolGlobalInt('FLUXPOS_NUM_TERMINALS');
 		for ($i = 2; $i <= $nbloop; $i++) {
-			print '<button type="button" class="block" onclick="location.href=\'index.php?setterminal='.$i.'\'">'.getDolGlobalString("TAKEPOS_TERMINAL_NAME_".$i, $langs->trans("TerminalName", $i)).'</button>';
+			print '<button type="button" class="block" onclick="location.href=\'index.php?setterminal='.$i.'\'">'.getDolGlobalString("FLUXPOS_TERMINAL_NAME_".$i, $langs->trans("TerminalName", $i)).'</button>';
 		}
 		?>
 	</div>
@@ -1621,7 +1621,7 @@ if (!getDolGlobalString('TAKEPOS_HIDE_HEAD_BAR')) {
 </div>
 </div>
 
-	<div class="row1<?php if (!getDolGlobalString('TAKEPOS_HIDE_HEAD_BAR')) {
+	<div class="row1<?php if (!getDolGlobalString('FLUXPOS_HIDE_HEAD_BAR')) {
 		print 'withhead';
 					} ?>">
 
@@ -1644,7 +1644,7 @@ if (!getDolGlobalString('TAKEPOS_HIDE_HEAD_BAR')) {
 			<button type="button" class="calcbutton" onclick="Edit(0);">0</button>
 			<button type="button" class="calcbutton" onclick="Edit('.')">.</button>
 			<button type="button" class="calcbutton poscolorblue" onclick="Edit('c')">C</button>
-			<?php if ($user->hasRight('takepos', 'editlines')) { ?>
+			<?php if ($user->hasRight('fluxpos', 'editlines')) { ?>
 			<button type="button" class="calcbutton2 poscolordelete" id="delete" onclick="deleteline()"><span class="fa fa-trash"></span></button>
 			<?php } ?>
 		</div>
@@ -1656,8 +1656,8 @@ if (!isModEnabled('invoice')) {
 	setEventMessages($langs->trans("ErrorModuleSetupNotComplete", $langs->transnoentitiesnoconv("Invoice")), null, 'errors');
 }
 
-// TakePOS setup check
-if (isset($_SESSION["takeposterminal"]) && $_SESSION["takeposterminal"]) {
+// FluxPos setup check
+if (isset($_SESSION["fluxposterminal"]) && $_SESSION["fluxposterminal"]) {
 	$sql = "SELECT code, libelle FROM " . MAIN_DB_PREFIX . "c_paiement";
 	$sql .= " WHERE entity IN (" . getEntity('c_paiement') . ")";
 	$sql .= " AND active = 1";
@@ -1675,7 +1675,7 @@ if (isset($_SESSION["takeposterminal"]) && $_SESSION["takeposterminal"]) {
 				$paycode = 'CHEQUE';
 			}
 
-			$constantforkey = "CASHDESK_ID_BANKACCOUNT_" . $paycode . $_SESSION["takeposterminal"];
+			$constantforkey = "FLUXPOS_ID_BANKACCOUNT_" . $paycode . $_SESSION["fluxposterminal"];
 			//var_dump($constantforkey.' '.getDolGlobalInt($constantforkey));
 			if (getDolGlobalInt($constantforkey) > 0) {
 				array_push($paiementsModes, $obj);
@@ -1685,37 +1685,37 @@ if (isset($_SESSION["takeposterminal"]) && $_SESSION["takeposterminal"]) {
 
 	if (empty($paiementsModes) && isModEnabled("bank")) {
 		$langs->load('errors');
-		setEventMessages($langs->trans("ErrorModuleSetupNotComplete", $langs->transnoentitiesnoconv("TakePOS")), null, 'errors');
-		setEventMessages($langs->trans("ProblemIsInSetupOfTerminal", $_SESSION["takeposterminal"]), null, 'errors');
+		setEventMessages($langs->trans("ErrorModuleSetupNotComplete", $langs->transnoentitiesnoconv("FluxPos")), null, 'errors');
+		setEventMessages($langs->trans("ProblemIsInSetupOfTerminal", $_SESSION["fluxposterminal"]), null, 'errors');
 	}
 }
 
 if (count($maincategories) == 0) {
-	if (getDolGlobalInt('TAKEPOS_ROOT_CATEGORY_ID') > 0) {
+	if (getDolGlobalInt('FLUXPOS_ROOT_CATEGORY_ID') > 0) {
 		$tmpcategory = new Categorie($db);
-		$tmpcategory->fetch(getDolGlobalInt('TAKEPOS_ROOT_CATEGORY_ID'));
-		setEventMessages($langs->trans("TakeposNeedsAtLeastOnSubCategoryIntoParentCategory", $tmpcategory->label), null, 'errors');
+		$tmpcategory->fetch(getDolGlobalInt('FLUXPOS_ROOT_CATEGORY_ID'));
+		setEventMessages($langs->trans("FluxPosNeedsAtLeastOnSubCategoryIntoParentCategory", $tmpcategory->label), null, 'errors');
 	} else {
-		setEventMessages($langs->trans("TakeposNeedsCategories"), null, 'errors');
+		setEventMessages($langs->trans("FluxPosNeedsCategories"), null, 'errors');
 	}
 }
-// User menu and external TakePOS modules
+// User menu and external FluxPos modules
 $menus = array();
 $r = 0;
 
-if (! getDolGlobalString('TAKEPOS_HIDE_HISTORY')) {
+if (! getDolGlobalString('FLUXPOS_HIDE_HISTORY')) {
 	$menus[$r++] = array('title' => '<span class="fa fa-history paddingrightonly"></span><div class="trunc">'.$langs->trans("History").'</div>', 'action' => 'History();');
 }
 
-if (getDolGlobalString('TAKEPOS_HIDE_HEAD_BAR')) {
-	if (getDolGlobalString('TAKEPOS_CHOOSE_CONTACT')) {
+if (getDolGlobalString('FLUXPOS_HIDE_HEAD_BAR')) {
+	if (getDolGlobalString('FLUXPOS_CHOOSE_CONTACT')) {
 		$menus[$r++] = array('title' => '<span class="far fa-building paddingrightonly"></span><div class="trunc">'.$langs->trans("Contact").'</div>', 'action' => 'Contact();');
 	} else {
 		$menus[$r++] = array('title' => '<span class="far fa-building paddingrightonly"></span><div class="trunc">'.$langs->trans("Customer").'</div>', 'action' => 'Customer();');
 	}
 }
 
-if (!getDolGlobalString('TAKEPOS_BAR_RESTAURANT')) {
+if (!getDolGlobalString('FLUXPOS_BAR_RESTAURANT')) {
 	$menus[$r++] = array('title' => '<span class="fa fa-layer-group paddingrightonly"></span><div class="trunc">'.$langs->trans("New").'</div>', 'action' => 'New();');
 } else {
 	// BAR RESTAURANT specific menu
@@ -1723,31 +1723,31 @@ if (!getDolGlobalString('TAKEPOS_BAR_RESTAURANT')) {
 }
 
 // Add a non predefined product
-if (!getDolGlobalString('TAKEPOS_NO_FREE_ZONE_PRODUCT')) {
+if (!getDolGlobalString('FLUXPOS_NO_FREE_ZONE_PRODUCT')) {
 	$menus[$r++] = array('title' => '<span class="fa fa-cube paddingrightonly"></span><div class="trunc">'.$langs->trans("FreeZone").'</div>', 'action' => 'FreeZone();');
 }
 
 // BAR RESTAURANT specific menu "Print on kitchen/order printer"
-if (getDolGlobalString('TAKEPOS_BAR_RESTAURANT')) {
-	if (getDolGlobalString('TAKEPOS_SUPPLEMENTS')) {
+if (getDolGlobalString('FLUXPOS_BAR_RESTAURANT')) {
+	if (getDolGlobalString('FLUXPOS_SUPPLEMENTS')) {
 		$menus[$r++] = array('title' => '<span class="fa fa-cube  paddingrightonly"></span><div class="trunc">'.$langs->trans("ProductSupplements").'</div>', 'action' => 'LoadProducts(\'supplements\');');
 	}
 
-	if (getDolGlobalString('TAKEPOS_ORDER_PRINTERS')) {
-		$menus[$r++] = array('title' => '<span class="fa fa-blender-phone paddingrightonly"></span><div class="trunc">'.$langs->trans("SentOrderToKitchen").'</span>', 'action' => 'TakeposPrintingOrder();');
+	if (getDolGlobalString('FLUXPOS_ORDER_PRINTERS')) {
+		$menus[$r++] = array('title' => '<span class="fa fa-blender-phone paddingrightonly"></span><div class="trunc">'.$langs->trans("SentOrderToKitchen").'</span>', 'action' => 'FluxPosPrintingOrder();');
 	}
 }
 
 // Add a discount
 $menus[$r++] = array('title' => '<span class="fa fa-percent paddingrightonly"></span><div class="trunc">'.$langs->trans("InvoiceDiscountShort").'</div>', 'action' => 'Reduction();');
 
-if (!getDolGlobalString('TAKEPOS_NO_SPLIT_SALE')) {
+if (!getDolGlobalString('FLUXPOS_NO_SPLIT_SALE')) {
 	$menus[$r++] = array('title' => '<span class="fas fa-cut paddingrightonly"></span><div class="trunc">'.$langs->trans("SplitSale").'</div>', 'action' => 'Split();');
 }
 
 // Last action that close the sell (payments)
 $menus[$r++] = array('title' => '<span class="far fa-money-bill-alt paddingrightonly"></span><div class="trunc">'.$langs->trans("Payment").'</div>', 'action' => 'CloseBill();');
-if (getDolGlobalString('TAKEPOS_DIRECT_PAYMENT')) {
+if (getDolGlobalString('FLUXPOS_DIRECT_PAYMENT')) {
 	$menus[$r++] = array('title' => '<span class="far fa-money-bill-alt paddingrightonly"></span><div class="trunc">'.$langs->trans("DirectPayment").' <span class="opacitymedium">('.$langs->trans("Cash").')</span></div>', 'action' => 'DirectPayment();');
 }
 
@@ -1755,7 +1755,7 @@ $customprinterallowed = false;
 $customprinttemplateallowed = true;
 
 // BAR RESTAURANT specific menu
-if (getDolGlobalString('TAKEPOS_BAR_RESTAURANT')) {
+if (getDolGlobalString('FLUXPOS_BAR_RESTAURANT')) {
 	// Button to print receipt before payment
 	$customprinterallowed = true;
 	$customprinttemplateallowed = true;
@@ -1769,33 +1769,33 @@ if (isALNERunningVersion()) {
 
 // Button to print receipt
 // This section should be same than into invoice.php
-if (getDolGlobalString('TAKEPOS_PRINT_METHOD') == "takeposconnector") {		// deprecated method
-	if (getDolGlobalString('TAKEPOS_PRINT_SERVER') && filter_var(getDolGlobalString('TAKEPOS_PRINT_SERVER'), FILTER_VALIDATE_URL) == true) {
-		// If TAKEPOS_PRINT_SERVER is an URL
+if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector") {		// deprecated method
+	if (getDolGlobalString('FLUXPOS_PRINT_SERVER') && filter_var(getDolGlobalString('FLUXPOS_PRINT_SERVER'), FILTER_VALIDATE_URL) == true) {
+		// If FLUXPOS_PRINT_SERVER is an URL
 		$menus[$r++] = array('title' => '<span class="fa fa-receipt paddingrightonly"></span><div class="trunc">'.$langs->trans("PrintTicket").'</div>', 'action' => 'PrintByESCPOSOld(placeid);');
 	} else {
-		// If TAKEPOS_PRINT_SERVER is an IP
-		// Print by calling the receipt.php to get HTML content and send the HTML content to TAKEPOS_PRINT_SERVER:8111/print
+		// If FLUXPOS_PRINT_SERVER is an IP
+		// Print by calling the receipt.php to get HTML content and send the HTML content to FLUXPOS_PRINT_SERVER:8111/print
 		$menus[$r++] = array('title' => '<span class="fa fa-receipt paddingrightonly"></span><div class="trunc">'.$langs->trans("PrintTicket").'</div>', 'action' => 'PrintHTMLToSlashPrint(placeid);');
 	}
-} elseif ($customprinterallowed && $customprinttemplateallowed && (isModEnabled('receiptprinter') && getDolGlobalInt('TAKEPOS_PRINTER_TO_USE'.$term) > 0) || getDolGlobalString('TAKEPOS_PRINT_METHOD') == "receiptprinter") {		// @phpstan-ignore-line
+} elseif ($customprinterallowed && $customprinttemplateallowed && (isModEnabled('receiptprinter') && getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term) > 0) || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "receiptprinter") {		// @phpstan-ignore-line
 	// Button Print Receipt on special custom printer using custom template
-	$nameOfPrinter = dol_getIdFromCode($db, getDolGlobalInt('TAKEPOS_PRINTER_TO_USE'.$term), 'printer_receipt', 'rowid', 'name', 1);
+	$nameOfPrinter = dol_getIdFromCode($db, getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term), 'printer_receipt', 'rowid', 'name', 1);
 	$menus[$r++] = array('title' => '<div title="'.dolPrintHTMLForAttribute($langs->trans("PrintOn", $nameOfPrinter)).'"><span class="fa fa-receipt paddingrightonly"></span><div class="trunc">'.$langs->trans("PrintTicket").'</div></div>', 'action' => 'PrintByESCPOS(placeid);');
 } else {
 	// Button Print Receipt on browser
 	$menus[$r++] = array('title' => '<span class="fa fa-receipt paddingrightonly"></span><div class="trunc">'.$langs->trans("PrintTicket").'</div>', 'action' => 'PrintByBrowser(placeid);');
 }
 
-if (getDolGlobalString('TAKEPOS_PRINT_METHOD') == "takeposconnector" && getDolGlobalString('TAKEPOS_ORDER_NOTES') == 1) {
-	$menus[$r++] = array('title' => '<span class="fa fa-sticky-note paddingrightonly"></span><div class="trunc">'.$langs->trans("OrderNotes").'</div>', 'action' => 'TakeposOrderNotes();');
+if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector" && getDolGlobalString('FLUXPOS_ORDER_NOTES') == 1) {
+	$menus[$r++] = array('title' => '<span class="fa fa-sticky-note paddingrightonly"></span><div class="trunc">'.$langs->trans("OrderNotes").'</div>', 'action' => 'FluxPosOrderNotes();');
 }
 
 
-if (getDolGlobalString('TAKEPOS_PRINT_METHOD') == "takeposconnector") {
+if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector") {
 	$menus[$r++] = array('title' => '<span class="fa fa-receipt paddingrightonly"></span><div class="trunc">'.$langs->trans("DOL_OPEN_DRAWER").'</div>', 'action' => 'OpenDrawer();');
 }
-if (getDolGlobalInt('TAKEPOS_ADD_BUTTON_OPEN_DRAWER'.$term) > 0) {
+if (getDolGlobalInt('FLUXPOS_ADD_BUTTON_OPEN_DRAWER'.$term) > 0) {
 	$menus[$r++] = array(
 		'title' => '<span class="fa fa-receipt paddingrightonly"></span><div class="trunc">'.$langs->trans("DOL_OPEN_DRAWER").'</div>',
 		'action' => 'DolibarrOpenDrawer();',
@@ -1805,7 +1805,7 @@ if (getDolGlobalInt('TAKEPOS_ADD_BUTTON_OPEN_DRAWER'.$term) > 0) {
 // If there is an open cash control started
 $sql = "SELECT rowid, status, entity FROM ".MAIN_DB_PREFIX."pos_cash_fence WHERE";
 $sql .= " entity = ".((int) $conf->entity)." AND ";
-$sql .= " posnumber = ".((int) empty($_SESSION["takeposterminal"]) ? 0 : $_SESSION["takeposterminal"])." AND ";
+$sql .= " posnumber = ".((int) empty($_SESSION["fluxposterminal"]) ? 0 : $_SESSION["fluxposterminal"])." AND ";
 $sql .= " date_creation > '".$db->idate(dol_get_first_hour(dol_now()))."'";
 $sql .= " AND status = 0";
 
@@ -1821,11 +1821,11 @@ if ($resql) {
 	}
 }
 
-if (getDolGlobalString('TAKEPOS_HIDE_HEAD_BAR')) {
+if (getDolGlobalString('FLUXPOS_HIDE_HEAD_BAR')) {
 	$menus[$r++] = array('title' => '<span class="fa fa-sign-out-alt pictofixedwidth"></span><div class="trunc">'.$langs->trans("Logout").'</div>', 'action' => 'window.location.href=\''.DOL_URL_ROOT.'/user/logout.php?token='.newToken().'\';');
 }
 
-if (getDolGlobalString('TAKEPOS_WEIGHING_SCALE')) {
+if (getDolGlobalString('FLUXPOS_WEIGHING_SCALE')) {
 	$menus[$r++] = array('title' => '<span class="fa fa-balance-scale pictofixedwidth"></span><div class="trunc">'.$langs->trans("WeighingScale").'</div>', 'action' => 'WeighingScale();');
 }
 
@@ -1852,7 +1852,7 @@ if ($reshook == 0) {  //add buttons
 
 ?>
 		<!-- Show buttons -->
-		<div id="dialogforpopuptakepos"></div>
+		<div id="dialogforpopupfluxpos"></div>
 
 		<div class="div3">
 		<?php
@@ -1871,10 +1871,10 @@ if ($reshook == 0) {  //add buttons
 			}
 		}
 
-		if (getDolGlobalString('TAKEPOS_HIDE_HEAD_BAR') && !getDolGlobalString('TAKEPOS_HIDE_SEARCH')) {
+		if (getDolGlobalString('FLUXPOS_HIDE_HEAD_BAR') && !getDolGlobalString('FLUXPOS_HIDE_SEARCH')) {
 			print '<!-- Show the search input text -->'."\n";
 			print '<div class="margintoponly">';
-			print '<input type="text" id="search" class="input-search-takepos input-nobottom" name="search" onkeyup="Search2(\''.dol_escape_js($keyCodeForEnter).'\', null);" style="width: 80%; width:calc(100% - 51px); font-size: 150%;" placeholder="'.dol_escape_htmltag($langs->trans("Search")).'" autofocus> ';
+			print '<input type="text" id="search" class="input-search-fluxpos input-nobottom" name="search" onkeyup="Search2(\''.dol_escape_js($keyCodeForEnter).'\', null);" style="width: 80%; width:calc(100% - 51px); font-size: 150%;" placeholder="'.dol_escape_htmltag($langs->trans("Search")).'" autofocus> ';
 			print '<a class="marginleftonly hideonsmartphone" onclick="ClearSearch(false);">'.img_picto('', 'searchclear.png').'</a>';
 			print '</div>';
 		}
@@ -1882,13 +1882,13 @@ if ($reshook == 0) {  //add buttons
 		</div>
 	</div>
 
-	<div class="row2<?php if (!getDolGlobalString('TAKEPOS_HIDE_HEAD_BAR')) {
+	<div class="row2<?php if (!getDolGlobalString('FLUXPOS_HIDE_HEAD_BAR')) {
 		print 'withhead';
 					} ?>">
 
 		<!--  Show categories as a tab bar -->
 		<?php
-		if (getDolGlobalInt('TAKEPOS_HIDE_CATEGORIES') == 1) {
+		if (getDolGlobalInt('FLUXPOS_HIDE_CATEGORIES') == 1) {
 			print '<div class="div4" style="display: none;">';
 		} else {
 			print '<div class="div4">';
@@ -1910,7 +1910,7 @@ if ($reshook == 0) {  //add buttons
 				} elseif ($count == ($MAXCATEG - 1)) {
 					echo '<span class="fa fa-chevron-right"></span>';
 				} else {
-					if (!getDolGlobalString('TAKEPOS_HIDE_CATEGORY_IMAGES')) {
+					if (!getDolGlobalString('FLUXPOS_HIDE_CATEGORY_IMAGES')) {
 						echo '<img class="imgwrapper" id="catimg'.$count.'" />';
 					}
 				} ?>
@@ -1927,7 +1927,7 @@ if ($reshook == 0) {  //add buttons
 		</div>
 
 		<!--  Show product -->
-		<div class="div5<?php if (getDolGlobalInt('TAKEPOS_HIDE_CATEGORIES') == 1) {
+		<div class="div5<?php if (getDolGlobalInt('FLUXPOS_HIDE_CATEGORIES') == 1) {
 			print ' centpercent';
 						} ?>">
 	<?php
@@ -1951,16 +1951,16 @@ if ($reshook == 0) {  //add buttons
 						//echo '<img class="imgwrapper" src="img/arrow-next-top.png" height="100%" id="proimg'.$count.'" />';
 						print '<span class="fa fa-chevron-right centerinmiddle" style="font-size: 5em; cursor: pointer;"></span>';
 					} else {
-						if (!getDolGlobalString('TAKEPOS_HIDE_PRODUCT_PRICES')) {
+						if (!getDolGlobalString('FLUXPOS_HIDE_PRODUCT_PRICES')) {
 							print '<div class="" id="proprice'.$count.'"></div>';
 						}
-						if (getDolGlobalString('TAKEPOS_HIDE_PRODUCT_IMAGES')) {
+						if (getDolGlobalString('FLUXPOS_HIDE_PRODUCT_IMAGES')) {
 							print '<button type="button" id="probutton'.$count.'" class="productbutton" style="display: none;"></button>';
 						} else {
 							print '<img class="imgwrapper" title="" id="proimg'.$count.'">';
 						}
 					} ?>
-						<?php if ($count != $MAXPRODUCT - 2 && $count != $MAXPRODUCT - 1 && !getDolGlobalString('TAKEPOS_HIDE_PRODUCT_IMAGES')) { ?>
+						<?php if ($count != $MAXPRODUCT - 2 && $count != $MAXPRODUCT - 1 && !getDolGlobalString('FLUXPOS_HIDE_PRODUCT_IMAGES')) { ?>
 					<div class="description" id="prodivdesc<?php echo $count; ?>">
 						<div class="description_content" id="prodesc<?php echo $count; ?>"></div>
 					</div>

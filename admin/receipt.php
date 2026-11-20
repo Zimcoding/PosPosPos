@@ -21,9 +21,9 @@
  */
 
 /**
- *	\file       htdocs/takepos/admin/receipt.php
- *	\ingroup    takepos
- *	\brief      Setup page for TakePos module
+ *	\file       htdocs/fluxpos/admin/receipt.php
+ *	\ingroup    fluxpos
+ *	\brief      Setup page for FluxPos module
  */
 
 // Load Dolibarr environment
@@ -38,7 +38,7 @@ require '../../main.inc.php'; // Load $user and permissions
  */
 require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/pdf.lib.php';
-require_once DOL_DOCUMENT_ROOT."/core/lib/takepos.lib.php";
+require_once dol_buildpath('/fluxpos/lib/fluxpos.lib.php');
 require_once DOL_DOCUMENT_ROOT."/blockedlog/lib/blockedlog.lib.php";
 require_once DOL_DOCUMENT_ROOT.'/product/class/html.formproduct.class.php';
 
@@ -47,7 +47,7 @@ if (!$user->admin) {
 	accessforbidden();
 }
 
-$langs->loadLangs(array("admin", "cashdesk", "commercial"));
+$langs->loadLangs(array("admin", "fluxpos@fluxpos", "commercial"));
 
 
 /*
@@ -58,13 +58,13 @@ $error = 0;
 if (GETPOST('action', 'alpha') == 'set') {
 	$db->begin();
 
-	$res = dolibarr_set_const($db, "TAKEPOS_HEADER", GETPOST('TAKEPOS_HEADER', 'restricthtml'), 'chaine', 0, '', $conf->entity);
-	$res = dolibarr_set_const($db, "TAKEPOS_FOOTER", GETPOST('TAKEPOS_FOOTER', 'restricthtml'), 'chaine', 0, '', $conf->entity);
-	$res = dolibarr_set_const($db, "TAKEPOS_RECEIPT_NAME", GETPOST('TAKEPOS_RECEIPT_NAME', 'alpha'), 'chaine', 0, '', $conf->entity);
-	$res = dolibarr_set_const($db, "TAKEPOS_PRINT_SERVER", GETPOST('TAKEPOS_PRINT_SERVER', 'alpha'), 'chaine', 0, '', $conf->entity);
-	$res = dolibarr_set_const($db, 'TAKEPOS_PRINT_WITHOUT_DETAILS_LABEL_DEFAULT', GETPOST('TAKEPOS_PRINT_WITHOUT_DETAILS_LABEL_DEFAULT', 'alphanohtml'), 'chaine', 0, '', $conf->entity);
+	$res = dolibarr_set_const($db, "FLUXPOS_HEADER", GETPOST('FLUXPOS_HEADER', 'restricthtml'), 'chaine', 0, '', $conf->entity);
+	$res = dolibarr_set_const($db, "FLUXPOS_FOOTER", GETPOST('FLUXPOS_FOOTER', 'restricthtml'), 'chaine', 0, '', $conf->entity);
+	$res = dolibarr_set_const($db, "FLUXPOS_RECEIPT_NAME", GETPOST('FLUXPOS_RECEIPT_NAME', 'alpha'), 'chaine', 0, '', $conf->entity);
+	$res = dolibarr_set_const($db, "FLUXPOS_PRINT_SERVER", GETPOST('FLUXPOS_PRINT_SERVER', 'alpha'), 'chaine', 0, '', $conf->entity);
+	$res = dolibarr_set_const($db, 'FLUXPOS_PRINT_WITHOUT_DETAILS_LABEL_DEFAULT', GETPOST('FLUXPOS_PRINT_WITHOUT_DETAILS_LABEL_DEFAULT', 'alphanohtml'), 'chaine', 0, '', $conf->entity);
 
-	dol_syslog("admin/cashdesk: level ".GETPOST('level', 'alpha'));
+	dol_syslog("admin/fluxpos: level ".GETPOST('level', 'alpha'));
 
 	if (!($res > 0)) {
 		$error++;
@@ -78,9 +78,9 @@ if (GETPOST('action', 'alpha') == 'set') {
 		setEventMessages($langs->trans("Error"), null, 'errors');
 	}
 } elseif (GETPOST('action', 'alpha') == 'setmethod') {
-	dolibarr_set_const($db, "TAKEPOS_PRINT_METHOD", GETPOST('value', 'alpha'), 'chaine', 0, '', $conf->entity);
-	// TakePOS connector require ReceiptPrinter module
-	if (getDolGlobalString('TAKEPOS_PRINT_METHOD') == "takeposconnector" && !isModEnabled('receiptprinter')) {
+	dolibarr_set_const($db, "FLUXPOS_PRINT_METHOD", GETPOST('value', 'alpha'), 'chaine', 0, '', $conf->entity);
+	// FluxPos connector require ReceiptPrinter module
+	if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector" && !isModEnabled('receiptprinter')) {
 		activateModule("modReceiptPrinter", 1, 0);
 	}
 }
@@ -92,14 +92,14 @@ if (GETPOST('action', 'alpha') == 'set') {
 
 $form = new Form($db);
 
-llxHeader('', $langs->trans("CashDeskSetup"), '', '', 0, 0, '', '', '', 'mod-takepos page-admin_receipt');
+llxHeader('', $langs->trans("CashDeskSetup"), '', '', 0, 0, '', '', '', 'mod-fluxpos page-admin_receipt');
 
 $linkback = '<a href="'.dolBuildUrl(DOL_URL_ROOT.'/admin/modules.php', ['restore_lastsearch_values' => 1]).'">'.img_picto($langs->trans("BackToModuleList"), 'back', 'class="pictofixedwidth"').'<span class="hideonsmartphone">'.$langs->trans("BackToModuleList").'</span></a>';
 
-print load_fiche_titre($langs->trans("CashDeskSetup").' (TakePOS)', $linkback, 'title_setup');
+print load_fiche_titre($langs->trans("CashDeskSetup").' (FluxPos)', $linkback, 'title_setup');
 
-$head = takepos_admin_prepare_head();
-print dol_get_fiche_head($head, 'receipt', 'TakePOS', -1, 'cash-register');
+$head = fluxpos_admin_prepare_head();
+print dol_get_fiche_head($head, 'receipt', 'FluxPos', -1, 'cash-register');
 
 print '<form action="'.$_SERVER["PHP_SELF"].'" method="post">';
 print '<input type="hidden" name="token" value="'.newToken().'">';
@@ -119,15 +119,15 @@ print $langs->trans('TicketVatGrouped');
 print '<td colspan="2">';
 if (isALNERunningVersion()) {
 	// Always forced to true
-	$conf->global->TAKEPOS_TICKET_VAT_GROUPPED = 1;
+	$conf->global->FLUXPOS_TICKET_VAT_GROUPPED = 1;
 	print img_picto($langs->trans("Enabled"), 'switch_on', 'class="opacitymedium valignmiddle"');
 	print ' <span class="opacitymedium valignmiddle">'.$langs->trans("Always").'</span>';
 } else {
-	print ajax_constantonoff("TAKEPOS_TICKET_VAT_GROUPPED", array(), $conf->entity, 0, 0, 1, 0);
+	print ajax_constantonoff("FLUXPOS_TICKET_VAT_GROUPPED", array(), $conf->entity, 0, 0, 1, 0);
 }
 print "</td></tr>\n";
 
-if (getDolGlobalString('TAKEPOS_PRINT_METHOD') == "browser" || getDolGlobalString('TAKEPOS_PRINT_METHOD') == "takeposconnector") {
+if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "browser" || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector") {
 	$substitutionarray = pdf_getSubstitutionArray($langs, array('ticket', 'member', 'candidate', 'shipping'), null, 2, array('mycompany', 'company', 'user', 'object', 'system'));
 	$substitutionarray['__(AnyTranslationKey)__'] = $langs->trans("Translation");
 
@@ -140,7 +140,7 @@ if (getDolGlobalString('TAKEPOS_PRINT_METHOD') == "browser" || getDolGlobalStrin
 	print '<tr class="oddeven"><td>';
 	print $form->textwithpicto($langs->trans("FreeLegalTextOnInvoices")." - ".$langs->trans("Header"), $htmltext, 1, 'help', '', 0, 2, 'freetexttooltip').'<br>';
 	print '</td><td>';
-	$variablename = 'TAKEPOS_HEADER';
+	$variablename = 'FLUXPOS_HEADER';
 	if (!getDolGlobalString('PDF_ALLOW_HTML_FOR_FREE_TEXT')) {
 		print '<textarea name="'.$variablename.'" class="flat" cols="120">'.getDolGlobalString($variablename).'</textarea>';
 	} else {
@@ -153,7 +153,7 @@ if (getDolGlobalString('TAKEPOS_PRINT_METHOD') == "browser" || getDolGlobalStrin
 	print '<tr class="oddeven"><td>';
 	print $form->textwithpicto($langs->trans("FreeLegalTextOnInvoices")." - ".$langs->trans("Footer"), $htmltext, 1, 'help', '', 0, 2, 'freetexttooltip').'<br>';
 	print '</td><td>';
-	$variablename = 'TAKEPOS_FOOTER';
+	$variablename = 'FLUXPOS_FOOTER';
 	if (!getDolGlobalString('PDF_ALLOW_HTML_FOR_FREE_TEXT')) {
 		print '<textarea name="'.$variablename.'" class="flat" cols="120">'.getDolGlobalString($variablename).'</textarea>';
 	} else {
@@ -164,14 +164,14 @@ if (getDolGlobalString('TAKEPOS_PRINT_METHOD') == "browser" || getDolGlobalStrin
 	print "</td></tr>\n";
 
 	print '<tr class="oddeven"><td><label for="receipt_name">'.$langs->trans("ReceiptName").'</label></td><td>';
-	print '<input name="TAKEPOS_RECEIPT_NAME" id="TAKEPOS_RECEIPT_NAME" class="minwidth200" value="'.getDolGlobalString('TAKEPOS_RECEIPT_NAME').'">';
+	print '<input name="FLUXPOS_RECEIPT_NAME" id="FLUXPOS_RECEIPT_NAME" class="minwidth200" value="'.getDolGlobalString('FLUXPOS_RECEIPT_NAME').'">';
 	print '</td></tr>';
 
 	// Customer information
 	print '<tr class="oddeven"><td>';
 	print $langs->trans('PrintCustomerOnReceipts');
 	print '<td colspan="2">';
-	print ajax_constantonoff("TAKEPOS_SHOW_CUSTOMER", array(), $conf->entity, 0, 0, 1, 0);
+	print ajax_constantonoff("FLUXPOS_SHOW_CUSTOMER", array(), $conf->entity, 0, 0, 1, 0);
 	print "</td></tr>\n";
 
 	// Print payment method
@@ -181,11 +181,11 @@ if (getDolGlobalString('TAKEPOS_PRINT_METHOD') == "browser" || getDolGlobalStrin
 	print '<td colspan="2">';
 	include_once DOL_DOCUMENT_ROOT.'/blockedlog/lib/blockedlog.lib.php';
 	if (isALNERunningVersion()) {
-		$conf->global->TAKEPOS_PRINT_PAYMENT_METHOD = 1;
-		print ajax_constantonoff("TAKEPOS_PRINT_PAYMENT_METHOD", array(), $conf->entity, 0, 0, 1, 0, 0, 0, '', '', 'inline-block', 0, '', 1);
+		$conf->global->FLUXPOS_PRINT_PAYMENT_METHOD = 1;
+		print ajax_constantonoff("FLUXPOS_PRINT_PAYMENT_METHOD", array(), $conf->entity, 0, 0, 1, 0, 0, 0, '', '', 'inline-block', 0, '', 1);
 		print '<span class="opacitymedium">'.$langs->trans("Always").'</span>';
 	} else {
-		print ajax_constantonoff("TAKEPOS_PRINT_PAYMENT_METHOD", array(), $conf->entity, 0, 0, 1, 0);
+		print ajax_constantonoff("FLUXPOS_PRINT_PAYMENT_METHOD", array(), $conf->entity, 0, 0, 1, 0);
 	}
 	print "</td></tr>\n";
 }
@@ -195,50 +195,50 @@ print '<tr class="oddeven"><td>';
 print $langs->trans('ShowPriceHTOnReceipt');
 print '<td colspan="2">';
 if (isALNERunningVersion()) {
-	$conf->global->TAKEPOS_SHOW_HT_RECEIPT = 1;
-	print ajax_constantonoff("TAKEPOS_SHOW_HT_RECEIPT", array(), $conf->entity, 0, 0, 1, 0, 0, 0, '', '', 'inline-block', 0, '', 1);
+	$conf->global->FLUXPOS_SHOW_HT_RECEIPT = 1;
+	print ajax_constantonoff("FLUXPOS_SHOW_HT_RECEIPT", array(), $conf->entity, 0, 0, 1, 0, 0, 0, '', '', 'inline-block', 0, '', 1);
 	print '<span class="opacitymedium">'.$langs->trans("Always").'</span>';
 } else {
-	print ajax_constantonoff("TAKEPOS_SHOW_HT_RECEIPT", array(), $conf->entity, 0, 0, 1, 0);
+	print ajax_constantonoff("FLUXPOS_SHOW_HT_RECEIPT", array(), $conf->entity, 0, 0, 1, 0);
 }
 print "</td></tr>\n";
 
-if (getDolGlobalString('TAKEPOS_PRINT_METHOD') == "takeposconnector" && filter_var(getDolGlobalString('TAKEPOS_PRINT_SERVER'), FILTER_VALIDATE_URL) == true) {
+if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector" && filter_var(getDolGlobalString('FLUXPOS_PRINT_SERVER'), FILTER_VALIDATE_URL) == true) {
 	print '<tr class="oddeven"><td>';
 	print $langs->trans('WeighingScale');
 	print '<td colspan="2">';
-	print ajax_constantonoff("TAKEPOS_WEIGHING_SCALE", array(), $conf->entity, 0, 0, 1, 0);
+	print ajax_constantonoff("FLUXPOS_WEIGHING_SCALE", array(), $conf->entity, 0, 0, 1, 0);
 	print "</td></tr>\n";
 }
 
-if (getDolGlobalString('TAKEPOS_PRINT_METHOD') == "takeposconnector" && filter_var(getDolGlobalString('TAKEPOS_PRINT_SERVER'), FILTER_VALIDATE_URL) == true) {
+if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector" && filter_var(getDolGlobalString('FLUXPOS_PRINT_SERVER'), FILTER_VALIDATE_URL) == true) {
 	print '<tr class="oddeven"><td>';
 	print $langs->trans('CustomerDisplay');
 	print '<td colspan="2">';
-	print ajax_constantonoff("TAKEPOS_CUSTOMER_DISPLAY", array(), $conf->entity, 0, 0, 1, 0);
+	print ajax_constantonoff("FLUXPOS_CUSTOMER_DISPLAY", array(), $conf->entity, 0, 0, 1, 0);
 	print "</td></tr>\n";
 }
 
 // Print without details
-if (getDolGlobalString('TAKEPOS_ENABLE_PRINT_WITHOUT_DETAILS')) {	// Note that even if option is set manually, if version is certified, option will be disabled later and above all in the page that generate the documents/receipts.
+if (getDolGlobalString('FLUXPOS_ENABLE_PRINT_WITHOUT_DETAILS')) {	// Note that even if option is set manually, if version is certified, option will be disabled later and above all in the page that generate the documents/receipts.
 	print '<tr class="oddeven"><td>';
 	print $langs->trans('PrintWithoutDetailsButton');
 	print '<td colspan="2">';
 	if (isALNERunningVersion()) {
 		// Always forced to true
-		$conf->global->TAKEPOS_PRINT_WITHOUT_DETAILS = 1;
+		$conf->global->FLUXPOS_PRINT_WITHOUT_DETAILS = 1;
 		print img_picto($langs->trans("Disabled"), 'switch_off', 'class="opacitymedium valignmiddle"');
 		print ' <span class="opacitymedium valignmiddle">'.$form->textwithpicto($langs->trans("NotAvailable"), $langs->trans("NotAvailableForCountryWhenModuleIsOn", $mysoc->country_code, $langs->transnoentitiesnoconv('Module3200Name'))).'</span>';
 	} else {
-		print ajax_constantonoff('TAKEPOS_PRINT_WITHOUT_DETAILS', array(), $conf->entity, 0, 0, 1, 0, 0, 0, '', '', 'inline-block', 0, '');
+		print ajax_constantonoff('FLUXPOS_PRINT_WITHOUT_DETAILS', array(), $conf->entity, 0, 0, 1, 0, 0, 0, '', '', 'inline-block', 0, '');
 	}
 	print "</td></tr>\n";
 
-	if (getDolGlobalString('TAKEPOS_PRINT_WITHOUT_DETAILS')) {
+	if (getDolGlobalString('FLUXPOS_PRINT_WITHOUT_DETAILS')) {
 		print '<tr class="oddeven"><td>';
 		print $langs->trans('PrintWithoutDetailsLabelDefault');
 		print '<td colspan="2">';
-		print '<input type="text" name="TAKEPOS_PRINT_WITHOUT_DETAILS_LABEL_DEFAULT" value="' . getDolGlobalString('TAKEPOS_PRINT_WITHOUT_DETAILS_LABEL_DEFAULT') . '" />';
+		print '<input type="text" name="FLUXPOS_PRINT_WITHOUT_DETAILS_LABEL_DEFAULT" value="' . getDolGlobalString('FLUXPOS_PRINT_WITHOUT_DETAILS_LABEL_DEFAULT') . '" />';
 		print "</td></tr>\n";
 	}
 }
@@ -248,10 +248,10 @@ print '<tr class="oddeven"><td>';
 print $langs->trans('GiftReceiptButton');
 print '<td>';
 if (isALNERunningVersion()) {
-	print ajax_constantonoff("TAKEPOS_GIFT_RECEIPT", array(), $conf->entity, 0, 0, 1, 0, 0, 0, '', '', 'inline-block', 0, '', 1);
+	print ajax_constantonoff("FLUXPOS_GIFT_RECEIPT", array(), $conf->entity, 0, 0, 1, 0, 0, 0, '', '', 'inline-block', 0, '', 1);
 	print '<span class="opacitymedium">'.$form->textwithpicto($langs->trans("NotAvailable"), $langs->trans("NotAvailableForCountryWhenModuleIsOn", $mysoc->country_code, $langs->transnoentitiesnoconv('Module3200Name'))).'</span>';
 } else {
-	print ajax_constantonoff("TAKEPOS_GIFT_RECEIPT", array(), $conf->entity, 0, 0, 1, 0);
+	print ajax_constantonoff("FLUXPOS_GIFT_RECEIPT", array(), $conf->entity, 0, 0, 1, 0);
 }
 print "</td></tr>\n";
 
@@ -259,7 +259,7 @@ print "</td></tr>\n";
 print '<tr class="oddeven"><td>';
 print $langs->trans("AutoPrintTickets");
 print '<td colspan="2">';
-print ajax_constantonoff("TAKEPOS_AUTO_PRINT_TICKETS", array(), $conf->entity, 0, 0, 1, 0);
+print ajax_constantonoff("FLUXPOS_AUTO_PRINT_TICKETS", array(), $conf->entity, 0, 0, 1, 0);
 print "</td></tr>\n";
 
 
@@ -278,8 +278,8 @@ print load_fiche_titre($langs->trans("Preview"), '', '');
 print '<div style="width: 50%; float:center;background-color:#606060">';
 print '<center>';
 
-// Call takepos/receipt.php
-print '<iframe id="iframe" allowtransparency="true" style="background: #FFFFFF;" src="'.DOL_URL_ROOT.'/takepos/receipt.php?forcenoautoopen=1&specimen=1" width="80%" height="600"></iframe>';
+// Call fluxpos/receipt.php
+print '<iframe id="iframe" allowtransparency="true" style="background: #FFFFFF;" src="'.DOL_URL_ROOT.'/fluxpos/receipt.php?forcenoautoopen=1&specimen=1" width="80%" height="600"></iframe>';
 
 print '</center>';
 print '</div>';

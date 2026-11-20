@@ -18,10 +18,10 @@
  */
 
 /**
- *	\file       htdocs/takepos/phone.php
- *	\ingroup    takepos
- *	\brief      TakePOS page for smartphone to allow a customer to take an order himself.
- *              This page is called by takepos/public/auto_order.php that set INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE when a customer access to the auto_order page.
+ *	\file       htdocs/fluxpos/phone.php
+ *	\ingroup    fluxpos
+ *	\brief      FluxPos page for smartphone to allow a customer to take an order himself.
+ *              This page is called by fluxpos/public/auto_order.php that set INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE when a customer access to the auto_order page.
  */
 
 /**
@@ -49,7 +49,7 @@ if (!defined('NOREQUIREAJAX')) {
 }
 
 if (!defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE')) {
-	print 'This page must be called by takepos/public/auto_order.php';
+	print 'This page must be called by fluxpos/public/auto_order.php';
 	exit;
 }
 
@@ -67,31 +67,31 @@ $idproduct = GETPOSTINT('idproduct');
 $mobilepage = GETPOST('mobilepage', 'alphanohtml');	// Set when page is loaded by a js .load()
 
 if ($setterminal > 0) {
-	$_SESSION["takeposterminal"] = ((int) $setterminal);
+	$_SESSION["fluxposterminal"] = ((int) $setterminal);
 }
 
-$langs->loadLangs(array("bills", "orders", "commercial", "cashdesk", "receiptprinter"));
+$langs->loadLangs(array("bills", "orders", "commercial", "fluxpos@fluxpos", "receiptprinter"));
 
 
 /*
  * View
  */
 
-$title = 'TakePOS - Dolibarr '.DOL_VERSION;
+$title = 'FluxPos - Dolibarr '.DOL_VERSION;
 if (getDolGlobalString('MAIN_APPLICATION_TITLE')) {
-	$title = 'TakePOS - ' . getDolGlobalString('MAIN_APPLICATION_TITLE');
+	$title = 'FluxPos - ' . getDolGlobalString('MAIN_APPLICATION_TITLE');
 }
 
 // llxHeader
 if (empty($mobilepage)) {
-	$head = '<meta name="apple-mobile-web-app-title" content="TakePOS"/>
+	$head = '<meta name="apple-mobile-web-app-title" content="FluxPos"/>
 	<meta name="apple-mobile-web-app-capable" content="yes">
 	<meta name="mobile-web-app-capable" content="yes">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>';
 	$arrayofcss = array(
-		'/takepos/css/phone.css',
+		'/fluxpos/css/phone.css',
 	);
-	$arrayofjs = array('/takepos/js/jquery.colorbox-min.js');
+	$arrayofjs = array('/fluxpos/js/jquery.colorbox-min.js');
 	$disablejs = 0;
 	$disablehead = 0;
 	top_htmlhead($head, $title, $disablejs, $disablehead, $arrayofjs, $arrayofcss);
@@ -104,16 +104,16 @@ if (empty($mobilepage)) {
 }
 
 
-if ($action == "productinfo" && $user->hasRight('takepos', 'run')) {
+if ($action == "productinfo" && $user->hasRight('fluxpos', 'run')) {
 	$prod = new Product($db);
 	$prod->fetch($idproduct);
 	print '<button type="button" class="publicphonebutton2 phoneblue total" onclick="AddProductConfirm(place, '.$idproduct.')">'.$langs->trans('Add').'</button>';
 	print "<br><b>".$prod->label."</b><br>";
-	print '<img class="imgwrapper" width="60%" src="'.DOL_URL_ROOT.'/takepos/public/auto_order.php?genimg=pro&query=pro&id='.$idproduct.'">';
+	print '<img class="imgwrapper" width="60%" src="'.DOL_URL_ROOT.'/fluxpos/public/auto_order.php?genimg=pro&query=pro&id='.$idproduct.'">';
 	print "<br>".$prod->description;
 	print "<br><b>".price($prod->price_ttc, 1, $langs, 1, -1, -1, getDolCurrency())."</b>";
 	print '<br>';
-} elseif ($action == "editline" && $user->hasRight('takepos', 'run')) {
+} elseif ($action == "editline" && $user->hasRight('fluxpos', 'run')) {
 	$placeid = GETPOSTINT('placeid');
 	$selectedline = GETPOSTINT('selectedline');
 	$invoice = new Facture($db);
@@ -123,7 +123,7 @@ if ($action == "productinfo" && $user->hasRight('takepos', 'run')) {
 			$prod = new Product($db);
 			$prod->fetch($line->fk_product);
 			print "<b>".$prod->label."</b><br>";
-			print '<img class="imgwrapper" width="60%" src="'.DOL_URL_ROOT.'/takepos/public/auto_order.php?genimg=pro&query=pro&id='.$line->fk_product.'">';
+			print '<img class="imgwrapper" width="60%" src="'.DOL_URL_ROOT.'/fluxpos/public/auto_order.php?genimg=pro&query=pro&id='.$line->fk_product.'">';
 			print "<br>".$prod->description;
 			print "<br><b>".price($prod->price_ttc, 1, $langs, 1, -1, -1, getDolCurrency())."</b>";
 			print '<br>';
@@ -154,14 +154,14 @@ if ($action == "productinfo" && $user->hasRight('takepos', 'run')) {
 	<script type="text/javascript">
 	<?php
 	$categorie = new Categorie($db);
-	$categories = $categorie->get_full_arbo('product', getDolGlobalInt('TAKEPOS_ROOT_CATEGORY_ID'), 1);
+	$categories = $categorie->get_full_arbo('product', getDolGlobalInt('FLUXPOS_ROOT_CATEGORY_ID'), 1);
 
 	// Search root category to know its level
-	//$conf->global->TAKEPOS_ROOT_CATEGORY_ID=0;
+	//$conf->global->FLUXPOS_ROOT_CATEGORY_ID=0;
 	$levelofrootcategory = 0;
-	if (getDolGlobalInt('TAKEPOS_ROOT_CATEGORY_ID') > 0) {
+	if (getDolGlobalInt('FLUXPOS_ROOT_CATEGORY_ID') > 0) {
 		foreach ($categories as $key => $categorycursor) {
-			if ($categorycursor['id'] == getDolGlobalInt('TAKEPOS_ROOT_CATEGORY_ID')) {
+			if ($categorycursor['id'] == getDolGlobalInt('FLUXPOS_ROOT_CATEGORY_ID')) {
 				$levelofrootcategory = $categorycursor['level'];
 				break;
 			}
@@ -203,7 +203,7 @@ if ($action == "productinfo" && $user->hasRight('takepos', 'run')) {
 	function LoadPlace(placeid){
 		place=placeid;
 		<?php
-		echo '$("#phonediv2").load("'.DOL_URL_ROOT.'/takepos/public/auto_order.php?mobilepage=invoice&place="+place+" #tablelines", function() {
+		echo '$("#phonediv2").load("'.DOL_URL_ROOT.'/fluxpos/public/auto_order.php?mobilepage=invoice&place="+place+" #tablelines", function() {
 			});';
 		?>
 		LoadCats();
@@ -213,20 +213,20 @@ if ($action == "productinfo" && $user->hasRight('takepos', 'run')) {
 		<?php
 		// If is a public terminal first show product information
 		print 'place=placeid;
-			$("#phonediv1").load("'.DOL_URL_ROOT.'/takepos/public/auto_order.php?action=productinfo&token='.newToken().'&place="+place+"&idproduct="+productid, function() {
+			$("#phonediv1").load("'.DOL_URL_ROOT.'/fluxpos/public/auto_order.php?action=productinfo&token='.newToken().'&place="+place+"&idproduct="+productid, function() {
 			});';
 		?>
 	}
 
 	function PublicPreOrder(){
-		$("#phonediv1").load("<?php echo DOL_URL_ROOT.'/takepos/public/auto_order.php?action=publicpreorder&token='.newToken(); ?>&place="+place, function() {
+		$("#phonediv1").load("<?php echo DOL_URL_ROOT.'/fluxpos/public/auto_order.php?action=publicpreorder&token='.newToken(); ?>&place="+place, function() {
 		});
 	}
 
 	function AddProductConfirm(placeid, productid){
 		place=placeid;
 		<?php
-			echo '$("#phonediv2").load("'.DOL_URL_ROOT.'/takepos/public/auto_order.php?mobilepage=invoice&action=addline&token='.newToken().'&place="+place+"&idproduct="+productid, function() {
+			echo '$("#phonediv2").load("'.DOL_URL_ROOT.'/fluxpos/public/auto_order.php?mobilepage=invoice&action=addline&token='.newToken().'&place="+place+"&idproduct="+productid, function() {
 			});';
 		?>
 
@@ -236,11 +236,11 @@ if ($action == "productinfo" && $user->hasRight('takepos', 'run')) {
 	function SetQty(place, selectedline, qty){
 		console.log("We click on SetQty()");
 		if (qty==0){
-			$("#phonediv2").load("<?php echo DOL_URL_ROOT ?>/takepos/public/auto_order.php?mobilepage=invoice&action=deleteline&token=<?php echo newToken(); ?>&place="+place+"&idline="+selectedline, function() {
+			$("#phonediv2").load("<?php echo DOL_URL_ROOT ?>/fluxpos/public/auto_order.php?mobilepage=invoice&action=deleteline&token=<?php echo newToken(); ?>&place="+place+"&idline="+selectedline, function() {
 			});
 		}
 		else{
-			$("#phonediv2").load("<?php echo DOL_URL_ROOT ?>/takepos/public/auto_order.php?mobilepage=invoice&action=updateqty&token=<?php echo newToken(); ?>&place="+place+"&idline="+selectedline+"&number="+qty, function() {
+			$("#phonediv2").load("<?php echo DOL_URL_ROOT ?>/fluxpos/public/auto_order.php?mobilepage=invoice&action=updateqty&token=<?php echo newToken(); ?>&place="+place+"&idline="+selectedline+"&number="+qty, function() {
 			});
 		}
 		LoadCats();
@@ -251,7 +251,7 @@ if ($action == "productinfo" && $user->hasRight('takepos', 'run')) {
 	function SetNote(place, selectedline){
 		console.log("We click on SetNote()");
 		var note = prompt("<?php dol_escape_js($langs->trans('Note')); ?>", "");
-		$("#phonediv2").load("<?php echo DOL_URL_ROOT ?>/takepos/public/auto_order.php?mobilepage=invoice&action=updateqty&token=<?php echo newToken(); ?>&place="+place+"&idline="+selectedline+"&number="+qty, function() {
+		$("#phonediv2").load("<?php echo DOL_URL_ROOT ?>/fluxpos/public/auto_order.php?mobilepage=invoice&action=updateqty&token=<?php echo newToken(); ?>&place="+place+"&idline="+selectedline+"&number="+qty, function() {
 		});
 		LoadCats();
 	}
@@ -260,7 +260,7 @@ if ($action == "productinfo" && $user->hasRight('takepos', 'run')) {
 		console.log("We click on LoadCats()");
 		<?php
 			// Load invoice.php to get categories by using auto_order so it will define INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE
-			echo '$("#phonediv1").load("'.DOL_URL_ROOT.'/takepos/public/auto_order.php?format=div&mobilepage=cats&place="+place+" #tablelines", function() {
+			echo '$("#phonediv1").load("'.DOL_URL_ROOT.'/fluxpos/public/auto_order.php?format=div&mobilepage=cats&place="+place+" #tablelines", function() {
 			});';
 		?>
 	}
@@ -268,7 +268,7 @@ if ($action == "productinfo" && $user->hasRight('takepos', 'run')) {
 	function LoadProducts(idcat) {
 		console.log("We click on LoadProducts()");
 		<?php
-			echo '$("#phonediv1").load("'.DOL_URL_ROOT.'/takepos/public/auto_order.php?format=div&mobilepage=products&catid="+idcat+"&place="+place+"", function() {
+			echo '$("#phonediv1").load("'.DOL_URL_ROOT.'/fluxpos/public/auto_order.php?format=div&mobilepage=products&catid="+idcat+"&place="+place+"", function() {
 			});';
 		?>
 	}
@@ -278,10 +278,10 @@ if ($action == "productinfo" && $user->hasRight('takepos', 'run')) {
 		});
 	}
 
-	function TakeposPrintingOrder(){
-		console.log("TakeposPrintingOrder");
+	function FluxPosPrintingOrder(){
+		console.log("FluxPosPrintingOrder");
 		<?php
-		echo '$("#phonediv2").load("'.DOL_URL_ROOT.'/takepos/public/auto_order.php?action=order&token='.newToken().'&mobilepage=order&place="+place, function() {
+		echo '$("#phonediv2").load("'.DOL_URL_ROOT.'/fluxpos/public/auto_order.php?action=order&token='.newToken().'&mobilepage=order&place="+place, function() {
 			});';
 		?>
 	}
@@ -294,12 +294,12 @@ if ($action == "productinfo" && $user->hasRight('takepos', 'run')) {
 	function CheckPlease(payment){
 		console.log("Click on CheckPlease");
 		if (payment==undefined){
-			$("#phonediv1").load("<?php echo DOL_URL_ROOT ?>/takepos/public/auto_order.php?action=checkplease&token=<?php echo newToken(); ?>&place="+place, function() {
+			$("#phonediv1").load("<?php echo DOL_URL_ROOT ?>/fluxpos/public/auto_order.php?action=checkplease&token=<?php echo newToken(); ?>&place="+place, function() {
 			});
 		}
 		else{
 			console.log("Request the check to the waiter");
-			$("#phonediv1").load("<?php echo DOL_URL_ROOT ?>/takepos/public/auto_order.php?action=checkplease&token=<?php echo newToken(); ?>&place=<?php echo urlencode($place); ?>&payment="+payment, function() {
+			$("#phonediv1").load("<?php echo DOL_URL_ROOT ?>/fluxpos/public/auto_order.php?action=checkplease&token=<?php echo newToken(); ?>&place=<?php echo urlencode($place); ?>&payment="+payment, function() {
 			});
 		}
 	}
@@ -308,8 +308,8 @@ if ($action == "productinfo" && $user->hasRight('takepos', 'run')) {
 
 
 	<?php
-	if (getDolGlobalString('TAKEPOS_NUM_TERMINALS') != "1" && $_SESSION["takeposterminal"] == "") {
-		print '<div class="dialog-info-takepos-terminal" id="dialog-info" title="TakePOS">'.$langs->trans('TerminalSelect').'</div>';
+	if (getDolGlobalString('FLUXPOS_NUM_TERMINALS') != "1" && $_SESSION["fluxposterminal"] == "") {
+		print '<div class="dialog-info-fluxpos-terminal" id="dialog-info" title="FluxPos">'.$langs->trans('TerminalSelect').'</div>';
 	}
 }
 

@@ -20,7 +20,7 @@
  */
 
 /**
- *  \file           htdocs/takepos/class/dolreceiptprinter.class.php
+ *  \file           htdocs/fluxpos/class/dolreceiptprinter.class.php
  *  \brief          Print receipt ticket on various ESC/POS printer
  */
 
@@ -677,7 +677,7 @@ class dolReceiptPrinter extends Printer
 			}
 			if ($object->pos_print_counter > 1) {
 				$this->template .= "{dol_print_text}*** ".$langs->transnoentities("DUPLICATA");
-				if (getDolGlobalString('TAKEPOS_SHOW_PRINT_COUNTER_ON_RECEIPT')) {
+				if (getDolGlobalString('FLUXPOS_SHOW_PRINT_COUNTER_ON_RECEIPT')) {
 					$this->template .= ' (no '.($object->pos_print_counter - 1).') ***';
 				}
 				$this->template .= "\r\n";
@@ -1014,7 +1014,7 @@ class dolReceiptPrinter extends Printer
 						}
 						break;
 					case 'DOL_VALUE_PLACE':
-						$sql = "SELECT floor, label FROM ".$this->db->prefix()."takepos_floor_tables where rowid=".((int) str_replace(")", "", str_replace("(PROV-POS".$_SESSION["takeposterminal"]."-", "", $object->ref)));
+						$sql = "SELECT floor, label FROM ".$this->db->prefix()."fluxpos_floor_tables where rowid=".((int) str_replace(")", "", str_replace("(PROV-POS".$_SESSION["fluxposterminal"]."-", "", $object->ref)));
 						$resql = $this->db->query($sql);
 						$obj = $this->db->fetch_object($resql);
 						if ($obj) {
@@ -1037,9 +1037,9 @@ class dolReceiptPrinter extends Printer
 			}
 			// If is DummyPrintConnector send to log to debugging
 			$connector = $this->printer->connector;
-			if ($connector instanceof DummyPrintConnector || getDolGlobalString('TAKEPOS_PRINT_METHOD') == "takeposconnector") {
+			if ($connector instanceof DummyPrintConnector || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector") {
 				$data = $connector->getData();
-				if (getDolGlobalString('TAKEPOS_PRINT_METHOD') == "takeposconnector") {
+				if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector") {
 					echo rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
 				}
 				dol_syslog($data);
@@ -1100,7 +1100,7 @@ class dolReceiptPrinter extends Printer
 			return 1;
 		}
 
-		if (getDolGlobalString('TAKEPOS_PRINT_METHOD') == "takeposconnector") {
+		if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector") {
 			$this->connector = new DummyPrintConnector();
 			$this->printer = new Printer($this->connector, $this->profile);
 			return;

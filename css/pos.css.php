@@ -21,8 +21,8 @@
  */
 
 /**
- *		\file       htdocs/takepos/css/pos.css.php
- *		\brief      File for CSS style for TakePOS
+ *		\file       htdocs/fluxpos/css/pos.css.php
+ *		\brief      File for CSS style for FluxPos
  */
 
 //if (! defined('NOREQUIREUSER')) define('NOREQUIREUSER','1');	// Not disabled because need to load personalized language
@@ -78,12 +78,12 @@ html,body {
 	width:100%;
 }
 
-.bodytakepos {
+.bodyfluxpos {
 	background-color: var(--colorbackgrey);
 }
 
 /* Fix dropdown user menu clipped by overflow:hidden on body and #topnav under MD theme */
-.bodytakepos#topmenu-login-dropdown.dropdown-menu{
+.bodyfluxpos#topmenu-login-dropdown.dropdown-menu{
 	position:fixed;
 	top:45px;
 	left:auto;
@@ -92,19 +92,19 @@ html,body {
 	max-height:calc(100vh-50px);
 }
 
-/* Fix dropdown user-header layout missing .side-nav-vert context under TakePOS */
-.bodytakepos #topmenu-login-dropdown .dropdown-menu {
+/* Fix dropdown user-header layout missing .side-nav-vert context under FluxPos */
+.bodyfluxpos #topmenu-login-dropdown .dropdown-menu {
 	line-height: 1.3em;
 }
 
-.bodytakepos #topmenu-login-dropdown .dropdown-menu > .user-header {
+.bodyfluxpos #topmenu-login-dropdown .dropdown-menu > .user-header {
 	min-height: 100px;
 	padding: 10px;
 	text-align: center;
 	white-space: normal;
 }
 
-.bodytakepos div.login_block_user {
+.bodyfluxpos div.login_block_user {
 	text-align: right;
 }
 
@@ -254,7 +254,7 @@ div[aria-describedby="dialog-info"].ui-dialog .ui-dialog-buttonpane {
 	border-width: 0;
 }
 
-.takepospay {
+.fluxpospay {
 	font-size: 1.5em;
 	height: 40px !important;
 }
@@ -373,7 +373,7 @@ div.paymentbordline
 	height: 100%;
 	margin: 0 auto;
 	<?php
-	if (getDolGlobalString('TAKEPOS_USE_ARROW_ON_NAVBAR')) {
+	if (getDolGlobalString('FLUXPOS_USE_ARROW_ON_NAVBAR')) {
 		?>
 		overflow-x: hidden;
 		overfloy-y: scroll;
@@ -592,7 +592,7 @@ p.description_content{
 div.description_content {
 	display: -webkit-box;
 	-webkit-box-orient: vertical;
-	-webkit-line-clamp: <?php echo getDolGlobalInt('TAKEPOS_LINES_TO_SHOW', 2); ?>;
+	-webkit-line-clamp: <?php echo getDolGlobalInt('FLUXPOS_LINES_TO_SHOW', 2); ?>;
 	overflow: hidden;
 	padding-left: 2px;
 	padding-right: 2px;
@@ -693,7 +693,7 @@ div.description_content {
 }
 
 
-.login_block_other.takepos {
+.login_block_other.fluxpos {
 	margin-top: 5px;
 }
 
@@ -831,7 +831,7 @@ div#moreinfo, div#infowarehouse {
 		min-height: 30px;
 	}
 
-	.takepospay {
+	.fluxpospay {
 		font-size: 1.2em;
 	}
 
@@ -964,7 +964,7 @@ div#moreinfo, div#infowarehouse {
 	display: none;
 }
 
-#dialogforpopuptakepos {
+#dialogforpopupfluxpos {
 	display: none;
 	position: fixed;
 	top: 20px;
@@ -978,7 +978,7 @@ div#moreinfo, div#infowarehouse {
 	font-family: sans-serif;
 }
 
-.takeposofflinestatus {
+.fluxposofflinestatus {
 	display: none;
 	position: fixed;
 	top: 5px;
@@ -992,11 +992,11 @@ div#moreinfo, div#infowarehouse {
 	font-weight: bold;
 }
 
-.takeposofflinestatus.offline {
+.fluxposofflinestatus.offline {
 	display: block;
 }
 
-.takeposofflinestatus.pending {
+.fluxposofflinestatus.pending {
 	display: block;
 	background-color: #e8a33d;
 	cursor: pointer;
@@ -1004,7 +1004,7 @@ div#moreinfo, div#infowarehouse {
 
 /* Local cart of a place, displayed while the terminal is offline, before the
  * background synchronization replays it to the server. */
-.takeposofflinecart .takeposofflineqtybtn {
+.fluxposofflinecart .fluxposofflineqtybtn {
 	width: 26px;
 	height: 26px;
 	margin: 0 4px;
@@ -1018,21 +1018,21 @@ div#moreinfo, div#infowarehouse {
 	cursor: pointer;
 }
 
-.takeposofflinecart .takeposofflineqtybtn:active {
+.fluxposofflinecart .fluxposofflineqtybtn:active {
 	background-color: #244a70;
 }
 
-.takeposofflinecart .takeposofflineqtyval {
+.fluxposofflinecart .fluxposofflineqtyval {
 	display: inline-block;
 	min-width: 28px;
 	font-weight: bold;
 }
 
-.takeposofflinecart .takeposofflinelabel {
+.fluxposofflinecart .fluxposofflinelabel {
 	white-space: normal;
 }
 
-.takeposofflinenotice {
+.fluxposofflinenotice {
 	margin: 4px 6px;
 	padding: 4px 8px;
 	border: 1px dashed #999999;
@@ -1042,16 +1042,16 @@ div#moreinfo, div#infowarehouse {
 
 /* Payments validated on the terminal, shown on the local cart of a validated sale,
  * before its synchronization registers them on the server. */
-.takeposofflinepayments {
+.fluxposofflinepayments {
 	margin: 0 6px;
 	font-size: 13px;
 }
 
-.takeposofflinepayments.remaining {
+.fluxposofflinepayments.remaining {
 	font-weight: bold;
 }
 
-.takeposofflinepayment .takeposofflinepaymentamount {
+.fluxposofflinepayment .fluxposofflinepaymentamount {
 	font-weight: bold;
 }
 
@@ -1093,7 +1093,7 @@ div#moreinfo, div#infowarehouse {
 		margin-left: 2px;
 	}
 
-	<?php $maxproductgrid = getDolGlobalInt('TAKEPOS_NB_MAXPRODUCT', 24); ?>
+	<?php $maxproductgrid = getDolGlobalInt('FLUXPOS_NB_MAXPRODUCT', 24); ?>
 	.div4 .wrapper.divempty, .div4 img, #prodiv<?php echo($maxproductgrid - 2); ?>, #prodiv<?php echo($maxproductgrid - 1); ?>, .catwatermark {
 		display: none!important;
 	}
@@ -1170,7 +1170,7 @@ div#moreinfo, div#infowarehouse {
 
 
 <?php
-if (!getDolGlobalString('TAKEPOS_USE_ARROW_ON_NAVBAR')) {
+if (!getDolGlobalString('FLUXPOS_USE_ARROW_ON_NAVBAR')) {
 	?>
 
 .arrows {

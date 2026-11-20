@@ -53,7 +53,7 @@ require '../../core/modules/barcode/doc/tcpdfbarcode.modules.php';
 $urlwithouturlroot = preg_replace('/'.preg_quote(DOL_URL_ROOT, '/').'$/i', '', trim($dolibarr_main_url_root));
 $urlwithroot = $urlwithouturlroot.DOL_URL_ROOT; // This is to use external domain name found into config file
 
-if (!isModEnabled('takepos')) {
+if (!isModEnabled('fluxpos')) {
 	accessforbidden('Module not enabled');
 }
 
@@ -67,8 +67,8 @@ if (!isModEnabled('takepos')) {
 if (GETPOSTISSET("key")) {
 	$key = GETPOST('key');
 	$module = new modTcpdfbarcode();
-	$result = $module->buildBarCode($urlwithroot."/takepos/public/auto_order.php?key=".urlencode($key), 'QRCODE', 'Y');
+	$result = $module->buildBarCode($urlwithroot."/fluxpos/public/auto_order.php?key=".urlencode($key), 'QRCODE', 'Y');
 } else {
 	$module = new modTcpdfbarcode();
-	$result = $module->buildBarCode($urlwithroot."/takepos/public/menu.php", 'QRCODE', 'Y');
+	$result = $module->buildBarCode($urlwithroot."/fluxpos/public/menu.php", 'QRCODE', 'Y');
 }
