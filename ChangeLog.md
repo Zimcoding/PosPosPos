@@ -2,6 +2,8 @@
 
 ## 1.0.3
 
+- Fixed a PHP syntax error (stray quote) in the "back to module list" link on every module setup page (admin/setup.php, appearance.php, bar.php, receipt.php, terminal.php). The setup screens returned a blank HTTP 500 because the page did not compile.
+- A GitHub Actions workflow now runs `php -l` on every PHP file and a syntax check on every JS file on each push and pull request, so a compile error can no longer reach main unnoticed.
 - The base URL of the module (used by the offline engine to reach ajax/ajax.php and the service worker) is now derived from the actual location of the running page instead of `dol_buildpath('/fluxpos/', 1)`. `dol_buildpath()` cannot resolve the URL of a directory, so it returned the url of the core location and the catalog synchronization was sent to `/fluxpos/ajax/ajax.php` and refused (HTTP 403) on a custom installation.
 - The service worker cache is renewed (`fluxpos-offline-v3`), so terminals drop their cached pages and scripts after the update.
 
