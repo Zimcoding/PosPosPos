@@ -42,7 +42,7 @@ if (!defined('NOREQUIREAJAX')) {
 }
 
 // Load Dolibarr environment
-require '../main.inc.php'; // Load $user and permissions
+require_once __DIR__.'/mainenv.php'; // Load $user and permissions
 /**
  * @var DoliDB $db
  * @var Translate $langs
@@ -74,8 +74,8 @@ if (!$user->hasRight('fluxpos', 'run')) {
  * View
  */
 
-$arrayofcss = array('/fluxpos/css/pos.css.php');
-$arrayofjs = array('/fluxpos/js/jquery.colorbox-min.js');
+$arrayofcss = array(dol_buildpath('/fluxpos/css/pos.css.php', 1));
+$arrayofjs = array(dol_buildpath('/fluxpos/js/jquery.colorbox-min.js', 1));
 
 $head = '';
 top_htmlhead($head, '', 0, 0, $arrayofjs, $arrayofcss);

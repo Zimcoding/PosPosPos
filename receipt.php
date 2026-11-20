@@ -53,7 +53,7 @@ if (!isset($action)) {
 		define('NOREQUIREAJAX', '1');
 	}
 
-	require '../main.inc.php'; // If this file is called from send.php avoid load again
+	require_once __DIR__.'/mainenv.php'; // If this file is called from send.php avoid load again
 }
 /**
  * @var Conf $conf

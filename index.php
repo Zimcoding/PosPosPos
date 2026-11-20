@@ -41,7 +41,7 @@ if (!defined('NOREQUIREAJAX')) {
 }
 
 // Load Dolibarr environment
-require '../main.inc.php'; // Load $user and permissions
+require_once __DIR__.'/mainenv.php'; // Load $user and permissions
 /**
  * @var Conf $conf
  * @var DoliDB $db
@@ -119,11 +119,11 @@ $form = new Form($db);
 
 $disablejs = 0;
 $disablehead = 0;
-$arrayofjs = array('/fluxpos/js/jquery.colorbox-min.js', '/fluxpos/js/offline.js'); // TODO It seems we don't need colorbox
-$arrayofcss = array('/fluxpos/css/pos.css.php', '/fluxpos/css/colorbox.css');
+$arrayofjs = array(dol_buildpath('/fluxpos/js/jquery.colorbox-min.js', 1), dol_buildpath('/fluxpos/js/offline.js', 1)); // TODO It seems we don't need colorbox
+$arrayofcss = array(dol_buildpath('/fluxpos/css/pos.css.php', 1), dol_buildpath('/fluxpos/css/colorbox.css', 1));
 
 if (getDolGlobalInt('FLUXPOS_COLOR_THEME') == 1) {
-	$arrayofcss[] =  '/fluxpos/css/colorful.css';
+	$arrayofcss[] =  dol_buildpath('/fluxpos/css/colorful.css', 1);
 }
 
 

@@ -46,7 +46,7 @@ if (!defined('NOREQUIREAJAX')) {
 
 // Load Dolibarr environment
 if (!defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE')) {
-	require '../main.inc.php';
+	require_once __DIR__.'/mainenv.php';
 }
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.form.class.php';
 require_once DOL_DOCUMENT_ROOT.'/core/class/hookmanager.class.php';
@@ -1540,9 +1540,9 @@ if (defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE')) {
 	<meta name="mobile-web-app-capable" content="yes">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>';
 	$arrayofcss = array(
-		'/fluxpos/css/pos.css.php',
+		dol_buildpath('/fluxpos/css/pos.css.php', 1),
 	);
-	$arrayofjs = array('/fluxpos/js/jquery.colorbox-min.js');
+	$arrayofjs = array(dol_buildpath('/fluxpos/js/jquery.colorbox-min.js', 1));
 	$disablejs = 0;
 	$disablehead = 0;
 	top_htmlhead($head, $title, $disablejs, $disablehead, $arrayofjs, $arrayofcss);

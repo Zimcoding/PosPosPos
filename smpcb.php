@@ -36,7 +36,7 @@ if (!defined('NOREQUIREAJAX')) {
 }
 
 // Load Dolibarr environment
-require '../main.inc.php';
+require_once __DIR__.'/mainenv.php';
 /**
  * @var User $user
  */

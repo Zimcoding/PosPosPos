@@ -26,7 +26,7 @@
  */
 
 // Load Dolibarr environment
-require '../../main.inc.php'; // Load $user and permissions
+require_once __DIR__.'/../mainenv.php'; // Load $user and permissions
 /**
  * @var Conf $conf
  * @var DoliDB $db
@@ -93,11 +93,11 @@ $form = new Form($db);
 $formproduct = new FormProduct($db);
 
 $arrayofjs = array();
-$arrayofcss = array("/fluxpos/css/colorbox.css");
+$arrayofcss = array(dol_buildpath('/fluxpos/css/colorbox.css', 1));
 
 llxHeader('', $langs->trans("CashDeskSetup"), '', '', 0, 0, $arrayofjs, $arrayofcss, '', 'mod-fluxpos page-admin_bar');
 
-$linkback = '<a href="'.dolBuildUrl(DOL_URL_ROOT.'/admin/modules.php', ['restore_lastsearch_values' => 1]).'">'.img_picto($langs->trans("BackToModuleList"), 'back', 'class="pictofixedwidth"').'<span class="hideonsmartphone">'.$langs->trans("BackToModuleList").'</span></a>';
+$linkback = '<a href="'.DOL_URL_ROOT.'/admin/modules.php?restore_lastsearch_values=1'">'.img_picto($langs->trans("BackToModuleList"), 'back', 'class="pictofixedwidth"').'<span class="hideonsmartphone">'.$langs->trans("BackToModuleList").'</span></a>';
 
 print load_fiche_titre($langs->trans("CashDeskSetup").' (FluxPos)', $linkback, 'title_setup');
 $head = fluxpos_admin_prepare_head();
@@ -110,7 +110,7 @@ print '<input type="hidden" name="token" value="'.newToken().'">';
 print '<input type="hidden" name="action" value="set">';
 
 ?>
-<script type="text/javascript" src="<?php echo dol_buildpath('/fluxpos/js/jquery.colorbox-min.js', 1) ?>"></script>	<!-- TODO It seems we don't need this -->
+<script type="text/javascript" src="<?php echo dol_buildpath(dol_buildpath('/fluxpos/js/jquery.colorbox-min.js', 1), 1) ?>"></script>	<!-- TODO It seems we don't need this -->
 <script type="text/javascript">
 function Floors() {
 	console.log("Open box to select floor");
@@ -228,7 +228,7 @@ if (getDolGlobalInt('FLUXPOS_BAR_RESTAURANT')) {
 		print '<a target="_blank" rel="noopener noreferrer" href="'.dol_buildpath('/fluxpos/public/menu.php', 1).'">'.dol_buildpath('/fluxpos/public/menu.php', 1).'</a>';
 		print '</td>';
 		print '<td class="right">';
-		print '<a target="_blank" rel="noopener noreferrer" href="printqr.php"><img src="'.dol_buildpath('/fluxpos/genimg/qr.php', 1).'" height="42" width="42"></a>';
+		print '<a target="_blank" rel="noopener noreferrer" href="printqr.php"><img src="'.dol_buildpath(dol_buildpath('/fluxpos/genimg/qr.php', 1), 1).'" height="42" width="42"></a>';
 		print '</td></tr>';
 		print '</table>';
 		print '</div>';
@@ -256,7 +256,7 @@ if (getDolGlobalInt('FLUXPOS_BAR_RESTAURANT')) {
 			print '<a target="_blank" rel="noopener noreferrer" href="'.dol_buildpath('/fluxpos/public/menu.php', 1).'">'.dol_buildpath('/fluxpos/public/menu.php', 1).'</a>';
 			print '</td>';
 			print '<td class="right">';
-			print '<a target="_blank" rel="noopener noreferrer" href="printqr.php?id='.$row['rowid'].'"><img src="'.dol_buildpath('/fluxpos/genimg/qr.php', 1).'?key='.dol_encode($row['rowid']).'" height="42" width="42"></a>';
+			print '<a target="_blank" rel="noopener noreferrer" href="printqr.php?id='.$row['rowid'].'"><img src="'.dol_buildpath(dol_buildpath('/fluxpos/genimg/qr.php', 1), 1).'?key='.dol_encode($row['rowid']).'" height="42" width="42"></a>';
 			print '</td></tr>';
 		}
 
