@@ -1040,6 +1040,47 @@ div#moreinfo, div#infowarehouse {
 	font-size: 12px;
 }
 
+/* Payments validated on the terminal, shown on the local cart of a validated sale,
+ * before its synchronization registers them on the server. */
+.takeposofflinepayments {
+	margin: 0 6px;
+	font-size: 13px;
+}
+
+.takeposofflinepayments.remaining {
+	font-weight: bold;
+}
+
+.takeposofflinepayment .takeposofflinepaymentamount {
+	font-weight: bold;
+}
+
+/* Dialog used to pay and validate a sale captured while the terminal is offline. */
+.offlinepaytotal {
+	font-weight: bold;
+	font-size: 1.2em;
+	margin-bottom: 8px;
+}
+
+.offlinepayrow {
+	display: flex;
+	align-items: center;
+	margin-bottom: 6px;
+}
+
+.offlinepaymode {
+	min-width: 110px;
+}
+
+.offlinepayamount {
+	width: 130px;
+}
+
+.offlinepayreturned {
+	font-weight: bold;
+	margin: 6px 0;
+}
+
 
 @media screen and (max-width: 767px) {
 	.div4 {

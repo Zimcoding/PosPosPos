@@ -30,6 +30,13 @@
  *				The local carts are replayed in background to the syncOfflineOrder endpoint
  *				of ajax/ajax.php when the connection is back, without interrupting the
  *				capture of new orders.
+ *
+ *				Phase 3 (offline payment and validation): the cashier can pay and validate
+ *				an order captured while offline (cash, credit card or cheque, with change
+ *				given for cash). The validated order is locked on the terminal and its
+ *				replay validates the sale with the invoice number and records the payments
+ *				exactly like the online payment screen; the receipt is printed by the server
+ *				receipt printer at the same moment.
  */
 
 var TakePOSOfflineDBName = 'takepos';
@@ -279,6 +286,10 @@ var TakePOSOffline = {
 			if (cart == null) {
 				cart = { place: String(place), socid: socid, created: Math.floor(Date.now() / 1000), lines: [] };
 			}
+			if (cart.validated) {
+				window.alert('This sale has been validated on this terminal and is waiting for its synchronization to the server. It cannot be modified anymore.');
+				return false;
+			}
 			return takePOSOfflineStoreGet('products:' + socid + ':__all__').then(function (allproducts) {
 				var product = (allproducts && allproducts[idproduct]) ? allproducts[idproduct] : null;
 				if (product == null) {
@@ -319,6 +330,10 @@ var TakePOSOffline = {
 			if (cart == null) {
 				return false;
 			}
+			if (cart.validated) {
+				window.alert('This sale has been validated on this terminal and is waiting for its synchronization to the server. It cannot be modified anymore.');
+				return false;
+			}
 			for (var i = 0; i < cart.lines.length; i++) {
 				if (String(cart.lines[i].rowid) == String(idproduct)) {
 					cart.lines[i].qty = Math.round((cart.lines[i].qty + parseFloat(delta)) * 1000) / 1000;
@@ -331,6 +346,44 @@ var TakePOSOffline = {
 				}
 			}
 			return false;
+		});
+	},
+
+	/**
+	 * Validate the local cart of the current place and record the payments captured
+	 * on the terminal (same intent as invoice.php action=valid). A negative amount
+	 * means "take the missing amount from the customer" (the server will use the
+	 * remain to pay). The cart is locked: it can no more be modified until its
+	 * synchronization, which will validate the sale (invoice number) and record the
+	 * payments exactly like the online payment screen does.
+	 *
+	 * @param  {Array} payments Payments captured: [{pay: 'LIQ'|'CB'|'CHQ'|..., amount, excess}]
+	 * @returns {Promise<bool>} Promise of true when the cart has been validated
+	 */
+	validateCart: function (payments) {
+		'use strict';
+
+		var self = this;
+		payments = payments || [];
+		return this.getCart().then(function (cart) {
+			if (cart == null || !cart.lines.length) {
+				window.alert('There is no order captured on this place.');
+				return false;
+			}
+			if (cart.validated) {
+				window.alert('This sale has been validated on this terminal and is waiting for its synchronization to the server.');
+				return false;
+			}
+			var total = 0;
+			for (var i = 0; i < cart.lines.length; i++) {
+				total += cart.lines[i].price_ttc * cart.lines[i].qty;
+			}
+			cart.total_ttc = Math.round(total * 100) / 100;
+			cart.payments = payments;
+			cart.validated = true;
+			return self.saveCart(cart).then(function () {
+				return self.renderCart();
+			});
 		});
 	},
 
@@ -379,8 +432,10 @@ var TakePOSOffline = {
 		}
 		return this.getCart().then(function (cart) {
 			var lines = (cart && cart.lines) ? cart.lines : [];
+			var payments = (cart && cart.payments) ? cart.payments : [];
+			var validated = (cart != null && cart.validated === true);
 			var html = '';
-			var i, line, total = 0;
+			var i, line, posnochange, total = 0;
 
 			for (i = 0; i < lines.length; i++) {
 				total += lines[i].price_ttc * lines[i].qty;
@@ -400,16 +455,38 @@ var TakePOSOffline = {
 				html += '<tr class="drag drop oddeven posinvoiceline takeposofflinecartline">';
 				html += '<td class="left"><span class="takeposofflinelabel">' + self.escapeHtml(line.label) + '</span></td>';
 				html += '<td class="right nowraponall takeposofflineqty">';
-				html += '<button type="button" class="takeposofflineqtybtn" onclick="TakePOSOffline.changeQty(' + line.rowid + ', -1);">-</button>';
+				if (!validated) {
+					html += '<button type="button" class="takeposofflineqtybtn" onclick="TakePOSOffline.changeQty(' + line.rowid + ', -1);">-</button>';
+				}
 				html += '<span class="takeposofflineqtyval">' + self.escapeHtml(line.qty) + '</span>';
-				html += '<button type="button" class="takeposofflineqtybtn" onclick="TakePOSOffline.changeQty(' + line.rowid + ', 1);">+</button>';
+				if (!validated) {
+					html += '<button type="button" class="takeposofflineqtybtn" onclick="TakePOSOffline.changeQty(' + line.rowid + ', 1);">+</button>';
+				}
 				html += '</td>';
 				html += '<td class="right takeposofflinetotal">' + self.formatAmount(line.price_ttc * line.qty) + '</td>';
 				html += '</tr>';
 			}
 			html += '<tr class="liste_total"><td colspan="2" class="right">' + self.escapeHtml(self.t('TotalTTCShort', 'Total')) + '</td><td class="right">' + self.formatAmount(total) + '</td></tr>';
 			html += '</table>';
-			if (lines.length) {
+
+			// Payments validated on the terminal
+			if (validated) {
+				var paid = 0;
+				html += '<div class="takeposofflinepayments">';
+				for (i = 0; i < payments.length; i++) {
+					posnochange = (payments[i].pay == 'LIQ' && payments[i].excess) ? ' - ' + self.escapeHtml(self.t('Change', 'Change')) + ' ' + self.formatAmount(payments[i].excess) : '';
+					html += '<div class="takeposofflinepayment">' + self.escapeHtml(self.t('PaymentTypeShort' + payments[i].pay, payments[i].pay)) + ' : <span class="takeposofflinepaymentamount">' + self.formatAmount(payments[i].amount) + posnochange + '</span></div>';
+					paid += parseFloat(payments[i].amount) || 0;
+				}
+				html += '</div>';
+				if (Math.round(total * 100) / 100 > Math.round(paid * 100) / 100) {
+					html += '<div class="takeposofflinepayments remaining">' + self.escapeHtml(self.t('RemainToPay', 'Remain to pay')) + ' : <span class="takeposofflinepaymentamount">' + self.formatAmount(total - paid) + '</span></div>';
+				}
+			}
+
+			if (validated) {
+				html += '<div class="takeposofflinenotice">' + 'This sale is validated. It has been safely stored with its payments: its invoice number and its receipt will be issued by the server as soon as the synchronization can be done.' + '</div>';
+			} else if (lines.length) {
 				html += '<div class="takeposofflinenotice">' + (navigator.onLine ? 'This order is synchronized to the server in background. Payment will be available as soon as the synchronization is done.' : 'This order is stored on this terminal and will be synchronized to the server when the connection is back.') + '</div>';
 			} else {
 				html += '<div class="takeposofflinenotice opacitymedium">Offline mode: a new order can be captured, it will be synchronized to the server when the connection is back. An order already registered on the server is shown again when the connection is back.</div>';
@@ -633,14 +710,20 @@ var TakePOSOffline = {
 						return jQuery.ajax(url, {
 							method: 'POST',
 							contentType: 'application/json; charset=utf-8',
-							data: JSON.stringify({ place: cart.place, thirdpartyid: cart.socid, lines: lines }),
+							data: JSON.stringify({
+								place: cart.place,
+								thirdpartyid: cart.socid,
+								lines: lines,
+								valid: (cart.validated === true),
+								payments: (cart.validated === true && cart.payments) ? cart.payments : []
+							}),
 							dataType: 'json'
 						}).then(function (data) {
 							if (data && data.error) {
 								console.log('TakePOS offline: synchronization of the order of place ' + cart.place + ' failed: ' + data.error);
 								return false;
 							}
-							console.log('TakePOS offline: order of place ' + cart.place + ' synchronized to the server');
+							console.log('TakePOS offline: order of place ' + cart.place + ' synchronized to the server' + (data && data.ref ? ' (invoice ' + data.ref + (data.paid ? ', paid' : '') + ')' : ''));
 							return takePOSOfflineStoreDelete(key).then(function () {
 								if (plc === currentplace && typeof Refresh == 'function') {
 									// Reload the order of the current place from the server

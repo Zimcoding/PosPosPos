@@ -113,6 +113,61 @@ function getTakePosProductsForCategory($categid, $pricelevel)
 }
 
 /**
+ * Send the receipt of an invoice to the receipt printer of a terminal.
+ * Same behavior as the printinvoiceticket action, usable from other actions, for
+ * example to print automatically the receipt of a sale validated offline, at the
+ * moment its synchronization reaches the server. Does nothing when no receipt
+ * printer is configured for the terminal.
+ *
+ * @param  int    $id   ID of invoice to print
+ * @param  string $term Terminal number
+ * @param  User   $user User asking the printing
+ * @return void
+ */
+function takeposPrintInvoiceTicket($id, $term, $user)
+{
+	global $db;
+
+	if (empty($id) || $id <= 0) {
+		return;
+	}
+
+	require_once DOL_DOCUMENT_ROOT.'/takepos/class/dolreceiptprinter.class.php';
+	require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
+
+	// check printer for terminal
+	if (getDolGlobalInt('TAKEPOS_PRINTER_TO_USE'.$term) <= 0 && getDolGlobalString('TAKEPOS_PRINT_METHOD') != "takeposconnector") {
+		return;
+	}
+
+	$object = new Facture($db);
+	$object->fetch($id);
+
+	$resultinccounter = 0;
+	$templateidtouse = 0;
+
+	// Increase of counter is managed by the file that generate the ticket, so "receipt.php"
+
+	// Call trigger to log the $action 'DOC_PREVIEW' or 'DOC_DOWNLOAD'
+	$result = $object->call_trigger('DOC_PREVIEW', $user);
+
+	if ($result >= 0) {
+		$resultinccounter++;
+		$object->pos_print_counter++;	// increase counter to match the change in database
+
+		$templateidtouse = getDolGlobalInt('TAKEPOS_TEMPLATE_TO_USE_FOR_INVOICES'.$term);	// Note that this may not be ignored by the sendToPrinter()
+	}
+
+	if ($resultinccounter) {
+		// Send to printer
+		$printer = new dolReceiptPrinter($db);
+		$printer->sendToPrinter($object, $templateidtouse, getDolGlobalInt('TAKEPOS_PRINTER_TO_USE'.$term));
+	} else {
+		print 'Failed to update print counter for object ID='.$object->id.' so we refuse to print.';
+	}
+}
+
+/**
  * Synchronize an offline order into the draft invoice of a place.
  * The draft invoice of the place is created if it does not exist yet (same rules as
  * invoice.php action=addline), then its product lines are reconciled with the line
@@ -125,19 +180,30 @@ function getTakePosProductsForCategory($categid, $pricelevel)
  * the operation is idempotent: it can be replayed at any time (retry after a failure,
  * background synchronization) without duplicating lines.
  *
- * @param  string $place Place (table) of the order
- * @param  array  $lines Array of captured lines: array('id' => product id, 'qty' => qty)
- * @param  int    $socid Thirdparty id to use if the invoice must be created
- * @return array         Result info: array('placeid', 'socid', 'total_ttc') or array('error' => ...)
+ * When a list of payments is provided, the sale is then validated and paid exactly
+ * like invoice.php action=valid does (validation with or without stock move, cash
+ * fence check, payment recorded into the bank account of the terminal for its
+ * payment mode, credit note conversion of a negative sale, change given for cash).
+ * The invoice number is attributed by the numbering module of Dolibarr at the
+ * validation, so an order paid on a terminal while offline keeps a regular and
+ * in-series invoice number. The receipt is printed automatically when the validation
+ * is made by this call and a receipt printer is configured for the terminal.
+ *
+ * @param  string $place    Place (table) of the order
+ * @param  array  $lines    Array of captured lines: array('id' => product id, 'qty' => qty)
+ * @param  int    $socid    Thirdparty id to use if the invoice must be created
+ * @param  array  $payments Payments captured on the terminal: array('pay' => 'cash'|'card'|'cheque'|'LIQ'|..., 'amount', 'excess', 'accountid')
+ * @param  bool   $valid    Validate the sale and record the payments
+ * @return array            Result info: array('placeid', 'socid', 'total_ttc', 'ref', 'paid') or array('error' => ...)
  */
-function takeposSyncOfflineOrder($place, $lines, $socid)
+function takeposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $valid = false)
 {
 	global $conf, $db, $langs, $mysoc, $user;
 
 	require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
 	require_once DOL_DOCUMENT_ROOT.'/core/lib/functions2.lib.php';
 
-	$langs->loadLangs(array("bills", "errors"));
+	$langs->loadLangs(array("bills", "errors", "admin", "takepos@takepos"));
 
 	$takeposterminal = empty($_SESSION['takeposterminal']) ? 1 : $_SESSION['takeposterminal'];
 	$constforcompanyid = 'CASHDESK_ID_THIRDPARTY'.$takeposterminal;
@@ -276,7 +342,204 @@ function takeposSyncOfflineOrder($place, $lines, $socid)
 		}
 	}
 
+	if ($valid) {
+		if (!$haslines) {
+			$db->rollback();
+			return array('error' => $langs->trans("NoLinesToBill", "TakePOS"));
+		}
+
+		// Test that the period is not close: a cash control closed for today on this
+		// terminal blocks any sale (same as invoice.php)
+		$tmpcurrentday = dol_getdate(dol_now());
+		$sql = "SELECT MIN(ref) as firstref FROM ".MAIN_DB_PREFIX."pos_cash_fence";
+		$sql .= " WHERE entity = ".((int) $conf->entity);
+		$sql .= " AND posnumber = ".((int) $takeposterminal);
+		$sql .= " AND year_close = ".((int) $tmpcurrentday['year']);
+		$sql .= " AND (";
+		$sql .= " (month_close IS NULL AND day_close IS NULL)";
+		$sql .= " OR (month_close = ".((int) $tmpcurrentday['mon'])." AND day_close IS NULL)";
+		$sql .= " OR (month_close = ".((int) $tmpcurrentday['mon'])." AND day_close = ".((int) $tmpcurrentday['mday']).")";
+		$sql .= ")";
+		$sql .= " AND status = 1";
+		$resql = $db->query($sql);
+		if ($resql) {
+			$obj = $db->fetch_object($resql);
+			if ($obj && $obj->firstref) {
+				$db->rollback();
+				return array('error' => $langs->trans("ACashControlHasBeenclosedForCurrentDay", $obj->firstref));
+			}
+		}
+
+		$invoicewasdraft = ($invoice->status == Facture::STATUS_DRAFT);
+
+		// Draft invoice with a negative total: transform into a credit note of the last
+		// validated invoice of the customer (same as invoice.php)
+		if ($invoicewasdraft && $invoice->total_ttc < 0) {
+			$invoice->type = $invoice::TYPE_CREDIT_NOTE;
+
+			$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."facture";
+			$sql .= " WHERE entity IN (".getEntity('invoice').")";
+			$sql .= " AND fk_soc = ".((int) $invoice->socid);
+			$sql .= " AND type <> ".Facture::TYPE_CREDIT_NOTE;
+			$sql .= " AND fk_statut >= ".$invoice::STATUS_VALIDATED;
+			$sql .= " ORDER BY rowid DESC";
+
+			$fk_source = 0;
+			$resql = $db->query($sql);
+			if ($resql) {
+				$obj = $db->fetch_object($resql);
+				if ($obj) {
+					$fk_source = $obj->rowid;
+				}
+			}
+			if ($fk_source == 0) {
+				$db->rollback();
+				return array('error' => $langs->trans("NoPreviousBillForCustomer"));
+			}
+			$invoice->fk_facture_source = $fk_source;
+			$invoice->update($user);
+		}
+
+		// Validation of the draft invoice: the invoice number is attributed here by the
+		// numbering module (same rules as invoice.php for the stock changes)
+		if ($invoice->status == Facture::STATUS_DRAFT) {
+			$constantforkey = 'CASHDESK_NO_DECREASE_STOCK'.$takeposterminal;
+			$allowstockchange = (getDolGlobalString($constantforkey) != "1");
+
+			if (isModEnabled('stock') && !isModEnabled('productbatch') && $allowstockchange) {
+				// Validation with a stock change into the warehouse of the terminal
+				$savconst = getDolGlobalString('STOCK_CALCULATE_ON_BILL');
+				$conf->global->STOCK_CALCULATE_ON_BILL = 1;	// To force the change of stock during invoice validation
+				$constantforkey = 'CASHDESK_ID_WAREHOUSE'.$takeposterminal;
+				$res = $invoice->validate($user, '', getDolGlobalInt($constantforkey), 0, 0);
+				$conf->global->STOCK_CALCULATE_ON_BILL = $savconst;
+			} else {
+				// Validation with no change into stock (same as invoice.php)
+				$res = $invoice->validate($user);
+			}
+			if ($res < 0) {
+				$db->rollback();
+				return array('error' => ($invoice->error == 'NotConfigured' ? $langs->trans("NotConfigured").' (TakePOS numbering module)' : $invoice->error));
+			}
+			$validatedhere = true;
+		}
+
+		// Record the payments captured on the terminal (same rules as invoice.php)
+		if (is_array($payments) && count($payments) > 0) {
+			$now = dol_now();
+			require_once DOL_DOCUMENT_ROOT.'/compta/paiement/class/paiement.class.php';
+
+			$lastpaiementid = 0;
+			foreach ($payments as $paymentinfo) {
+				if (!is_array($paymentinfo)) {
+					continue;
+				}
+				$pay = isset($paymentinfo['pay']) ? (string) $paymentinfo['pay'] : '';
+				$paycode = $pay;
+				if ($pay == 'cash') {
+					$paycode = 'LIQ';	// For backward compatibility
+				}
+				if ($pay == 'card') {
+					$paycode = 'CB';	// For backward compatibility
+				}
+				if ($pay == 'cheque') {
+					$paycode = 'CHQ';	// For backward compatibility
+				}
+
+				if ($paycode == 'delayed') {
+					// Payment will be made outside the POS
+					if (getDolGlobalInt("TAKEPOS_DELAYED_TERMS")) {
+						$invoice->setPaymentTerms(getDolGlobalInt("TAKEPOS_DELAYED_TERMS"));
+					}
+					continue;
+				}
+
+				// Search the payment mode id from its code (same as invoice.php)
+				$paiementid = 0;
+				if ($paycode) {
+					$sql = "SELECT id, code FROM ".MAIN_DB_PREFIX."c_paiement";
+					$sql .= " WHERE active = 1 AND code = '".$db->escape($paycode)."'";
+					$resql = $db->query($sql);
+					if ($resql) {
+						$obj = $db->fetch_object($resql);
+						if ($obj) {
+							$paiementid = $obj->id;
+						}
+					}
+				}
+
+				// Bank account of the terminal for this payment mode (same as invoice.php)
+				$bankaccount = 0;
+				if (!empty($paymentinfo['accountid'])) {
+					$bankaccount = (int) $paymentinfo['accountid'];
+				} elseif ($paycode == 'LIQ') {
+					$bankaccount = getDolGlobalInt('CASHDESK_ID_BANKACCOUNT_CASH'.$takeposterminal);	// For backward compatibility
+				} elseif ($paycode == 'CHQ') {
+					$bankaccount = getDolGlobalInt('CASHDESK_ID_BANKACCOUNT_CHEQUE'.$takeposterminal);	// For backward compatibility
+				} else {
+					$bankaccount = getDolGlobalInt('CASHDESK_ID_BANKACCOUNT_'.$paycode.$takeposterminal);
+				}
+				if ($bankaccount <= 0 && isModEnabled("bank")) {
+					$error++;
+					break;
+				}
+
+				$remaintopay = $invoice->getRemainToPay();
+				if (!(($remaintopay > 0 && $invoice->type != Facture::TYPE_CREDIT_NOTE) || ($remaintopay < 0 && $invoice->type == Facture::TYPE_CREDIT_NOTE))) {
+					continue;	// Nothing more to pay
+				}
+
+				$amountofpayment = (float) (isset($paymentinfo['amount']) ? $paymentinfo['amount'] : 0);
+				// Same rule as invoice.php: a missing amount, or an amount higher than the
+				// remain to pay (money received including the change), is capped to the remain to pay
+				if ($amountofpayment <= 0 || $amountofpayment > $remaintopay) {
+					$amountofpayment = $remaintopay;
+				}
+
+				$payment = new Paiement($db);
+				$payment->datepaye = $now;
+				$payment->fk_account = $bankaccount;
+				if ($paycode == 'LIQ') {
+					$payment->pos_change = !empty($paymentinfo['excess']) ? (float) $paymentinfo['excess'] : 0;
+				}
+				$payment->amounts[$invoice->id] = $amountofpayment;
+				// We do not set $payment->multicurrency_amounts because we want payment to be in main currency
+				$payment->paiementid = $paiementid;
+				$payment->paiementcode = $paycode;
+				$payment->num_payment = '';
+
+				$res = $payment->create($user);		// This record payment and regenerate the PDF
+				if ($res < 0) {
+					$error++;
+					break;
+				}
+				$res = $payment->addPaymentToBank($user, 'payment', '(CustomerInvoicePayment)', $bankaccount, '', '');
+				if ($res < 0) {
+					$error++;
+					break;
+				}
+				$lastpaiementid = $paiementid;
+			}
+
+			// Recalculate the remain to pay after the payments have been recorded
+			$remaintopay = $invoice->getRemainToPay();
+			if ($remaintopay == 0 && $lastpaiementid > 0) {
+				$result = $invoice->setPaid($user);
+				if ($result > 0) {
+					$invoice->paye = 1;
+					$invoice->status = $invoice::STATUS_CLOSED;
+					$invoice->close_code = '';
+				}
+				// set payment method
+				$invoice->setPaymentMethods($lastpaiementid);
+			}
+		}
+	}
+
 	if ($error) {
+		if (!empty($payment) && $payment->error) {
+			return array('error' => $payment->error);
+		}
 		$db->rollback();
 		return array('error' => $invoice->error ? $invoice->error : $db->lasterror());
 	}
@@ -284,7 +547,14 @@ function takeposSyncOfflineOrder($place, $lines, $socid)
 
 	$invoice->fetch($invoice->id);
 
-	return array('placeid' => $invoice->id, 'place' => $place, 'socid' => $invoice->socid, 'total_ttc' => $invoice->total_ttc);
+	// The receipt of a sale validated by this synchronization is printed on the receipt
+	// printer of the terminal when there is one configured (the receipt of a sale paid
+	// with browser printing can be printed from the card of the invoice)
+	if ($validatedhere) {
+		takeposPrintInvoiceTicket($invoice->id, $takeposterminal, $user);
+	}
+
+	return array('placeid' => $invoice->id, 'place' => $place, 'socid' => $invoice->socid, 'total_ttc' => $invoice->total_ttc, 'ref' => $invoice->ref, 'paid' => (int) $invoice->paye);
 }
 
 
@@ -707,7 +977,7 @@ if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
 		exit;
 	}
 
-	$result = takeposSyncOfflineOrder((string) $input['place'], (array) $input['lines'], (!empty($input['thirdpartyid']) ? (int) $input['thirdpartyid'] : 0));
+	$result = takeposSyncOfflineOrder((string) $input['place'], (array) $input['lines'], (!empty($input['thirdpartyid']) ? (int) $input['thirdpartyid'] : 0), (isset($input['payments']) && is_array($input['payments']) ? $input['payments'] : array()), (!empty($input['valid'])));
 	echo json_encode($result);
 } elseif ($action == "opendrawer" && $term != '' && $user->hasRight('takepos', 'run')) {
 	top_httphead('application/html');
@@ -732,44 +1002,7 @@ if ($action == 'getProducts' && $user->hasRight('takepos', 'run')) {
 } elseif ($action == "printinvoiceticket" && $term != '' && $id > 0 && $user->hasRight('takepos', 'run')) {
 	top_httphead('application/html');
 
-	require_once DOL_DOCUMENT_ROOT.'/takepos/class/dolreceiptprinter.class.php';
-	require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
-	$printer = new dolReceiptPrinter($db);
-
-	// check printer for terminal
-	if ((getDolGlobalInt('TAKEPOS_PRINTER_TO_USE'.$term) > 0 || getDolGlobalString('TAKEPOS_PRINT_METHOD') == "takeposconnector")) {
-		$object = new Facture($db);
-		$object->fetch($id);
-
-		$resultinccounter = 0;
-		$templateidtouse = 0;
-
-		/*
-		$url = DOL_URL_ROOT."/blockedlog/ajax/block-add.php?id=".((int) $object->id).'&element='.urlencode($object->element)."&action=DOC_PREVIEW&token=".newToken();
-
-		$result = getURLContent($url, 'GET', '', 1, array(), array('http', 'https'), 2);
-
-		if ((string) $result['http_code'] == '200') {
-		*/
-		// Increase of counter is managed by the file that generate the ticket, so "receipt.php"
-
-		// Call trigger to log the $action 'DOC_PREVIEW' or 'DOC_DOWNLOAD'
-		$result = $object->call_trigger('DOC_PREVIEW', $user);
-
-		if ($result >= 0) {
-			$resultinccounter++;
-			$object->pos_print_counter++;	// increase counter to match the change in database
-
-			$templateidtouse = getDolGlobalInt('TAKEPOS_TEMPLATE_TO_USE_FOR_INVOICES'.$term);	// Note that this may not be ignored by the sendToPrinter()
-		}
-
-		if ($resultinccounter) {
-			// Send to printer
-			$printer->sendToPrinter($object, $templateidtouse, getDolGlobalInt('TAKEPOS_PRINTER_TO_USE'.$term));
-		} else {
-			print 'Failed to update print counter for object ID='.$object->id.' so we refuse to print.';
-		}
-	}
+	takeposPrintInvoiceTicket($id, $term, $user);
 } elseif ($action == 'getInvoice' && $user->hasRight('takepos', 'run')) {
 	top_httphead('application/json');
 
