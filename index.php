@@ -197,7 +197,13 @@ var takeposcurrency = '<?php echo $conf->currency; ?>';
 var takeposlang = {
 	Qty: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("Qty")); ?>',
 	TotalTTCShort: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("TotalTTCShort")); ?>',
-	Empty: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("Empty")); ?>'
+	TotalTTC: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("TotalTTC")); ?>',
+	Empty: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("Empty")); ?>',
+	Change: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("Change")); ?>',
+	RemainToPay: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("RemainToPay")); ?>',
+	PaymentTypeShortLIQ: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("PaymentTypeShortLIQ")); ?>',
+	PaymentTypeShortCB: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("PaymentTypeShortCB")); ?>',
+	PaymentTypeShortCHQ: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("PaymentTypeShortCHQ")); ?>'
 };
 var editaction="qty";
 var editnumber="";
@@ -737,6 +743,17 @@ function CloseBill() {
 	}
 	?>
 	invoiceid = $("#invoiceid").val();
+
+	if (!navigator.onLine) {
+		if ($('#offlinecart').val() == '1' && ($('#invoiceid').val() || '') == '') {
+			// Offline: pay and validate the sale captured on this terminal
+			OpenOfflinePay();
+		} else {
+			window.alert('Payment of an order already registered on the server requires the connection.');
+		}
+		return;
+	}
+
 	console.log("Open popup to enter payment on invoiceid="+invoiceid);
 	<?php if (getDolGlobalInt("TAKEPOS_NO_GENERIC_THIRDPARTY")) { ?>
 		if ($("#idcustomer").val() == "") {
@@ -804,8 +821,14 @@ function New() {
 
 	if (!navigator.onLine) {
 		if ($('#offlinecart').val() == '1' && ($('#invoiceid').val() || '') == '') {
-			// Discard the local cart of the place (nothing was sent to the server yet)
-			TakePOSOffline.clearCart();
+			TakePOSOffline.getCart().then(function (cart) {
+				if (cart && cart.validated) {
+					window.alert('This sale has been validated on this terminal and is waiting for its synchronization to the server. It cannot be discarded anymore.');
+					return;
+				}
+				// Discard the local cart of the place (nothing was sent to the server yet)
+				TakePOSOffline.clearCart();
+			});
 		} else {
 			window.alert('An order already registered on the server cannot be deleted while the terminal is offline.');
 		}
@@ -1209,9 +1232,72 @@ function ModalBox(ModalID)
 }
 
 function DirectPayment(){
+	if (!navigator.onLine) {
+		if ($('#offlinecart').val() == '1' && ($('#invoiceid').val() || '') == '') {
+			// Offline: pay the full sale in cash, the payment and the invoice number
+			// will be registered at the synchronization (same as amount=0 online)
+			TakePOSOffline.validateCart([{ pay: 'LIQ', amount: 0, excess: 0 }]);
+		} else {
+			window.alert('Payment of an order already registered on the server requires the connection.');
+		}
+		return;
+	}
 	console.log("DirectPayment");
 	$("#poslines").load("invoice.php?place="+place+"&action=valid&token=<?php echo currentToken(); ?>&pay=LIQ", function() {
 		$('#invoiceid').val("");
+	});
+}
+
+function OpenOfflinePay() {
+	console.log("Open the offline payment dialog for place="+place);
+	if (typeof TakePOSOffline == "undefined") {
+		return;
+	}
+	TakePOSOffline.getCart().then(function (cart) {
+		var total = 0;
+		if (cart && cart.lines) {
+			for (var i = 0; i < cart.lines.length; i++) {
+				total += cart.lines[i].price_ttc * cart.lines[i].qty;
+			}
+		}
+		jQuery("#offlinepaytotal").text(TakePOSOffline.t('TotalTTC', 'Total TTC') + " : " + TakePOSOffline.formatAmount(total));
+		jQuery("#offlinepayreturned").text("");
+		jQuery("#offlinepayamountLIQ, #offlinepayamountCB, #offlinepayamountCHQ").val("");
+	});
+	ModalBox('ModalOfflinePay');
+	jQuery("#offlinepayamountLIQ").focus();
+}
+
+function ValidateOfflinePay() {
+	var payamounts = [
+		{ pay: 'LIQ', amount: parseFloat(jQuery("#offlinepayamountLIQ").val()) || 0 },
+		{ pay: 'CB', amount: parseFloat(jQuery("#offlinepayamountCB").val()) || 0 },
+		{ pay: 'CHQ', amount: parseFloat(jQuery("#offlinepayamountCHQ").val()) || 0 }
+	];
+	var payments = [];
+	var i;
+	for (i = 0; i < payamounts.length; i++) {
+		if (payamounts[i].amount > 0) {
+			payments.push(payamounts[i]);
+		}
+	}
+	if (!payments.length) {
+		alert('Enter the amount received for at least one payment mode');
+		return;
+	}
+	// Change given on a cash payment (money received instead of the exact total), same rule as pay.php
+	TakePOSOffline.getCart().then(function (cart) {
+		var total = 0;
+		if (cart && cart.lines) {
+			for (i = 0; i < cart.lines.length; i++) {
+				total += cart.lines[i].price_ttc * cart.lines[i].qty;
+			}
+		}
+		if (payments[0].pay == 'LIQ' && payments[0].amount > total) {
+			payments[0].excess = Math.round((payments[0].amount - total) * 100) / 100;
+		}
+		document.getElementById('ModalOfflinePay').style.display = 'none';
+		TakePOSOffline.validateCart(payments);
 	});
 }
 
@@ -1511,6 +1597,26 @@ if (!getDolGlobalString('TAKEPOS_HIDE_HEAD_BAR')) {
 	<div class="modal-body">
 		<input type="text" class="block" id="textinput">
 		<button type="button" class="block" onclick="SetNote(); document.getElementById('ModalNote').style.display = 'none';">OK</button>
+	</div>
+</div>
+</div>
+
+<!-- Modal Offline payment: dialog used to pay and validate a sale captured while the terminal is offline.
+	 The sale stays on the terminal until its background synchronization validates it on the server with
+	 the same rules as invoice.php action=valid (invoice number, payments, receipt printing). -->
+<div id="ModalOfflinePay" class="modal">
+	<div class="modal-content">
+		<div class="modal-header">
+		<span class="close" href="#" onclick="document.getElementById('ModalOfflinePay').style.display = 'none';">&times;</span>
+		<h3><?php print $langs->trans("PaymentMode"); ?></h3>
+	</div>
+	<div class="modal-body">
+		<div id="offlinepaytotal" class="offlinepaytotal"></div>
+		<div class="offlinepayrow"><span class="offlinepaymode"><span class="fa fa-coins"></span> <?php print $langs->trans("PaymentTypeShortLIQ"); ?></span><input type="number" step="any" min="0" class="block offlinepayamount" id="offlinepayamountLIQ"></div>
+		<div class="offlinepayrow"><span class="offlinepaymode"><span class="fa fa-credit-card"></span> <?php print $langs->trans("PaymentTypeShortCB"); ?></span><input type="number" step="any" min="0" class="block offlinepayamount" id="offlinepayamountCB"></div>
+		<div class="offlinepayrow"><span class="offlinepaymode"><span class="fa fa-money-check"></span> <?php print $langs->trans("PaymentTypeShortCHQ"); ?></span><input type="number" step="any" min="0" class="block offlinepayamount" id="offlinepayamountCHQ"></div>
+		<div id="offlinepayreturned" class="offlinepayreturned"></div>
+		<button type="button" class="block" onclick="ValidateOfflinePay();"><?php print $langs->trans("Validate"); ?></button>
 	</div>
 </div>
 </div>
