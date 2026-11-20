@@ -407,9 +407,11 @@ function LoadProducts(position, issubcat) {
 		}
 
 		FillProductsGrid(data);
-	}).fail(function() {
-		// Offline fallback: fill the grid from the catalog cached into IndexedDB
-		if (navigator.onLine) {
+	}).fail(function(jqxhr, textStatus) {
+		// Offline fallback: fill the grid from the catalog cached into IndexedDB.
+		// handleFailure() also switches to offline mode when the server is unreachable
+		// (Wi-Fi still up), so the next actions of the terminal use the local data.
+		if (typeof FluxPosOffline == 'undefined' || !FluxPosOffline.handleFailure(jqxhr, textStatus)) {
 			return;
 		}
 		FluxPosOffline.getCategoryProducts(currentcat, socid).then(function(data) {
@@ -611,9 +613,9 @@ function MoreProducts(moreorless) {
 			ishow++; //Next product to show after print data product
 			idata++; //Next data every time
 		}
-	}).fail(function() {
+	}).fail(function(jqxhr, textStatus) {
 		// Offline fallback: fill the page from the catalog cached into IndexedDB
-		if (navigator.onLine) {
+		if (typeof FluxPosOffline == 'undefined' || !FluxPosOffline.handleFailure(jqxhr, textStatus)) {
 			return;
 		}
 		FluxPosOffline.getCategoryProducts(currentcat, socid).then(function(products) {
@@ -659,7 +661,7 @@ function ClickProduct(position, qty = 1, qty_std = 0) {
 		// Offline order entry: queue the product into the local cart of the place (it
 		// will be synchronized to the server in background). Only an order with no
 		// invoice created yet on the server can be captured while offline.
-		if (!navigator.onLine && ($('#invoiceid').val() || '') == '') {
+		if (typeof FluxPosOffline != 'undefined' && FluxPosOffline.isOffline() && ($('#invoiceid').val() || '') == '') {
 			FluxPosOffline.addProduct(idproduct, qty);
 			ClearSearch(false);
 			return;
@@ -744,7 +746,7 @@ function CloseBill() {
 	?>
 	invoiceid = $("#invoiceid").val();
 
-	if (!navigator.onLine) {
+	if (typeof FluxPosOffline != 'undefined' && FluxPosOffline.isOffline()) {
 		if ($('#offlinecart').val() == '1' && ($('#invoiceid').val() || '') == '') {
 			// Offline: pay and validate the sale captured on this terminal
 			OpenOfflinePay();
@@ -801,7 +803,7 @@ function FluxPosOrderNotes() {
 }
 
 function Refresh() {
-	if (!navigator.onLine && ($('#invoiceid').length == 0 || ($('#invoiceid').val() || '') == '')) {
+	if (typeof FluxPosOffline != 'undefined' && FluxPosOffline.isOffline() && ($('#invoiceid').length == 0 || ($('#invoiceid').val() || '') == '')) {
 		// Offline: show the local cart of the place instead of asking the server.
 		// An order already registered on the server cannot be displayed until the
 		// connection is back.
@@ -819,18 +821,14 @@ function New() {
 	// If we go here,it means $conf->global->FLUXPOS_BAR_RESTAURANT is not defined
 	invoiceid = $("#invoiceid").val();		// This is a hidden field added by invoice.php
 
-	if (!navigator.onLine) {
+	if (typeof FluxPosOffline != 'undefined' && FluxPosOffline.isOffline()) {
 		if ($('#offlinecart').val() == '1' && ($('#invoiceid').val() || '') == '') {
-			FluxPosOffline.getCart().then(function (cart) {
-				if (cart && cart.validated) {
-					window.alert('This sale has been validated on this terminal and is waiting for its synchronization to the server. It cannot be discarded anymore.');
-					return;
-				}
-				// Discard the local cart of the place (nothing was sent to the server yet)
-				FluxPosOffline.clearCart();
-			});
-		} else {
-			window.alert('An order already registered on the server cannot be deleted while the terminal is offline.');
+			// Discard the local cart of the place (nothing was sent to the server yet)
+			FluxPosOffline.clearCart();
+		} else if (confirm('This place has an order registered on the server, which cannot be modified while the terminal is offline. Start a new separate order on this terminal? It can only be paid whole while it is offline.')) {
+			// The order of the place stays apart on the server and is shown again when the
+			// connection is back. The new order is stored on the terminal and can be paid whole.
+			FluxPosOffline.startSeparateOrder();
 		}
 		ClearSearch(false);
 		return;
@@ -937,9 +935,9 @@ function Search2(keyCodeForEnter, moreorless) {
 
 			$.getJSON('<?php echo dol_buildpath('/fluxpos/ajax/ajax.php', 1) ?>?action=search&token=<?php echo currentToken();?>&search_term=' + search_term + '&thirdpartyid=' + socid + '&search_start=' + search_start + '&search_limit=' + search_limit, function (data) {
 				nbsearchresults = FillSearchResults(data);
-			}).fail(function () {
+			}).fail(function (jqxhr, textStatus) {
 				// Offline fallback: search into the catalog cached into IndexedDB
-				if (navigator.onLine) {
+				if (typeof FluxPosOffline == 'undefined' || !FluxPosOffline.handleFailure(jqxhr, textStatus)) {
 					return;
 				}
 				FluxPosOffline.searchProducts(search_term, socid, search_limit).then(function (cacheddata) {
@@ -1232,7 +1230,7 @@ function ModalBox(ModalID)
 }
 
 function DirectPayment(){
-	if (!navigator.onLine) {
+	if (typeof FluxPosOffline != 'undefined' && FluxPosOffline.isOffline()) {
 		if ($('#offlinecart').val() == '1' && ($('#invoiceid').val() || '') == '') {
 			// Offline: pay the full sale in cash, the payment and the invoice number
 			// will be registered at the synchronization (same as amount=0 online)

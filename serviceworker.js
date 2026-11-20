@@ -25,7 +25,12 @@
  *				intercepted: the JS layers fall back on IndexedDB when offline.
  */
 
-var fluxposCacheName = 'fluxpos-offline-v1';
+var fluxposCacheName = 'fluxpos-offline-v2';
+
+// Directory of the module, derived from the scope of this service worker, so the module
+// works whether it is installed into htdocs/fluxpos or htdocs/custom/fluxpos (or any other
+// directory: the scope of a service worker is always the directory it is served from).
+var fluxposModulePath = new URL(self.registration.scope).pathname.replace(/\/$/, '');
 
 
 self.addEventListener('install', function (event) {
@@ -77,10 +82,10 @@ self.addEventListener('fetch', function (event) {
 	var pathname = url.pathname;
 
 	// Static assets of the module and of Dolibarr core: cache first, then network
-	var isStaticAsset = pathname.indexOf('/fluxpos/css/') >= 0 ||
-		pathname.indexOf('/fluxpos/js/') >= 0 ||
-		pathname.indexOf('/fluxpos/img/') >= 0 ||
-		pathname.indexOf('/fluxpos/genimg/') >= 0 ||
+	var isStaticAsset = pathname.indexOf(fluxposModulePath + '/css/') >= 0 ||
+		pathname.indexOf(fluxposModulePath + '/js/') >= 0 ||
+		pathname.indexOf(fluxposModulePath + '/img/') >= 0 ||
+		pathname.indexOf(fluxposModulePath + '/genimg/') >= 0 ||
 		/\.(css|js|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)$/.test(pathname);
 	if (isStaticAsset) {
 		event.respondWith(fluxposCacheFirst(request));

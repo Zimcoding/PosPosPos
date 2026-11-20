@@ -349,9 +349,20 @@ var FluxPosOffline = {
 		this.updateOfflineStatus();
 		this.syncCatalog();
 		this.syncOutbox().then(function () {
-			if (jQuery('#offlinecart').val() == '1' && typeof Refresh == 'function') {
-				Refresh();
+			if (jQuery('#offlinecart').val() != '1') {
+				return;
 			}
+			self.getCart().then(function (cart) {
+				if (cart && cart.separate === true) {
+					// A separate local order is being captured on this place: keep it
+					// displayed until it is paid (the order on the server is untouched)
+					self.renderCart(true);
+					return;
+				}
+				if (typeof Refresh == 'function') {
+					Refresh();
+				}
+			});
 		});
 	},
 
@@ -950,10 +961,21 @@ var FluxPosOffline = {
 		// A call that hangs (Wi-Fi up, server unreachable) must end in an error, so the
 		// terminal can switch to offline mode instead of waiting forever. While the server
 		// is known to be down, calls give up quickly and the terminal falls back at once.
-		// Only the read-only catalog calls (ajax.php) get this default: a payment or a
-		// validation (invoice.php) may be slow and must never be cut off by the tablet.
+		// Only the read-only calls get this default (the catalog calls of ajax.php and the
+		// fragment loads of invoice.php without an action): a payment or a validation
+		// (invoice.php with an action) may be slow and must never be cut off by the tablet.
 		jQuery.ajaxPrefilter(function (options, originalOptions) {
-			if (typeof originalOptions.timeout == 'undefined' && self.isDolibarrUrl(options.url) && String(options.url).indexOf('/ajax/ajax.php') >= 0) {
+			var url = String(options.url);
+			if (typeof originalOptions.timeout != 'undefined' || !self.isDolibarrUrl(url)) {
+				return;
+			}
+			if (url.indexOf('/ajax/ajax.php') >= 0) {
+				options.timeout = self.serverDown ? 3000 : 30000;
+			} else if ((options.type || 'GET') == 'GET' && /(^|\/)invoice\.php(\?|$)/.test(url) && url.indexOf('action=') < 0) {
+				// Read-only load of an order fragment (Refresh): it must end in an error
+				// quickly so the terminal falls back on the data of the terminal instead of
+				// waiting forever. The write loads of invoice.php (action=addline, valid,
+				// delete) are never cut off by the terminal.
 				options.timeout = self.serverDown ? 3000 : 30000;
 			}
 		});
@@ -1010,7 +1032,7 @@ var FluxPosOffline = {
 		'use strict';
 
 		var self = this;
-		if (!navigator.onLine) {
+		if (this.isOffline()) {	// Nothing to send while the browser is offline or the server is unreachable
 			return;
 		}
 		if (this._syncTimer) {
@@ -1114,7 +1136,7 @@ var FluxPosOffline = {
 		'use strict';
 
 		var self = this;
-		if (this._syncing || !navigator.onLine || !window.indexedDB) {
+		if (this._syncing || this.isOffline() || !window.indexedDB) {
 			return Promise.resolve(false);
 		}
 		this._syncing = true;
