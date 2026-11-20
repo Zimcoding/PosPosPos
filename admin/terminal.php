@@ -453,7 +453,7 @@ if (isALNERunningVersion()) {		// No need to show the custom template when isALN
 
 if (isModEnabled('receiptprinter')) {
 	// Select printer to use with terminal
-	require_once DOL_DOCUMENT_ROOT.'/fluxpos/class/dolreceiptprinter.class.php';
+	require_once dol_buildpath('/fluxpos/class/dolreceiptprinter.class.php');
 	$printer = new dolReceiptPrinter($db);
 
 	$printer->listprinters();
@@ -488,9 +488,9 @@ if (isModEnabled('receiptprinter')) {
 	}
 }
 
-if (isModEnabled('receiptprinter') || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "receiptprinter" || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector") {
+if (isModEnabled('receiptprinter') || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "receiptprinter" || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "takeposconnector") {
 	// Select printer to use with terminal
-	require_once DOL_DOCUMENT_ROOT.'/fluxpos/class/dolreceiptprinter.class.php';
+	require_once dol_buildpath('/fluxpos/class/dolreceiptprinter.class.php');
 	$printer = new dolReceiptPrinter($db);
 	$printer->listPrintersTemplates();
 	$templates = array();

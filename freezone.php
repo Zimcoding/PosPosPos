@@ -122,7 +122,7 @@ top_htmlhead('', '', 0, 0, $arrayofjs, $arrayofcss);
 	 */
 	function Save() {
 		console.log("We click so we call page invoice.php with invoiceid=<?php echo $invoiceid; ?>, place=<?php echo $place; ?>, amount="+$("#number").val()+", tva_tx="+vatRate);
-		parent.$("#poslines").load("<?php echo DOL_URL_ROOT; ?>/fluxpos/invoice.php?action=freezone&token=<?php echo newToken(); ?>&invoiceid=<?php echo $invoiceid; ?>&place=<?php echo $place; ?>&number="+$("#number").val()+"&tva_tx="+vatRate, {desc:$("#desc").val()});
+		parent.$("#poslines").load("<?php echo dol_buildpath('/fluxpos/invoice.php', 1) ?>?action=freezone&token=<?php echo newToken(); ?>&invoiceid=<?php echo $invoiceid; ?>&place=<?php echo $place; ?>&number="+$("#number").val()+"&tva_tx="+vatRate, {desc:$("#desc").val()});
 		parent.$.colorbox.close();
 	}
 

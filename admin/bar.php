@@ -110,11 +110,11 @@ print '<input type="hidden" name="token" value="'.newToken().'">';
 print '<input type="hidden" name="action" value="set">';
 
 ?>
-<script type="text/javascript" src="<?php echo DOL_URL_ROOT ?>/fluxpos/js/jquery.colorbox-min.js"></script>	<!-- TODO It seems we don't need this -->
+<script type="text/javascript" src="<?php echo dol_buildpath('/fluxpos/js/jquery.colorbox-min.js', 1) ?>"></script>	<!-- TODO It seems we don't need this -->
 <script type="text/javascript">
 function Floors() {
 	console.log("Open box to select floor");
-	$.colorbox({href:"<?php echo DOL_URL_ROOT ?>/fluxpos/floors.php?mode=edit&place=0", width:"90%", height:"90%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("Floors"); ?>"});
+	$.colorbox({href:"<?php echo dol_buildpath('/fluxpos/floors.php', 1) ?>?mode=edit&place=0", width:"90%", height:"90%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("Floors"); ?>"});
 }
 </script>
 
@@ -143,7 +143,7 @@ if (getDolGlobalInt('FLUXPOS_BAR_RESTAURANT')) {
 	print '<td class="">';
 	print ajax_constantonoff("FLUXPOS_ORDER_PRINTERS", array(), $conf->entity, 0, 0, 1, 0);
 	if (getDolGlobalString('FLUXPOS_ORDER_PRINTERS')) {
-		print' &nbsp; <a href="'.DOL_URL_ROOT.'/fluxpos/admin/orderprinters.php?leftmenu=setup">'.$langs->trans("Setup").'</a>';
+		print' &nbsp; <a href="'.dol_buildpath('/fluxpos/admin/orderprinters.php', 1).'?leftmenu=setup">'.$langs->trans("Setup").'</a>';
 	}
 	print '</td></tr>';
 
@@ -225,10 +225,10 @@ if (getDolGlobalInt('FLUXPOS_BAR_RESTAURANT')) {
 		print '<td>'.$langs->trans("URL").' - '.$langs->trans("CustomerMenu").'</td><td class="right">'.$langs->trans("QR").'</td>';
 		print "</tr>\n";
 		print '<tr class="oddeven value"><td>';
-		print '<a target="_blank" rel="noopener noreferrer" href="'.$urlwithroot.'/fluxpos/public/menu.php">'.$urlwithroot.'/fluxpos/public/menu.php</a>';
+		print '<a target="_blank" rel="noopener noreferrer" href="'.dol_buildpath('/fluxpos/public/menu.php', 1).'">'.dol_buildpath('/fluxpos/public/menu.php', 1).'</a>';
 		print '</td>';
 		print '<td class="right">';
-		print '<a target="_blank" rel="noopener noreferrer" href="printqr.php"><img src="'.DOL_URL_ROOT.'/fluxpos/genimg/qr.php" height="42" width="42"></a>';
+		print '<a target="_blank" rel="noopener noreferrer" href="printqr.php"><img src="'.dol_buildpath('/fluxpos/genimg/qr.php', 1).'" height="42" width="42"></a>';
 		print '</td></tr>';
 		print '</table>';
 		print '</div>';
@@ -253,10 +253,10 @@ if (getDolGlobalInt('FLUXPOS_BAR_RESTAURANT')) {
 			print $langs->trans("Table")." ".$row['label'];
 			print '</td>';
 			print '<td>';
-			print '<a target="_blank" rel="noopener noreferrer" href="'.$urlwithroot."/fluxpos/public/auto_order.php?key=".dol_encode($row['rowid']).'">'.$urlwithroot."/fluxpos/public/auto_order.php?key=".dol_encode($row['rowid']).'</a>';
+			print '<a target="_blank" rel="noopener noreferrer" href="'.dol_buildpath('/fluxpos/public/menu.php', 1).'">'.dol_buildpath('/fluxpos/public/menu.php', 1).'</a>';
 			print '</td>';
 			print '<td class="right">';
-			print '<a target="_blank" rel="noopener noreferrer" href="printqr.php?id='.$row['rowid'].'"><img src="'.DOL_URL_ROOT.'/fluxpos/genimg/qr.php?key='.dol_encode($row['rowid']).'" height="42" width="42"></a>';
+			print '<a target="_blank" rel="noopener noreferrer" href="printqr.php?id='.$row['rowid'].'"><img src="'.dol_buildpath('/fluxpos/genimg/qr.php', 1).'?key='.dol_encode($row['rowid']).'" height="42" width="42"></a>';
 			print '</td></tr>';
 		}
 

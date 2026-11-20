@@ -109,7 +109,7 @@ if ($action == "productinfo" && $user->hasRight('fluxpos', 'run')) {
 	$prod->fetch($idproduct);
 	print '<button type="button" class="publicphonebutton2 phoneblue total" onclick="AddProductConfirm(place, '.$idproduct.')">'.$langs->trans('Add').'</button>';
 	print "<br><b>".$prod->label."</b><br>";
-	print '<img class="imgwrapper" width="60%" src="'.DOL_URL_ROOT.'/fluxpos/public/auto_order.php?genimg=pro&query=pro&id='.$idproduct.'">';
+	print '<img class="imgwrapper" width="60%" src="'.dol_buildpath('/fluxpos/public/auto_order.php', 1).'?genimg=pro&query=pro&id='.$idproduct.'">';
 	print "<br>".$prod->description;
 	print "<br><b>".price($prod->price_ttc, 1, $langs, 1, -1, -1, getDolCurrency())."</b>";
 	print '<br>';
@@ -123,7 +123,7 @@ if ($action == "productinfo" && $user->hasRight('fluxpos', 'run')) {
 			$prod = new Product($db);
 			$prod->fetch($line->fk_product);
 			print "<b>".$prod->label."</b><br>";
-			print '<img class="imgwrapper" width="60%" src="'.DOL_URL_ROOT.'/fluxpos/public/auto_order.php?genimg=pro&query=pro&id='.$line->fk_product.'">';
+			print '<img class="imgwrapper" width="60%" src="'.dol_buildpath('/fluxpos/public/auto_order.php', 1).'?genimg=pro&query=pro&id='.$line->fk_product.'">';
 			print "<br>".$prod->description;
 			print "<br><b>".price($prod->price_ttc, 1, $langs, 1, -1, -1, getDolCurrency())."</b>";
 			print '<br>';
@@ -203,7 +203,7 @@ if ($action == "productinfo" && $user->hasRight('fluxpos', 'run')) {
 	function LoadPlace(placeid){
 		place=placeid;
 		<?php
-		echo '$("#phonediv2").load("'.DOL_URL_ROOT.'/fluxpos/public/auto_order.php?mobilepage=invoice&place="+place+" #tablelines", function() {
+		echo '$("#phonediv2").load("'.dol_buildpath('/fluxpos/public/auto_order.php', 1).'?mobilepage=invoice&place="+place+" #tablelines", function() {
 			});';
 		?>
 		LoadCats();
@@ -213,20 +213,20 @@ if ($action == "productinfo" && $user->hasRight('fluxpos', 'run')) {
 		<?php
 		// If is a public terminal first show product information
 		print 'place=placeid;
-			$("#phonediv1").load("'.DOL_URL_ROOT.'/fluxpos/public/auto_order.php?action=productinfo&token='.newToken().'&place="+place+"&idproduct="+productid, function() {
+			$("#phonediv1").load("'.dol_buildpath('/fluxpos/public/auto_order.php', 1).'?action=productinfo&token='.newToken().'&place="+place+"&idproduct="+productid, function() {
 			});';
 		?>
 	}
 
 	function PublicPreOrder(){
-		$("#phonediv1").load("<?php echo DOL_URL_ROOT.'/fluxpos/public/auto_order.php?action=publicpreorder&token='.newToken(); ?>&place="+place, function() {
+		$("#phonediv1").load("<?php echo dol_buildpath('/fluxpos/public/auto_order.php', 1).'?action=publicpreorder&token='.newToken(); ?>&place="+place, function() {
 		});
 	}
 
 	function AddProductConfirm(placeid, productid){
 		place=placeid;
 		<?php
-			echo '$("#phonediv2").load("'.DOL_URL_ROOT.'/fluxpos/public/auto_order.php?mobilepage=invoice&action=addline&token='.newToken().'&place="+place+"&idproduct="+productid, function() {
+			echo '$("#phonediv2").load("'.dol_buildpath('/fluxpos/public/auto_order.php', 1).'?mobilepage=invoice&action=addline&token='.newToken().'&place="+place+"&idproduct="+productid, function() {
 			});';
 		?>
 
@@ -236,11 +236,11 @@ if ($action == "productinfo" && $user->hasRight('fluxpos', 'run')) {
 	function SetQty(place, selectedline, qty){
 		console.log("We click on SetQty()");
 		if (qty==0){
-			$("#phonediv2").load("<?php echo DOL_URL_ROOT ?>/fluxpos/public/auto_order.php?mobilepage=invoice&action=deleteline&token=<?php echo newToken(); ?>&place="+place+"&idline="+selectedline, function() {
+			$("#phonediv2").load("<?php echo dol_buildpath('/fluxpos/public/auto_order.php', 1) ?>?mobilepage=invoice&action=deleteline&token=<?php echo newToken(); ?>&place="+place+"&idline="+selectedline, function() {
 			});
 		}
 		else{
-			$("#phonediv2").load("<?php echo DOL_URL_ROOT ?>/fluxpos/public/auto_order.php?mobilepage=invoice&action=updateqty&token=<?php echo newToken(); ?>&place="+place+"&idline="+selectedline+"&number="+qty, function() {
+			$("#phonediv2").load("<?php echo dol_buildpath('/fluxpos/public/auto_order.php', 1) ?>?mobilepage=invoice&action=updateqty&token=<?php echo newToken(); ?>&place="+place+"&idline="+selectedline+"&number="+qty, function() {
 			});
 		}
 		LoadCats();
@@ -251,7 +251,7 @@ if ($action == "productinfo" && $user->hasRight('fluxpos', 'run')) {
 	function SetNote(place, selectedline){
 		console.log("We click on SetNote()");
 		var note = prompt("<?php dol_escape_js($langs->trans('Note')); ?>", "");
-		$("#phonediv2").load("<?php echo DOL_URL_ROOT ?>/fluxpos/public/auto_order.php?mobilepage=invoice&action=updateqty&token=<?php echo newToken(); ?>&place="+place+"&idline="+selectedline+"&number="+qty, function() {
+		$("#phonediv2").load("<?php echo dol_buildpath('/fluxpos/public/auto_order.php', 1) ?>?mobilepage=invoice&action=updateqty&token=<?php echo newToken(); ?>&place="+place+"&idline="+selectedline+"&number="+qty, function() {
 		});
 		LoadCats();
 	}
@@ -260,7 +260,7 @@ if ($action == "productinfo" && $user->hasRight('fluxpos', 'run')) {
 		console.log("We click on LoadCats()");
 		<?php
 			// Load invoice.php to get categories by using auto_order so it will define INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE
-			echo '$("#phonediv1").load("'.DOL_URL_ROOT.'/fluxpos/public/auto_order.php?format=div&mobilepage=cats&place="+place+" #tablelines", function() {
+			echo '$("#phonediv1").load("'.dol_buildpath('/fluxpos/public/auto_order.php', 1).'?format=div&mobilepage=cats&place="+place+" #tablelines", function() {
 			});';
 		?>
 	}
@@ -268,7 +268,7 @@ if ($action == "productinfo" && $user->hasRight('fluxpos', 'run')) {
 	function LoadProducts(idcat) {
 		console.log("We click on LoadProducts()");
 		<?php
-			echo '$("#phonediv1").load("'.DOL_URL_ROOT.'/fluxpos/public/auto_order.php?format=div&mobilepage=products&catid="+idcat+"&place="+place+"", function() {
+			echo '$("#phonediv1").load("'.dol_buildpath('/fluxpos/public/auto_order.php', 1).'?format=div&mobilepage=products&catid="+idcat+"&place="+place+"", function() {
 			});';
 		?>
 	}
@@ -281,7 +281,7 @@ if ($action == "productinfo" && $user->hasRight('fluxpos', 'run')) {
 	function FluxPosPrintingOrder(){
 		console.log("FluxPosPrintingOrder");
 		<?php
-		echo '$("#phonediv2").load("'.DOL_URL_ROOT.'/fluxpos/public/auto_order.php?action=order&token='.newToken().'&mobilepage=order&place="+place, function() {
+		echo '$("#phonediv2").load("'.dol_buildpath('/fluxpos/public/auto_order.php', 1).'?action=order&token='.newToken().'&mobilepage=order&place="+place, function() {
 			});';
 		?>
 	}
@@ -294,12 +294,12 @@ if ($action == "productinfo" && $user->hasRight('fluxpos', 'run')) {
 	function CheckPlease(payment){
 		console.log("Click on CheckPlease");
 		if (payment==undefined){
-			$("#phonediv1").load("<?php echo DOL_URL_ROOT ?>/fluxpos/public/auto_order.php?action=checkplease&token=<?php echo newToken(); ?>&place="+place, function() {
+			$("#phonediv1").load("<?php echo dol_buildpath('/fluxpos/public/auto_order.php', 1) ?>?action=checkplease&token=<?php echo newToken(); ?>&place="+place, function() {
 			});
 		}
 		else{
 			console.log("Request the check to the waiter");
-			$("#phonediv1").load("<?php echo DOL_URL_ROOT ?>/fluxpos/public/auto_order.php?action=checkplease&token=<?php echo newToken(); ?>&place=<?php echo urlencode($place); ?>&payment="+payment, function() {
+			$("#phonediv1").load("<?php echo dol_buildpath('/fluxpos/public/auto_order.php', 1) ?>?action=checkplease&token=<?php echo newToken(); ?>&place=<?php echo urlencode($place); ?>&payment="+payment, function() {
 			});
 		}
 	}

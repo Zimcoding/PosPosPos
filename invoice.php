@@ -85,7 +85,7 @@ if (defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE')) {
 		if (getDolGlobalString('FLUXPOS_NUM_TERMINALS') == "1") {
 			$_SESSION["fluxposterminal"] = 1;
 		} else {
-			header("Location: ".DOL_URL_ROOT."/fluxpos/index.php");
+			header("Location: ".dol_buildpath('/fluxpos/index.php', 1));
 			exit;
 		}
 	}
@@ -884,7 +884,7 @@ if (empty($reshook)) {
 				echo "<script>\n";
 				echo "function addbatch(batch, warehouseid) {\n";
 				echo "console.log('We add batch '+batch+' from warehouse id '+warehouseid);\n";
-				echo '$("#poslines").load("'.DOL_URL_ROOT.'/fluxpos/invoice.php?action=addline&batch="+encodeURI(batch)+"&warehouseid="+warehouseid+"&place='.$place.'&idproduct='.$idproduct.'&token='.newToken().'", function() {});'."\n";
+				echo '$("#poslines").load("'.dol_buildpath('/fluxpos/invoice.php', 1).'?action=addline&batch="+encodeURI(batch)+"&warehouseid="+warehouseid+"&place='.$place.'&idproduct='.$idproduct.'&token='.newToken().'", function() {});'."\n";
 				echo "}\n";
 				echo "</script>\n";
 
@@ -1124,9 +1124,9 @@ if (empty($reshook)) {
 				$invoice->delete($user);
 
 				if (defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE')) {
-					header("Location: ".DOL_URL_ROOT."/fluxpos/public/auto_order.php");
+					header("Location: ".dol_buildpath('/fluxpos/public/auto_order.php', 1));
 				} else {
-					header("Location: ".DOL_URL_ROOT."/fluxpos/invoice.php");
+					header("Location: ".dol_buildpath('/fluxpos/invoice.php', 1));
 				}
 				exit;
 			}
@@ -1322,8 +1322,8 @@ if (empty($reshook)) {
 
 	if ($action == "order" && $placeid != 0 && ($user->hasRight('fluxpos', 'run') || defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE'))) {
 		include_once DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php';
-		if ((isModEnabled('receiptprinter') && getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term) > 0) || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "receiptprinter" || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector") {
-			require_once DOL_DOCUMENT_ROOT.'/fluxpos/class/dolreceiptprinter.class.php';
+		if ((isModEnabled('receiptprinter') && getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term) > 0) || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "receiptprinter" || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "takeposconnector") {
+			require_once dol_buildpath('/fluxpos/class/dolreceiptprinter.class.php');
 			$printer = new dolReceiptPrinter($db);
 		}
 
@@ -1367,7 +1367,7 @@ if (empty($reshook)) {
 				$order_receipt_printer1 .= '</td></tr>';
 			}
 		}
-		if (((isModEnabled('receiptprinter') && getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term) > 0) || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "receiptprinter" || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector") && $linestoprint > 0 && $printer !== null) {
+		if (((isModEnabled('receiptprinter') && getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term) > 0) || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "receiptprinter" || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "takeposconnector") && $linestoprint > 0 && $printer !== null) {
 			$invoice->fetch($placeid); //Reload object before send to printer
 			$printer->orderprinter = 1;
 			echo "<script>";
@@ -1399,7 +1399,7 @@ if (empty($reshook)) {
 				$order_receipt_printer2 .= '</td></tr>';
 			}
 		}
-		if (((isModEnabled('receiptprinter') && getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term) > 0) || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "receiptprinter" || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector") && $linestoprint > 0) {
+		if (((isModEnabled('receiptprinter') && getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term) > 0) || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "receiptprinter" || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "takeposconnector") && $linestoprint > 0) {
 			$invoice->fetch($placeid); //Reload object before send to printer
 			$printer->orderprinter = 2;
 			echo "<script>";
@@ -1431,7 +1431,7 @@ if (empty($reshook)) {
 				$order_receipt_printer3 .= '</td></tr>';
 			}
 		}
-		if (((isModEnabled('receiptprinter') && getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term) > 0) || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "receiptprinter" || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector") && $linestoprint > 0 && $printer !== null) {
+		if (((isModEnabled('receiptprinter') && getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term) > 0) || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "receiptprinter" || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "takeposconnector") && $linestoprint > 0 && $printer !== null) {
 			$invoice->fetch($placeid); //Reload object before send to printer
 			$printer->orderprinter = 3;
 			echo "<script>";
@@ -1484,8 +1484,8 @@ if (empty($reshook)) {
 				$sectionwithinvoicelink .= ' <a target="_blank" class="button" href="' . DOL_URL_ROOT . '/document.php?token=' . newToken() . '&modulepart=facture&file=' . $invoice->ref . '/' . $invoice->ref . '.pdf">'.$langs->trans("Invoice").'</a>';
 			} else {
 				// This section should be same than into index.php
-				if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector") {
-					// Used when the external addon fluxposconnector is installed. Deprecated.
+				if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "takeposconnector") {
+					// Used when the external addon takeposconnector is installed. Deprecated.
 					if (getDolGlobalString('FLUXPOS_PRINT_SERVER') && filter_var(getDolGlobalString('FLUXPOS_PRINT_SERVER'), FILTER_VALIDATE_URL) == true) {
 						// If FLUXPOS_PRINT_SERVER is an URL
 						$sectionwithinvoicelink .= ' <button id="buttonprint" type="button" onclick="PrintByESCPOSOld('.$placeid.')">'.$langs->trans('PrintTicket').'</button>';
@@ -1579,7 +1579,7 @@ $(document).ready(function() {
 		selectedtext=$('#'+selectedline).find("td:first").html();
 		<?php
 		if (defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE')) {
-			print '$("#phonediv1").load("'.DOL_URL_ROOT.'/fluxpos/public/auto_order.php?action=editline&token='.newToken().'&placeid="+placeid+"&selectedline="+selectedline, function() {
+			print '$("#phonediv1").load("'.dol_buildpath('/fluxpos/public/auto_order.php', 1).'?action=editline&token='.newToken().'&placeid="+placeid+"&selectedline="+selectedline, function() {
 			});';
 		}
 		?>
@@ -1715,7 +1715,7 @@ function PrintHTMLToSlashPrint(id){
 /* Print of configured printer when FLUXPOS_PRINT_SERVER is URL, using the ESCPOS driver */
 function PrintByESCPOSOld(id){
 	console.log("PrintByESCPOSOld id=" + id);
-	$.get("<?php echo DOL_URL_ROOT; ?>/fluxpos/ajax/ajax.php?action=printinvoiceticket&token=<?php echo currentToken(); ?>&term=<?php echo urlencode(isset($_SESSION["fluxposterminal"]) ? $_SESSION["fluxposterminal"] : ''); ?>&id="+id, function(data, status) {
+	$.get("<?php echo dol_buildpath('/fluxpos/ajax/ajax.php', 1) ?>?action=printinvoiceticket&token=<?php echo currentToken(); ?>&term=<?php echo urlencode(isset($_SESSION["fluxposterminal"]) ? $_SESSION["fluxposterminal"] : ''); ?>&id="+id, function(data, status) {
 		// The answer must be the base64url ESC/POS ticket. Anything else (login page after session loss, PHP error...) must not be sent to the printer.
 		data = $.trim(data);
 		if (!/^[A-Za-z0-9_-]+$/.test(data)) {
@@ -1744,7 +1744,7 @@ function PrintByESCPOS(id) {
 	$.ajax({
 		type: "GET",
 		data: { token: '<?php echo currentToken(); ?>' },
-		url: "<?php print DOL_URL_ROOT.'/fluxpos/ajax/ajax.php?action=printinvoiceticket&token='.currentToken().'&term='.urlencode(isset($_SESSION["fluxposterminal"]) ? $_SESSION["fluxposterminal"] : '').'&id='; ?>" + id,
+		url: "<?php print dol_buildpath('/fluxpos/ajax/ajax.php', 1).'?action=printinvoiceticket&token='.currentToken().'&term='.urlencode(isset($_SESSION["fluxposterminal"]) ? $_SESSION["fluxposterminal"] : '').'&id='; ?>" + id,
 		success: function(){
 				showPrintResultPopup('<?php echo dol_escape_js($langs->trans("SentToPrinter").' '.$nameOfPrinter); ?>', 2000);
 			},
@@ -1768,13 +1768,13 @@ function showPrintResultPopup(message, duration) {
 
 // Call url to generate a credit note (with same lines) from existing invoice
 function CreditNote() {
-	$("#poslines").load("<?php print DOL_URL_ROOT; ?>/fluxpos/invoice.php?action=creditnote&token=<?php echo newToken() ?>&invoiceid="+placeid, function() {	});
+	$("#poslines").load("<?php print dol_buildpath('/fluxpos/invoice.php', 1) ?>?action=creditnote&token=<?php echo newToken() ?>&invoiceid="+placeid, function() {	});
 	return true;
 }
 
 // Call url to add notes
 function SetNote() {
-	$("#poslines").load("<?php print DOL_URL_ROOT; ?>/fluxpos/invoice.php?action=addnote&token=<?php echo newToken() ?>&invoiceid="+placeid+"&idline="+selectedline, { "addnote": $("#textinput").val() });
+	$("#poslines").load("<?php print dol_buildpath('/fluxpos/invoice.php', 1) ?>?action=addnote&token=<?php echo newToken() ?>&invoiceid="+placeid+"&idline="+selectedline, { "addnote": $("#textinput").val() });
 	return true;
 }
 
@@ -2093,7 +2093,7 @@ if (!empty($_SESSION["basiclayout"]) && $_SESSION["basiclayout"] == 1) {
 			}
 			$htmlforlines .= ' onclick="LoadProducts('.$row['id'].');">';
 			if (defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE')) {
-				$htmlforlines .= '<img class="imgwrapper" width="33%" src="'.DOL_URL_ROOT.'/fluxpos/public/auto_order.php?genimg=cat&query=cat&id='.$row['id'].'"><br>';
+				$htmlforlines .= '<img class="imgwrapper" width="33%" src="'.dol_buildpath('/fluxpos/public/auto_order.php', 1).'?genimg=cat&query=cat&id='.$row['id'].'"><br>';
 			} else {
 				$htmlforlines .= '<td class="left">';
 			}
@@ -2125,7 +2125,7 @@ if (!empty($_SESSION["basiclayout"]) && $_SESSION["basiclayout"] == 1) {
 			$htmlforlines .= ' onclick="AddProduct(\''.$place.'\', '.$row->id.')"';
 			$htmlforlines .= '>';
 			if (defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE')) {
-				$htmlforlines .= '<img class="imgwrapper" width="33%" src="'.DOL_URL_ROOT.'/fluxpos/public/auto_order.php?genimg=pro&query=pro&id='.$row->id.'"><br>';
+				$htmlforlines .= '<img class="imgwrapper" width="33%" src="'.dol_buildpath('/fluxpos/public/auto_order.php', 1).'?genimg=pro&query=pro&id='.$row->id.'"><br>';
 				$htmlforlines .= $row->label.' '.price($row->price_ttc, 1, $langs, 1, -1, -1, $conf->currency);
 				$htmlforlines .= '</div>'."\n";
 			} else {

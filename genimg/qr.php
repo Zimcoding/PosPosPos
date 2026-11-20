@@ -67,8 +67,8 @@ if (!isModEnabled('fluxpos')) {
 if (GETPOSTISSET("key")) {
 	$key = GETPOST('key');
 	$module = new modTcpdfbarcode();
-	$result = $module->buildBarCode($urlwithroot."/fluxpos/public/auto_order.php?key=".urlencode($key), 'QRCODE', 'Y');
+	$result = $module->buildBarCode(dol_buildpath('/fluxpos/public/auto_order.php', 1)."?key=".urlencode($key), 'QRCODE', 'Y');
 } else {
 	$module = new modTcpdfbarcode();
-	$result = $module->buildBarCode($urlwithroot."/fluxpos/public/menu.php", 'QRCODE', 'Y');
+	$result = $module->buildBarCode(dol_buildpath('/fluxpos/public/menu.php', 1), 'QRCODE', 'Y');
 }

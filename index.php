@@ -191,7 +191,7 @@ var currentsubcategories=[];	// Subcategories of currentcat, shown before its pr
 var pagecategories=0;
 var pageactions=0;
 var place="<?php echo $place; ?>";
-var fluxposbaseuri = '<?php echo DOL_URL_ROOT ?>/fluxpos/';
+var fluxposbaseuri = '<?php echo dol_buildpath('/fluxpos/', 1) ?>';
 var fluxposnewtoken = '<?php echo newToken(); ?>';
 var fluxposcurrency = '<?php echo $conf->currency; ?>';
 var fluxposlang = {
@@ -398,7 +398,7 @@ function LoadProducts(position, issubcat) {
 	}
 
 	// Only show products for sale (tosell=1)
-	$.getJSON('<?php echo DOL_URL_ROOT ?>/fluxpos/ajax/ajax.php?action=getProducts&token=<?php echo currentToken();?>&thirdpartyid=' + socid + '&category='+currentcat+'&tosell=1&limit='+limit+'&offset=0', function(data) {
+	$.getJSON('<?php echo dol_buildpath('/fluxpos/ajax/ajax.php', 1) ?>?action=getProducts&token=<?php echo currentToken();?>&thirdpartyid=' + socid + '&category='+currentcat+'&tosell=1&limit='+limit+'&offset=0', function(data) {
 		console.log("Call ajax.php (in LoadProducts) to get Products of category "+currentcat+" then loop on result to fill image thumbs");
 		console.log("Found "+data.length+" record");
 
@@ -550,7 +550,7 @@ function MoreProducts(moreorless) {
 	}
 
 	// Only show products for sale (tosell=1)
-	$.getJSON('<?php echo DOL_URL_ROOT ?>/fluxpos/ajax/ajax.php?action=getProducts&token=<?php echo currentToken();?>&thirdpartyid=' + socid + '&category='+currentcat+'&tosell=1&limit='+limit+'&offset='+offset, function(data) {
+	$.getJSON('<?php echo dol_buildpath('/fluxpos/ajax/ajax.php', 1) ?>?action=getProducts&token=<?php echo currentToken();?>&thirdpartyid=' + socid + '&category='+currentcat+'&tosell=1&limit='+limit+'&offset='+offset, function(data) {
 		console.log("Call ajax.php (in MoreProducts) to get Products of category "+currentcat);
 
 		if (typeof (data[0]) == "undefined" && first >= currentsubcategories.length && moreorless=="more"){ // Return if no more pages
@@ -848,7 +848,7 @@ function New() {
 		return;
 	}
 
-	$.getJSON('<?php echo DOL_URL_ROOT ?>/fluxpos/ajax/ajax.php?action=getInvoice&token=<?php echo currentToken();?>&id='+invoiceid, function(data) {
+	$.getJSON('<?php echo dol_buildpath('/fluxpos/ajax/ajax.php', 1) ?>?action=getInvoice&token=<?php echo currentToken();?>&id='+invoiceid, function(data) {
 		var r;
 
 		if (parseInt(data['paye']) === 1) {
@@ -935,7 +935,7 @@ function Search2(keyCodeForEnter, moreorless) {
 				socid = parseInt("<?php echo dol_escape_js($socid); ?>");
 			}
 
-			$.getJSON('<?php echo DOL_URL_ROOT ?>/fluxpos/ajax/ajax.php?action=search&token=<?php echo currentToken();?>&search_term=' + search_term + '&thirdpartyid=' + socid + '&search_start=' + search_start + '&search_limit=' + search_limit, function (data) {
+			$.getJSON('<?php echo dol_buildpath('/fluxpos/ajax/ajax.php', 1) ?>?action=search&token=<?php echo currentToken();?>&search_term=' + search_term + '&thirdpartyid=' + socid + '&search_start=' + search_start + '&search_limit=' + search_limit, function (data) {
 				nbsearchresults = FillSearchResults(data);
 			}).fail(function () {
 				// Offline fallback: search into the catalog cached into IndexedDB
@@ -1194,7 +1194,7 @@ function DolibarrOpenDrawer() {
 	$.ajax({
 		type: "GET",
 		data: { token: '<?php echo currentToken(); ?>' },
-		url: "<?php print DOL_URL_ROOT.'/fluxpos/ajax/ajax.php?action=opendrawer&token='.currentToken().'&term='.urlencode(empty($_SESSION["fluxposterminal"]) ? '' : $_SESSION["fluxposterminal"]); ?>",
+		url: "<?php print dol_buildpath('/fluxpos/ajax/ajax.php', 1).'?action=opendrawer&token='.currentToken().'&term='.urlencode(empty($_SESSION["fluxposterminal"]) ? '' : $_SESSION["fluxposterminal"]); ?>",
 	});
 }
 
@@ -1312,7 +1312,7 @@ function WeighingScale(callback) {
 			// Protocole Dialog-06, il a besoin du prix unitaire, le demander s'il manque
 			var urlProduct;
 			if (idproduct == "" && selectedline > 0) {
-				urlProduct = "<?php echo DOL_URL_ROOT; ?>/api/index.php/fluxposconnector/invoices/" + placeid + "/lines/" + selectedline + "/product";
+				urlProduct = "<?php echo DOL_URL_ROOT; ?>/api/index.php/takeposconnector/invoices/" + placeid + "/lines/" + selectedline + "/product";
 			} else {
 				urlProduct = "<?php echo DOL_URL_ROOT; ?>/api/index.php/products/" + idproduct;
 			}
@@ -1334,7 +1334,7 @@ function WeighingScale(callback) {
 				}
 			});
 		<?php } else { ?>
-			// Protocole par défaut de fluxposconnector: réception continue du poids/stabilité
+			// Protocole par défaut de takeposconnector: réception continue du poids/stabilité
 			editnumber = globalWeight;
 			$("#poslines").load("invoice.php?token=<?php echo currentToken(); ?>&action=updateqty&place="+place+"&idline="+selectedline+"&number="+editnumber, function() {
 				editnumber="";
@@ -1511,7 +1511,7 @@ if (!getDolGlobalString('FLUXPOS_HIDE_HEAD_BAR')) {
 				?>
 				<div class="login_block_user">
 				<?php
-				print top_menu_user(1, DOL_URL_ROOT.'/user/logout.php?token='.newToken().'&urlfrom='.urlencode('/fluxpos/?setterminal='.((int) $term)));
+				print top_menu_user(1, DOL_URL_ROOT.'/user/logout.php?token='.newToken().'&urlfrom='.urlencode(dol_buildpath('/fluxpos/index.php', 1).'?setterminal='.((int) $term)));
 				?>
 				</div>
 			</div>
@@ -1769,7 +1769,7 @@ if (isALNERunningVersion()) {
 
 // Button to print receipt
 // This section should be same than into invoice.php
-if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector") {		// deprecated method
+if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "takeposconnector") {		// deprecated method
 	if (getDolGlobalString('FLUXPOS_PRINT_SERVER') && filter_var(getDolGlobalString('FLUXPOS_PRINT_SERVER'), FILTER_VALIDATE_URL) == true) {
 		// If FLUXPOS_PRINT_SERVER is an URL
 		$menus[$r++] = array('title' => '<span class="fa fa-receipt paddingrightonly"></span><div class="trunc">'.$langs->trans("PrintTicket").'</div>', 'action' => 'PrintByESCPOSOld(placeid);');
@@ -1787,12 +1787,12 @@ if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector") {		// depr
 	$menus[$r++] = array('title' => '<span class="fa fa-receipt paddingrightonly"></span><div class="trunc">'.$langs->trans("PrintTicket").'</div>', 'action' => 'PrintByBrowser(placeid);');
 }
 
-if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector" && getDolGlobalString('FLUXPOS_ORDER_NOTES') == 1) {
+if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "takeposconnector" && getDolGlobalString('FLUXPOS_ORDER_NOTES') == 1) {
 	$menus[$r++] = array('title' => '<span class="fa fa-sticky-note paddingrightonly"></span><div class="trunc">'.$langs->trans("OrderNotes").'</div>', 'action' => 'FluxPosOrderNotes();');
 }
 
 
-if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector") {
+if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "takeposconnector") {
 	$menus[$r++] = array('title' => '<span class="fa fa-receipt paddingrightonly"></span><div class="trunc">'.$langs->trans("DOL_OPEN_DRAWER").'</div>', 'action' => 'OpenDrawer();');
 }
 if (getDolGlobalInt('FLUXPOS_ADD_BUTTON_OPEN_DRAWER'.$term) > 0) {

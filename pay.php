@@ -518,7 +518,7 @@ if (!getDolGlobalInt("FLUXPOS_NUMPAD")) {
 			$.ajax({
 				method: 'POST',
 				data: { token: '<?php echo currentToken(); ?>' },
-				url: '<?php echo DOL_URL_ROOT ?>/fluxpos/smpcb.php?status' }).done(function (data) {
+				url: '<?php echo dol_buildpath('/fluxpos/smpcb.php', 1) ?>?status' }).done(function (data) {
 				console.log(data);
 				if (data === "SUCCESS") {
 					parent.$("#poslines").load("invoice.php?place=<?php echo urlencode($place); ?>&action=valid&token=<?php echo newToken(); ?>&pay=CB&amount=" + amountpayed + "&invoiceid=" + invoiceid, function () {

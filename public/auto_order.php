@@ -43,7 +43,7 @@ $_SESSION["fluxposterminal"] = getDolGlobalInt('FLUXPOS_TERMINAL_NB_FOR_PUBLIC',
 
 define('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE', 1);
 if (GETPOSTISSET("mobilepage")) {
-	require DOL_DOCUMENT_ROOT.'/fluxpos/invoice.php';	// The section with list of selected products in order
+	require dol_buildpath('/fluxpos/invoice.php');	// The section with list of selected products in order
 } else {
-	require DOL_DOCUMENT_ROOT.'/fluxpos/phone.php';
+	require dol_buildpath('/fluxpos/phone.php');
 }

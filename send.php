@@ -103,7 +103,7 @@ if ($action == "send" && $user->hasRight('fluxpos', 'run')) {
 		$nojs = 1;	// used by include of fluxpos/receipt.php
 
 		ob_start(); // turn on output receipt
-		include DOL_DOCUMENT_ROOT.'/fluxpos/receipt.php';
+		include dol_buildpath('/fluxpos/receipt.php');
 		$receipt = ob_get_contents(); // get the contents of the output buffer
 		ob_end_clean();
 	} else {
@@ -203,7 +203,7 @@ function SendMail() {
 	$.ajax({
 		type: "GET",
 		data: { token: '<?php echo currentToken(); ?>' },
-		url: '<?php print DOL_URL_ROOT.'/fluxpos/send.php?action=send&token='.newToken().'&facid='.((int) $facid).'&email='; ?>' + encodeURIComponent($("#email").val()),
+		url: '<?php print dol_buildpath('/fluxpos/send.php', 1).'?action=send&token='.newToken().'&facid='.((int) $facid).'&email='; ?>' + encodeURIComponent($("#email").val()),
 		success: function(response) {
 			console.log("Email sent");
 			alert("Email sent");

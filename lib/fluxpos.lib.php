@@ -36,22 +36,22 @@ function fluxpos_admin_prepare_head()
 	$h = 0;
 	$head = array();
 
-	$head[$h][0] = DOL_URL_ROOT.'/fluxpos/admin/setup.php';
+	$head[$h][0] = dol_buildpath('/fluxpos/admin/setup.php', 1);
 	$head[$h][1] = $langs->trans("Parameters");
 	$head[$h][2] = 'setup';
 	$h++;
 
-	$head[$h][0] = DOL_URL_ROOT.'/fluxpos/admin/appearance.php';
+	$head[$h][0] = dol_buildpath('/fluxpos/admin/appearance.php', 1);
 	$head[$h][1] = $langs->trans("Appearance");
 	$head[$h][2] = 'appearance';
 	$h++;
 
-	$head[$h][0] = DOL_URL_ROOT.'/fluxpos/admin/receipt.php';
+	$head[$h][0] = dol_buildpath('/fluxpos/admin/receipt.php', 1);
 	$head[$h][1] = $langs->trans("Printers").' / '.$langs->trans("Receipt");
 	$head[$h][2] = 'receipt';
 	$h++;
 
-	$head[$h][0] = DOL_URL_ROOT.'/fluxpos/admin/bar.php';
+	$head[$h][0] = dol_buildpath('/fluxpos/admin/bar.php', 1);
 	$head[$h][1] = $langs->trans("BarRestaurant");
 	$head[$h][2] = 'bar';
 	$h++;
@@ -63,14 +63,14 @@ function fluxpos_admin_prepare_head()
 			// A disabled terminal is greyed out but still listed, so it can be enabled again
 			$label = '<span class="opacitymedium">'.$label.' ('.$langs->trans("Disabled").')</span>';
 		}
-		$head[$h][0] = DOL_URL_ROOT.'/fluxpos/admin/terminal.php?terminal='.$i;
+		$head[$h][0] = dol_buildpath('/fluxpos/admin/terminal.php', 1).'?terminal='.$i;
 		$head[$h][1] = $label;
 		$head[$h][2] = 'terminal'.$i;
 		$h++;
 	}
 
 	/*
-	$head[$h][0] = DOL_URL_ROOT.'/fluxpos/admin/other.php';
+	$head[$h][0] = dol_buildpath('/fluxpos/admin/other.php', 1);
 	$head[$h][1] = $langs->trans("About");
 	$head[$h][2] = 'other';
 	$h++;

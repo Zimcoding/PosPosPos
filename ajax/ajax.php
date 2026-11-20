@@ -132,11 +132,11 @@ function fluxposPrintInvoiceTicket($id, $term, $user)
 		return;
 	}
 
-	require_once DOL_DOCUMENT_ROOT.'/fluxpos/class/dolreceiptprinter.class.php';
+	require_once dol_buildpath('/fluxpos/class/dolreceiptprinter.class.php');
 	require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
 
 	// check printer for terminal
-	if (getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term) <= 0 && getDolGlobalString('FLUXPOS_PRINT_METHOD') != "fluxposconnector") {
+	if (getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term) <= 0 && getDolGlobalString('FLUXPOS_PRINT_METHOD') != "takeposconnector") {
 		return;
 	}
 
@@ -982,7 +982,7 @@ if ($action == 'getProducts' && $user->hasRight('fluxpos', 'run')) {
 } elseif ($action == "opendrawer" && $term != '' && $user->hasRight('fluxpos', 'run')) {
 	top_httphead('application/html');
 
-	require_once DOL_DOCUMENT_ROOT.'/fluxpos/class/dolreceiptprinter.class.php';
+	require_once dol_buildpath('/fluxpos/class/dolreceiptprinter.class.php');
 	$printer = new dolReceiptPrinter($db);
 
 	// check printer for terminal
@@ -1023,7 +1023,7 @@ if ($action == 'getProducts' && $user->hasRight('fluxpos', 'run')) {
 	top_httphead('application/html');
 
 	require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
-	require_once DOL_DOCUMENT_ROOT.'/fluxpos/class/dolreceiptprinter.class.php';
+	require_once dol_buildpath('/fluxpos/class/dolreceiptprinter.class.php');
 
 	$object = new Facture($db);
 	$printer = new dolReceiptPrinter($db);

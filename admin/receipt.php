@@ -80,7 +80,7 @@ if (GETPOST('action', 'alpha') == 'set') {
 } elseif (GETPOST('action', 'alpha') == 'setmethod') {
 	dolibarr_set_const($db, "FLUXPOS_PRINT_METHOD", GETPOST('value', 'alpha'), 'chaine', 0, '', $conf->entity);
 	// FluxPos connector require ReceiptPrinter module
-	if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector" && !isModEnabled('receiptprinter')) {
+	if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "takeposconnector" && !isModEnabled('receiptprinter')) {
 		activateModule("modReceiptPrinter", 1, 0);
 	}
 }
@@ -127,7 +127,7 @@ if (isALNERunningVersion()) {
 }
 print "</td></tr>\n";
 
-if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "browser" || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector") {
+if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "browser" || getDolGlobalString('FLUXPOS_PRINT_METHOD') == "takeposconnector") {
 	$substitutionarray = pdf_getSubstitutionArray($langs, array('ticket', 'member', 'candidate', 'shipping'), null, 2, array('mycompany', 'company', 'user', 'object', 'system'));
 	$substitutionarray['__(AnyTranslationKey)__'] = $langs->trans("Translation");
 
@@ -203,7 +203,7 @@ if (isALNERunningVersion()) {
 }
 print "</td></tr>\n";
 
-if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector" && filter_var(getDolGlobalString('FLUXPOS_PRINT_SERVER'), FILTER_VALIDATE_URL) == true) {
+if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "takeposconnector" && filter_var(getDolGlobalString('FLUXPOS_PRINT_SERVER'), FILTER_VALIDATE_URL) == true) {
 	print '<tr class="oddeven"><td>';
 	print $langs->trans('WeighingScale');
 	print '<td colspan="2">';
@@ -211,7 +211,7 @@ if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector" && filter_v
 	print "</td></tr>\n";
 }
 
-if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "fluxposconnector" && filter_var(getDolGlobalString('FLUXPOS_PRINT_SERVER'), FILTER_VALIDATE_URL) == true) {
+if (getDolGlobalString('FLUXPOS_PRINT_METHOD') == "takeposconnector" && filter_var(getDolGlobalString('FLUXPOS_PRINT_SERVER'), FILTER_VALIDATE_URL) == true) {
 	print '<tr class="oddeven"><td>';
 	print $langs->trans('CustomerDisplay');
 	print '<td colspan="2">';
@@ -279,7 +279,7 @@ print '<div style="width: 50%; float:center;background-color:#606060">';
 print '<center>';
 
 // Call fluxpos/receipt.php
-print '<iframe id="iframe" allowtransparency="true" style="background: #FFFFFF;" src="'.DOL_URL_ROOT.'/fluxpos/receipt.php?forcenoautoopen=1&specimen=1" width="80%" height="600"></iframe>';
+print '<iframe id="iframe" allowtransparency="true" style="background: #FFFFFF;" src="'.dol_buildpath('/fluxpos/receipt.php', 1).'?forcenoautoopen=1&specimen=1" width="80%" height="600"></iframe>';
 
 print '</center>';
 print '</div>';
