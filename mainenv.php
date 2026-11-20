@@ -59,3 +59,42 @@ if (!$res) {
 if (!$res) {
 	die('Include of main fails: the FluxPos module directory must stay inside the Dolibarr htdocs directory (htdocs/fluxpos or htdocs/custom/fluxpos).');
 }
+
+/**
+ * Return the web URL of the root directory of the module, with a trailing slash.
+ *
+ *	The URL is derived from the location of the page being served, so it always
+ * points to the copy of the module that runs, whatever its placement (htdocs/fluxpos,
+ * htdocs/custom/fluxpos, ...) and whatever the Dolibarr version. Do not use
+ * dol_buildpath('/fluxpos/', 1) for this: dol_buildpath() resolves the custom
+ * path by testing the existence of files on disk, so the URL of a directory
+ * (used by js/offline.js as the base URL of the module) is not resolved and
+ * falls back to the url of the core copy.
+ *
+ * Must be called after this file has been included (DOL_URL_ROOT is defined).
+ *
+ * @return string	URL of the module root with a trailing slash (eg. '/custom/fluxpos/')
+ */
+function fluxposUrlRoot()
+{
+	$urlroot = defined('DOL_URL_ROOT') ? DOL_URL_ROOT : '';
+	if (empty($_SERVER['SCRIPT_NAME'])) {
+		return $urlroot.'/fluxpos/';
+	}
+	$url = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME']));	// .../fluxpos or .../fluxpos/ajax
+
+	// A page served from a subdirectory of the module: go back to the module root
+	$url = preg_replace('@/(ajax|admin|css|genimg|public)$@i', '', $url);
+
+	// Safety net when the served page is not inside the module directory
+	if (substr($url, -8) != '/fluxpos') {
+		if (defined('DOL_DOCUMENT_ROOT') && strpos(DOL_DOCUMENT_ROOT, dirname($url)) === 0) {
+			$url .= '/fluxpos';
+		} else {
+			$url = $urlroot.'/fluxpos';
+		}
+	}
+
+	return $url.'/';
+}
+
