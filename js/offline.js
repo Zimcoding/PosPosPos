@@ -59,7 +59,7 @@ function openFluxPosOfflineDB() {
 
 	return new Promise(function (resolve, reject) {
 		if (!window.indexedDB) {
-			reject(new Error('IndexedDB is not supported by this browser'));
+			reject(new Error((window.fluxposlang && window.fluxposlang.FluxPosOfflineNoIndexedDB) ? window.fluxposlang.FluxPosOfflineNoIndexedDB : 'IndexedDB is not supported by this browser'));
 			return;
 		}
 		var request = window.indexedDB.open(FluxPosOfflineDBName, FluxPosOfflineDBVersion);
@@ -430,7 +430,7 @@ var FluxPosOffline = {
 			return;
 		}
 		this._lastBlockedNotice = now;
-		window.alert('This place has an order registered on the server, which cannot be modified while the terminal is offline. Press New to start a new separate order on this terminal.');
+		window.alert(this.t('FluxPosOfflineBlockedNotice', 'This place has an order registered on the server, which cannot be modified while the terminal is offline. Press New to start a new separate order on this terminal.'));
 	},
 
 	/**
@@ -715,7 +715,7 @@ var FluxPosOffline = {
 				cart = { place: String(place), socid: socid, created: Math.floor(Date.now() / 1000), lines: [], separate: (self._separatePlace === String(place)) };
 			}
 			if (cart.validated) {
-				window.alert('This sale has been validated on this terminal and is waiting for its synchronization to the server. It cannot be modified anymore.');
+				window.alert(self.t('FluxPosOfflineSaleLocked', 'This sale has been validated on this terminal and is waiting for its synchronization to the server. It cannot be modified anymore.'));
 				return false;
 			}
 			return takePOSOfflineStoreGet('products:' + socid + ':__all__').then(function (allproducts) {
@@ -735,7 +735,7 @@ var FluxPosOffline = {
 				}
 				if (!found) {
 					if (product == null) {
-						window.alert('This product is not into the catalog cached on this terminal. It cannot be sold while the terminal is offline.');
+						window.alert(self.t('FluxPosOfflineNotInCachedCatalog', 'This product is not into the catalog cached on this terminal. It cannot be sold while the terminal is offline.'));
 						return false;
 					}
 					cart.lines.push({ rowid: product.rowid, ref: product.ref, label: product.label, price_ttc: parseFloat(product.price_ttc) || 0, qty: qty });
@@ -764,7 +764,7 @@ var FluxPosOffline = {
 				return false;
 			}
 			if (cart.validated) {
-				window.alert('This sale has been validated on this terminal and is waiting for its synchronization to the server. It cannot be modified anymore.');
+				window.alert(self.t('FluxPosOfflineSaleLocked', 'This sale has been validated on this terminal and is waiting for its synchronization to the server. It cannot be modified anymore.'));
 				return false;
 			}
 			for (var i = 0; i < cart.lines.length; i++) {
@@ -773,7 +773,7 @@ var FluxPosOffline = {
 						// A line of the order of the place on the server can only be raised
 						// while the terminal is offline: the merge into the server order
 						// raises a quantity to the captured one, never lowers it.
-						window.alert('A line of the order of this place on the server can only be raised while the terminal is offline. The quantity is changed on the server when the connection is back.');
+						window.alert(self.t('FluxPosOfflineAdoptedLineRaiseOnly', 'A line of the order of this place on the server can only be raised while the terminal is offline. The quantity is changed on the server when the connection is back.'));
 						return false;
 					}
 					cart.lines[i].qty = Math.round((cart.lines[i].qty + parseFloat(delta)) * 1000) / 1000;
@@ -810,10 +810,10 @@ var FluxPosOffline = {
 		}).then(function (cart) {
 			if (cart == null || !cart.lines.length) {
 				if (!self.isOffline() && typeof Refresh == 'function') {
-					window.alert('This order has just been sent to the server. Pay it again on the screen.');
+					window.alert(self.t('FluxPosOfflineOrderJustSent', 'This order has just been sent to the server. Pay it again on the screen.'));
 					Refresh();
 				} else {
-					window.alert('There is no order captured on this place.');
+					window.alert(self.t('FluxPosOfflineNoOrderCaptured', 'There is no order captured on this place.'));
 				}
 				return false;
 			}
@@ -821,11 +821,11 @@ var FluxPosOffline = {
 				// The captured products are merged into the draft invoice which already
 				// exists on the server for this place: that order is paid on the server
 				// (only an order started offline can be paid whole from this terminal).
-				window.alert('This place has an order registered on the server. The products captured while offline are synchronized to it as soon as the connection is back, then it is paid there.');
+				window.alert(self.t('FluxPosOfflineAdoptedValidate', 'This place has an order registered on the server. The products captured while offline are synchronized to it as soon as the connection is back, then it is paid there.'));
 				return false;
 			}
 			return self.storeSale(cart, payments || [], 'cart:' + cart.place).then(function (sale) {
-				self._lastSaleNotice = 'Sale of ' + self.formatAmount(sale.total_ttc) + ' stored on this terminal. Its invoice number is given by the server when the connection is back.';
+				self._lastSaleNotice = self.t('FluxPosOfflineSaleStored', 'Sale of %s stored on this terminal. Its invoice number is given by the server when the connection is back.').replace('%s', self.formatAmount(sale.total_ttc));
 			}).then(function () {
 				self.updateOfflineStatus();
 				self.scheduleSync();
@@ -1065,17 +1065,17 @@ var FluxPosOffline = {
 			}
 
 			if (validated) {
-				html += '<div class="fluxposofflinenotice">' + 'This sale is validated. It has been safely stored with its payments: its invoice number and its receipt will be issued by the server as soon as the synchronization can be done.' + '</div>';
+				html += '<div class="fluxposofflinenotice">' + self.escapeHtml(self.t('FluxPosOfflineSaleStoredNotice', 'This sale is validated. It has been safely stored with its payments: its invoice number and its receipt will be issued by the server as soon as the synchronization can be done.')) + '</div>';
 			} else if (lines.length) {
 				if (cart && cart.adopted === true && cart.separate !== true) {
-					html += '<div class="fluxposofflinenotice">' + 'This order is captured on this terminal, its lines included. It is merged into the order of this place on the server as soon as the connection is back (only the quantities of its own lines can be raised while offline).' + '</div>';
+					html += '<div class="fluxposofflinenotice">' + self.escapeHtml(self.t('FluxPosOfflineAdoptedNotice', 'This order is captured on this terminal, its lines included. It is merged into the order of this place on the server as soon as the connection is back (only the quantities of its own lines can be raised while offline).')) + '</div>';
 				} else {
-					html += '<div class="fluxposofflinenotice">' + (!self.isOffline() ? 'This order is synchronized to the server in background.' : 'This order is stored on this terminal and will be synchronized to the server when the connection is back.') + '</div>';
+					html += '<div class="fluxposofflinenotice">' + self.escapeHtml(!self.isOffline() ? self.t('FluxPosOfflineOrderSynced', 'This order is synchronized to the server in background.') : self.t('FluxPosOfflineOrderStoredOffline', 'This order is stored on this terminal and will be synchronized to the server when the connection is back.')) + '</div>';
 				}
 			} else if (self._lastSaleNotice) {
 				html += '<div class="fluxposofflinenotice">' + self.escapeHtml(self._lastSaleNotice) + '</div>';
 			} else {
-				html += '<div class="fluxposofflinenotice opacitymedium">Offline mode: a new order can be captured, it will be synchronized to the server when the connection is back. An order already registered on the server is shown again when the connection is back.</div>';
+				html += '<div class="fluxposofflinenotice opacitymedium">' + self.escapeHtml(self.t('FluxPosOfflineEmptyCartNotice', 'Offline mode: a new order can be captured, it will be synchronized to the server when the connection is back. An order already registered on the server is shown again when the connection is back.')) + '</div>';
 			}
 			jQuery('#poslines').html(html);
 			return true;
@@ -1401,7 +1401,7 @@ var FluxPosOffline = {
 						self.markServerUp();
 						if (!data || data.error) {
 							// Refused by the server: keep the sale with its error and go on with the next one
-							sale.error = (data && data.error) ? String(data.error) : 'Unexpected answer of the server';
+							sale.error = (data && data.error) ? String(data.error) : self.t('FluxPosOfflineUnexpectedAnswer', 'Unexpected answer of the server');
 							console.log('FluxPos offline: sale ' + sale.uid + ' refused by the server: ' + sale.error);
 							return takePOSOfflineStorePut('sale:' + sale.uid, sale).then(function () {
 								return true;
@@ -1541,22 +1541,22 @@ var FluxPosOffline = {
 		this.countPending().then(function (pending) {
 			var parts = [];
 			if (pending.sales > 0) {
-				parts.push(pending.sales + ' sale(s) waiting');
+				parts.push(self.t('FluxPosOfflineStatusSalesWaiting', '%s sale(s) waiting').replace('%s', pending.sales));
 			}
 			if (pending.failed > 0) {
-				parts.push(pending.failed + ' refused by the server, see the browser console');
+				parts.push(self.t('FluxPosOfflineStatusRefused', '%s refused by the server, see the browser console').replace('%s', pending.failed));
 			}
 			if (pending.orders > 0) {
-				parts.push(pending.orders + ' open order(s) waiting');
+				parts.push(self.t('FluxPosOfflineStatusOrdersWaiting', '%s open order(s) waiting').replace('%s', pending.orders));
 			}
 			element.classList.remove('offline', 'pending');
 			element.onclick = null;
 			if (self.isOffline()) {
 				element.classList.add('offline');
-				element.textContent = 'Offline' + (parts.length ? ' - ' + parts.join(', ') : ' - catalog only');
+				element.textContent = self.t('FluxPosOfflineStatusOffline', 'Offline') + (parts.length ? ' - ' + parts.join(', ') : ' ' + self.t('FluxPosOfflineStatusCatalogOnly', '- catalog only'));
 			} else if (parts.length) {
 				element.classList.add('pending');
-				element.textContent = parts.join(', ') + ' - click to retry';
+				element.textContent = parts.join(', ') + self.t('FluxPosOfflineStatusClickRetry', ' - click to retry');
 				element.onclick = function () {
 					self.syncOutbox();
 				};

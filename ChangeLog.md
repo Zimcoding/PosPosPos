@@ -1,5 +1,10 @@
 # CHANGELOG FLUXPOS FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.0.14
+
+- All messages of the offline engine are translatable: every user-facing string (the notices of the offline status indicator, the messages shown when a product is added, quantities are changed or the cart is validated while offline, and the notices of the cart display) goes through the translation of the module (`langs/en_US/fluxpos.lang`, keys `FluxPosOffline*`), delivered to the terminal with the `fluxposlang` object of the POS screen and resolved at call time with an English fallback. The console messages stay technical English on purpose (they are for debugging, not for the cashier). A translation into Dutch or French can now simply be added as `langs/nl_NL/fluxpos.lang` or `langs/fr_FR/fluxpos.lang`.
+- The service worker cache is renewed (`fluxpos-offline-v9`) so terminals load the updated offline.js.
+
 ## 1.0.13
 
 - Bug fix: when the server of a terminal that was working offline became reachable again, the recovery could end in the console error `self.getCart is not a function` (markServerUp): the function used the local variable `self` inside its callbacks without declaring it, so JavaScript fell back on the global `self` (the browser window) and the display was not given back to the server after a synchronization. The missing local variable is declared, and in the same way as the other engine functions already did. The service worker cache is renewed (`fluxpos-offline-v8`) so terminals load the fixed offline.js.
