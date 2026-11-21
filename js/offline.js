@@ -394,6 +394,11 @@ var FluxPosOffline = {
 		}
 		this.serverDown = true;
 		this.updateOfflineStatus();
+		if (typeof jQuery('#offlinecart').val() != 'undefined') {
+			// Show the local cart of the place at once when one is being captured,
+			// instead of leaving the lines of the server order on the screen
+			this.renderCart();
+		}
 		if (!this._probeTimer) {
 			this._probeTimer = setInterval(function () {
 				self.probe();

@@ -680,11 +680,28 @@ function ClickProduct(position, qty = 1, qty_std = 0) {
 
 		addInvoiceLine = function(qty, qty_std_inner = 0) {
 			// Call page invoice.php to generate the section with product lines
-			  $("#poslines").load("invoice.php?action=addline&token=<?php echo currentToken(); ?>&place="+place+"&idproduct="+idproduct+"&selectedline="+selectedline+"&qty="+qty+"&invoiceid="+invoiceid+(qty_std_inner ? '&qty_std=1' : ''), function() {
+			var url = "invoice.php?action=addline&token=<?php echo currentToken(); ?>&place="+place+"&idproduct="+idproduct+"&selectedline="+selectedline+"&qty="+qty+"&invoiceid="+invoiceid+(qty_std_inner ? '&qty_std=1' : '');
+			var idproducttotap = idproduct;		// The callback resets idproduct before it can fall back
+			$("#poslines").load(url, function(response, status, xhr) {
 				idproduct = "";
 				<?php if (getDolGlobalString('FLUXPOS_CUSTOMER_DISPLAY')) {
 					echo "CustomerDisplay();";
 				}?>
+				if (status == 'error') {
+					// The server could not be reached (or refused the call): never lose the
+					// tap silently. On a network failure the terminal works offline, so the
+					// product goes into the local cart of the place like a direct tap would.
+					console.log("ClickProduct addline failed http="+((xhr||{}).status||0)+" status="+status);
+					if (typeof FluxPosOffline != 'undefined' && typeof FluxPosOffline.handleFailure == 'function' && FluxPosOffline.handleFailure(xhr, status)) {
+						if (($('#invoiceid').val() || '') == '') {
+							if (typeof FluxPosOffline.addProduct == 'function') {
+								FluxPosOffline.addProduct(idproducttotap, qty);
+							}
+						} else if (typeof FluxPosOffline.notifyBlockedCapture == 'function') {
+							FluxPosOffline.notifyBlockedCapture();
+						}
+					}
+				}
 			});
 		};
 
@@ -823,7 +840,20 @@ function Refresh() {
 		return;
 	}
 	console.log("Refresh by reloading place="+place+" invoiceid="+invoiceid);
-	$("#poslines").load("invoice.php?place="+place+"&invoiceid="+invoiceid, function() {
+	$("#poslines").load("invoice.php?place="+place+"&invoiceid="+invoiceid, function(response, status, xhr) {
+		if (status == 'error') {
+			// The server could not be reached: switch the display to the data of the
+			// terminal instead of leaving the lines of the order as they are.
+			console.log("Refresh failed http="+((xhr||{}).status||0)+" status="+status);
+			if (typeof FluxPosOffline != 'undefined') {
+				if (typeof FluxPosOffline.handleFailure == 'function') {
+					FluxPosOffline.handleFailure(xhr, status);
+				}
+				if (typeof FluxPosOffline.renderCart == 'function') {
+					FluxPosOffline.renderCart();
+				}
+			}
+		}
 		//$('#poslines').scrollTop($('#poslines')[0].scrollHeight);
 	});
 }
@@ -1509,7 +1539,7 @@ if (!getDolGlobalString('FLUXPOS_HIDE_HEAD_BAR')) {
 					<div class="login_block_other fluxpos">
 					<input type="text" id="search" name="search" class="input-nobottom" onkeyup="Search2('<?php echo dol_escape_js($keyCodeForEnter); ?>', null);" placeholder="<?php echo dol_escape_htmltag($langs->trans("Search")); ?>" autofocus>
 					<a onclick="ClearSearch(false);" class="nohover"><span class="fa fa-backspace"></span></a>
-					<a href="<?php echo DOL_URL_ROOT.'/'; ?>" target="backoffice" rel="opener"><!-- we need rel="opener" here, we are on same domain and we need to be able to reuse this tab several times -->
+					<a href="<?php echo DOL_URL_ROOT.'/index.php?token='.newToken(); ?>" target="backoffice" rel="opener"><!-- we need rel="opener" here, we are on same domain and we need to be able to reuse this tab several times -->
 					<span class="fas fa-home"></span></a>
 					<?php if (empty($conf->dol_use_jmobile)) { ?>
 					<a class="hideonsmartphone" onclick="FullScreen();" title="<?php echo dol_escape_htmltag($langs->trans("ClickFullScreenEscapeToLeave")); ?>"><span class="fa fa-expand-arrows-alt"></span></a>
