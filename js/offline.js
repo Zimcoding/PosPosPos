@@ -465,6 +465,7 @@ var FluxPosOffline = {
 	markServerUp: function () {
 		'use strict';
 
+		var self = this;
 		if (!this.serverDown) {
 			return;
 		}
