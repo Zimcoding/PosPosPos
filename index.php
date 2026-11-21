@@ -662,10 +662,16 @@ function ClickProduct(position, qty = 1, qty_std = 0) {
 		// will be synchronized to the server in background). Only an order with no
 		// invoice created yet on the server can be captured while offline; for the other
 		// places, the cashier is guided to "New" instead of a tap that does nothing.
-		if (typeof FluxPosOffline != 'undefined' && FluxPosOffline.isOffline()) {
+		// The service worker of a terminal can still serve the offline.js of the previous
+		// deployment for a moment, so every function of the engine is checked before use.
+		if (typeof FluxPosOffline != 'undefined' && typeof FluxPosOffline.isOffline == 'function' && FluxPosOffline.isOffline()) {
 			if (($('#invoiceid').val() || '') == '') {
-				FluxPosOffline.addProduct(idproduct, qty);
-			} else {
+				if (typeof FluxPosOffline.addProduct == 'function') {
+					FluxPosOffline.addProduct(idproduct, qty);
+				} else {
+					console.log('FluxPos offline: this screen runs an older version of the offline engine, reload the POS screen to work offline');
+				}
+			} else if (typeof FluxPosOffline.notifyBlockedCapture == 'function') {
 				FluxPosOffline.notifyBlockedCapture();
 			}
 			ClearSearch(false);
