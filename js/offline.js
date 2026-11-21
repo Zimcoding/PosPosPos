@@ -216,10 +216,62 @@ function takePOSOfflineStorePutAndDelete(putkey, value, deletekey) {
 
 
 var FluxPosOffline = {
-	fluxposbaseurl: (typeof fluxposbaseuri != 'undefined') ? fluxposbaseuri : '/fluxpos/',
-	fluxposnewtoken: (typeof fluxposnewtoken != 'undefined') ? fluxposnewtoken : '',
-	fluxposcurrency: (typeof fluxposcurrency != 'undefined') ? fluxposcurrency : '',
-	fluxposlang: (typeof fluxposlang != 'undefined') ? fluxposlang : {},
+	/**
+	 * Root URL of the module ('/custom/fluxpos/' for a custom placement), resolved at
+	 * call time. Prefers the fluxposbaseuri global of the page; falls back on the URL
+	 * of this script file (.../fluxpos/js/offline.js), the only reliable marker when
+	 * the page does not define the global.
+	 *
+	 * @returns {string} Root URL of the module, with a trailing slash
+	 */
+	get fluxposbaseurl() {
+		'use strict';
+
+		if (typeof window.fluxposbaseuri == 'string' && window.fluxposbaseuri) {
+			return window.fluxposbaseuri;
+		}
+		var scripts = document.getElementsByTagName('script');
+		for (var i = 0; i < scripts.length; i++) {
+			var src = scripts[i].src || '';
+			if (/(^|\/)offline\.js([?#]|$)/.test(src)) {
+				return src.replace(/js\/offline\.js([?#].*)?$/, '');
+			}
+		}
+		return '/fluxpos/';
+	},
+
+	/**
+	 * Security token of the POS screen, resolved at call time.
+	 *
+	 * @returns {string} Current CSRF token of the page (empty when unknown)
+	 */
+	get fluxposnewtoken() {
+		'use strict';
+
+		return (typeof window.fluxposnewtoken == 'string') ? window.fluxposnewtoken : '';
+	},
+
+	/**
+	 * Currency code of the Dolibarr installation, resolved at call time.
+	 *
+	 * @returns {string} Currency code
+	 */
+	get fluxposcurrency() {
+		'use strict';
+
+		return (typeof window.fluxposcurrency == 'string') ? window.fluxposcurrency : '';
+	},
+
+	/**
+	 * Translation strings passed by index.php, resolved at call time.
+	 *
+	 * @returns {Object} Map of translation keys
+	 */
+	get fluxposlang() {
+		'use strict';
+
+		return (window.fluxposlang && typeof window.fluxposlang == 'object') ? window.fluxposlang : {};
+	},
 
 	serverDown: false,			// true after a call to the server failed for a network reason
 	requestTimeout: 15000,		// ms before a call to the server is considered lost
