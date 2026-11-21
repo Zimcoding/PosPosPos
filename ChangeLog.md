@@ -1,5 +1,10 @@
 # CHANGELOG FLUXPOS FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.0.9
+
+- Since the custom-placement rework, the offline engine resolved the root URL of the module and the security token into its own properties while the file loaded from the `<head>` of the page, that is before the POS page defines them: every offline-engine call (catalog synchronization, ping, sale/order synchronization) went to `/fluxpos/ajax/ajax.php` instead of `/custom/fluxpos/ajax/ajax.php`, with an empty token, and was refused (`HTTP 403`, `token=` empty in the console). The product catalog was therefore never cached on the terminals: offline product taps found no product and offline category switching showed nothing (products are not added, with or without a visible notice). The module URL and the token are now resolved at call time (and fall back on the location of offline.js itself), so the engine reaches the endpoints with the current token on any placement. This also restores correct amounts and translations in the offline cart display.
+- The service worker cache is renewed (`fluxpos-offline-v6`) so terminals load the fixed offline.js.
+
 ## 1.0.8
 
 - The moment the server becomes unreachable (network gone, but the terminal still thinks it is online), the first product taps went through the server call only: the addline fragment load had no failure handling, so the tap hung or failed without any visible result ("failing silently"). A failed line-entry load now falls back on the terminal: on a network failure the product goes into the local cart of the place exactly like a direct offline tap; if the place already has an order on the server, the cashier gets the "press New" notice. A failed refresh of the order switches the display to the local cart as soon as the connection drops, instead of leaving stale lines on screen.
