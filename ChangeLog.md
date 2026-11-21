@@ -1,5 +1,9 @@
 # CHANGELOG FLUXPOS FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.0.13
+
+- Bug fix: when the server of a terminal that was working offline became reachable again, the recovery could end in the console error `self.getCart is not a function` (markServerUp): the function used the local variable `self` inside its callbacks without declaring it, so JavaScript fell back on the global `self` (the browser window) and the display was not given back to the server after a synchronization. The missing local variable is declared, and in the same way as the other engine functions already did. The service worker cache is renewed (`fluxpos-offline-v8`) so terminals load the fixed offline.js.
+
 ## 1.0.12
 
 - Phase 4 requirements draft added: `docs/PHASE4_REQUIREMENTS.md` collects the requirements for the next development phase (production readiness) — terminal synchronization panel with explicit error text and retry/discard, completion of the adopted-order capture (lowering/deleting lines of a server order while offline via the line identifiers), setup pre-flight checks (duplicate module copies, missing `llx_fluxpos_sale`, legacy constants, terminal/customer setup, browser self-test), translation of the offline engine through `fluxpos.lang` and `fluxposlang`, server-side synchronization traceability, catalog size guard, and the conflict policy for adopted orders, with an acceptance test matrix and a suggested delivery order. No code change in this version (documentation only); module version 1.0.12.
