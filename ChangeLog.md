@@ -1,5 +1,11 @@
 # CHANGELOG FLUXPOS FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.0.8
+
+- The moment the server becomes unreachable (network gone, but the terminal still thinks it is online), the first product taps went through the server call only: the addline fragment load had no failure handling, so the tap hung or failed without any visible result ("failing silently"). A failed line-entry load now falls back on the terminal: on a network failure the product goes into the local cart of the place exactly like a direct offline tap; if the place already has an order on the server, the cashier gets the "press New" notice. A failed refresh of the order switches the display to the local cart as soon as the connection drops, instead of leaving stale lines on screen.
+- The home (backoffice) button of the POS header opened the Dolibarr home without a security token, so the CSRF check refused it (the repeated "GET /index.php refused by CSRF protection - Token not provided" in the log). The link now carries the token.
+- The service worker cache is renewed (`fluxpos-offline-v5`) so terminals load the new offline.js.
+
 ## 1.0.7
 
 - After a deployment, a terminal whose service worker still serves the offline.js of the previous version ran the new POS page with an older offline engine: tapping a product while offline threw "FluxPosOffline.notifyBlockedCapture is not a function" and stopped the sale entry. Every call to the offline engine from the POS page is now checked before use, so an out-of-date script can only log a hint asking for a reload instead of breaking the page.
