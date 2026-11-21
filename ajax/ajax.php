@@ -1224,12 +1224,20 @@ if ($action == 'getProducts' && $user->hasRight('fluxpos', 'run')) {
 	$object = new Facture($db);
 	if ($id > 0) {
 		$object->fetch($id);
+		// The lines are used by the snapshots of the offline engine: it caches the order
+		// while online so it can adopt it into the local cart when offline (see
+		// captureOnServerOrder() of js/offline.js)
+		$object->fetch_lines();
 	}
 
 	// Remove sensitive internal properties before serialization to avoid
 	// leaking the database connection parameters and the schema metadata.
 	unset($object->db);
 	unset($object->fields);
+	foreach ($object->lines as $factureline) {
+		unset($factureline->db);
+		unset($factureline->fields);
+	}
 
 	echo json_encode($object);
 } elseif ($action == 'thecheck' && $user->hasRight('fluxpos', 'run')) {

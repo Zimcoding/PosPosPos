@@ -1,5 +1,11 @@
 # CHANGELOG FLUXPOS FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.0.11
+
+- A place whose order is already registered on the server can finally be captured while offline: the order is adopted into the local cart of the place at the first product tap (this used to be the "Press New" notice). The terminal keeps a snapshot of the order of each place while the connection is up (stored on the terminal like the catalog and the carts), so going offline keeps the lines of the order on display, the new product taps keep working (the quantities of lines already on the server can only be raised while offline — the merge raises, never duplicates), and a background synchronization merges the whole cart into the existing draft invoice of the place as soon as the connection is back, with the same endpoint and the same rules as an order started offline. The payment of such an order stays on the server as today (only an order started offline can be paid whole from the terminal). When no snapshot of the order is available (the order was never shown on this screen), the cashier is guided to "New" as before. Discount lines and sub-lines are excluded, like the server merge already does.
+- The service worker cache is renewed (`fluxpos-offline-v7`) so terminals load the new offline.js.
+(Capture offline on a place whose order exists on the server (adopt the server order))
+
 ## 1.0.10
 
 - Deployment hardening: the browser of a terminal can keep serving its own cached old `offline.js` long after a deployment (its service worker cache only renews when the engine itself changes, but the plain HTTP cache never expires reliably), and an old engine calls the server on the obsolete URL with an obsolete token: catalog synchronization refused 403 again although the fixed code was on the server. The module scripts of the POS screen are now loaded with the modification time of the file on disk as a version (`offline.js?v=...`), so any terminal drops its cached copy as soon as the files are updated on the server.
