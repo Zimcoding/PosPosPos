@@ -214,7 +214,28 @@ var fluxposlang = {
 	RemainToPay: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("RemainToPay")); ?>',
 	PaymentTypeShortLIQ: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("PaymentTypeShortLIQ")); ?>',
 	PaymentTypeShortCB: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("PaymentTypeShortCB")); ?>',
-	PaymentTypeShortCHQ: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("PaymentTypeShortCHQ")); ?>'
+	PaymentTypeShortCHQ: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("PaymentTypeShortCHQ")); ?>',
+	FluxPosOfflineNoIndexedDB: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineNoIndexedDB")); ?>',
+	FluxPosOfflineBlockedNotice: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineBlockedNotice")); ?>',
+	FluxPosOfflineSaleLocked: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineSaleLocked")); ?>',
+	FluxPosOfflineNotInCachedCatalog: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineNotInCachedCatalog")); ?>',
+	FluxPosOfflineAdoptedLineRaiseOnly: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineAdoptedLineRaiseOnly")); ?>',
+	FluxPosOfflineOrderJustSent: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineOrderJustSent")); ?>',
+	FluxPosOfflineNoOrderCaptured: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineNoOrderCaptured")); ?>',
+	FluxPosOfflineAdoptedValidate: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineAdoptedValidate")); ?>',
+	FluxPosOfflineSaleStored: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineSaleStored")); ?>',
+	FluxPosOfflineSaleStoredNotice: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineSaleStoredNotice")); ?>',
+	FluxPosOfflineAdoptedNotice: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineAdoptedNotice")); ?>',
+	FluxPosOfflineOrderSynced: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineOrderSynced")); ?>',
+	FluxPosOfflineOrderStoredOffline: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineOrderStoredOffline")); ?>',
+	FluxPosOfflineEmptyCartNotice: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineEmptyCartNotice")); ?>',
+	FluxPosOfflineUnexpectedAnswer: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineUnexpectedAnswer")); ?>',
+	FluxPosOfflineStatusOffline: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineStatusOffline")); ?>',
+	FluxPosOfflineStatusCatalogOnly: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineStatusCatalogOnly")); ?>',
+	FluxPosOfflineStatusSalesWaiting: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineStatusSalesWaiting")); ?>',
+	FluxPosOfflineStatusRefused: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineStatusRefused")); ?>',
+	FluxPosOfflineStatusOrdersWaiting: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineStatusOrdersWaiting")); ?>',
+	FluxPosOfflineStatusClickRetry: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineStatusClickRetry")); ?>'
 };
 var editaction="qty";
 var editnumber="";

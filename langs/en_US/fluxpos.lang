@@ -243,3 +243,28 @@ PaymentTypeShort=Payment
 PaymentTypeShortLIQ=Cash
 PaymentTypeShortCB=Credit card
 PaymentTypeShortCHQ=Check
+
+#
+# Offline engine (messages shown by the POS screen while the terminal works offline)
+#
+FluxPosOfflineNoIndexedDB=IndexedDB is not supported by this browser
+FluxPosOfflineBlockedNotice=This place has an order registered on the server, which cannot be modified while the terminal is offline. Press New to start a new separate order on this terminal.
+FluxPosOfflineSaleLocked=This sale has been validated on this terminal and is waiting for its synchronization to the server. It cannot be modified anymore.
+FluxPosOfflineNotInCachedCatalog=This product is not into the catalog cached on this terminal. It cannot be sold while the terminal is offline.
+FluxPosOfflineAdoptedLineRaiseOnly=A line of the order of this place on the server can only be raised while the terminal is offline. The quantity is changed on the server when the connection is back.
+FluxPosOfflineOrderJustSent=This order has just been sent to the server. Pay it again on the screen.
+FluxPosOfflineNoOrderCaptured=There is no order captured on this place.
+FluxPosOfflineAdoptedValidate=This place has an order registered on the server. The products captured while offline are synchronized to it as soon as the connection is back, then it is paid there.
+FluxPosOfflineSaleStored=Sale of %s stored on this terminal. Its invoice number is given by the server when the connection is back.
+FluxPosOfflineSaleStoredNotice=This sale is validated. It has been safely stored with its payments: its invoice number and its receipt will be issued by the server as soon as the synchronization can be done.
+FluxPosOfflineAdoptedNotice=This order is captured on this terminal, its lines included. It is merged into the order of this place on the server as soon as the connection is back (only the quantities of its own lines can be raised while offline).
+FluxPosOfflineOrderSynced=This order is synchronized to the server in background.
+FluxPosOfflineOrderStoredOffline=This order is stored on this terminal and will be synchronized to the server when the connection is back.
+FluxPosOfflineEmptyCartNotice=Offline mode: a new order can be captured, it will be synchronized to the server when the connection is back. An order already registered on the server is shown again when the connection is back.
+FluxPosOfflineUnexpectedAnswer=Unexpected answer of the server
+FluxPosOfflineStatusOffline=Offline
+FluxPosOfflineStatusCatalogOnly=- catalog only
+FluxPosOfflineStatusSalesWaiting=%s sale(s) waiting
+FluxPosOfflineStatusRefused=%s refused by the server, see the browser console
+FluxPosOfflineStatusOrdersWaiting=%s open order(s) waiting
+FluxPosOfflineStatusClickRetry=- click to retry
