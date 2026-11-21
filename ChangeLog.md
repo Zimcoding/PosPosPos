@@ -1,5 +1,9 @@
 # CHANGELOG FLUXPOS FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.0.10
+
+- Deployment hardening: the browser of a terminal can keep serving its own cached old `offline.js` long after a deployment (its service worker cache only renews when the engine itself changes, but the plain HTTP cache never expires reliably), and an old engine calls the server on the obsolete URL with an obsolete token: catalog synchronization refused 403 again although the fixed code was on the server. The module scripts of the POS screen are now loaded with the modification time of the file on disk as a version (`offline.js?v=...`), so any terminal drops its cached copy as soon as the files are updated on the server.
+
 ## 1.0.9
 
 - Since the custom-placement rework, the offline engine resolved the root URL of the module and the security token into its own properties while the file loaded from the `<head>` of the page, that is before the POS page defines them: every offline-engine call (catalog synchronization, ping, sale/order synchronization) went to `/fluxpos/ajax/ajax.php` instead of `/custom/fluxpos/ajax/ajax.php`, with an empty token, and was refused (`HTTP 403`, `token=` empty in the console). The product catalog was therefore never cached on the terminals: offline product taps found no product and offline category switching showed nothing (products are not added, with or without a visible notice). The module URL and the token are now resolved at call time (and fall back on the location of offline.js itself), so the engine reaches the endpoints with the current token on any placement. This also restores correct amounts and translations in the offline cart display.

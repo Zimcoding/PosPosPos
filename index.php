@@ -119,7 +119,18 @@ $form = new Form($db);
 
 $disablejs = 0;
 $disablehead = 0;
-$arrayofjs = array(dol_buildpath('/fluxpos/js/jquery.colorbox-min.js', 1), dol_buildpath('/fluxpos/js/offline.js', 1)); // TODO It seems we don't need colorbox
+
+// Static assets of the module carry the modification time of the file on disk as
+// version, so a terminal drops its browser-cached copy after every deployment.
+// Without this, a terminal could keep running an old offline.js for a long time
+// (the service worker cache only renews when itself is renewed), and the old
+// engine then calls the server on an obsolete URL with an obsolete token.
+$fluxpos_javascripts = array('/fluxpos/js/jquery.colorbox-min.js', '/fluxpos/js/offline.js');
+$arrayofjs = array();
+foreach ($fluxpos_javascripts as $fluxpos_javascript) {
+	$fluxpos_javascript_mtime = (int) @filemtime(dol_buildpath($fluxpos_javascript, 0));
+	$arrayofjs[] = dol_buildpath($fluxpos_javascript, 1).($fluxpos_javascript_mtime > 0 ? '?v='.$fluxpos_javascript_mtime : '');
+}
 $arrayofcss = array(dol_buildpath('/fluxpos/css/pos.css.php', 1), dol_buildpath('/fluxpos/css/colorbox.css', 1));
 
 if (getDolGlobalInt('FLUXPOS_COLOR_THEME') == 1) {
