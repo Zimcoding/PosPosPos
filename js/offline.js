@@ -719,10 +719,11 @@ var FluxPosOffline = {
 			}
 			return takePOSOfflineStoreGet('products:' + socid + ':__all__').then(function (allproducts) {
 				var product = (allproducts && allproducts[idproduct]) ? allproducts[idproduct] : null;
-				if (product == null) {
-					window.alert('This product is not into the catalog cached on this terminal. It cannot be sold while the terminal is offline.');
-					return false;
-				}
+
+				// The product may already be a line of the cart, including a line adopted
+				// from the order of the place on the server (see captureOnServerOrder()):
+				// only the quantity is raised then, even when the product is not in the
+				// cached catalog (its price is on the line).
 				var found = false;
 				for (var i = 0; i < cart.lines.length; i++) {
 					if (String(cart.lines[i].rowid) == String(idproduct)) {
@@ -732,6 +733,10 @@ var FluxPosOffline = {
 					}
 				}
 				if (!found) {
+					if (product == null) {
+						window.alert('This product is not into the catalog cached on this terminal. It cannot be sold while the terminal is offline.');
+						return false;
+					}
 					cart.lines.push({ rowid: product.rowid, ref: product.ref, label: product.label, price_ttc: parseFloat(product.price_ttc) || 0, qty: qty });
 				}
 				return self.saveCart(cart).then(function () {
@@ -763,6 +768,13 @@ var FluxPosOffline = {
 			}
 			for (var i = 0; i < cart.lines.length; i++) {
 				if (String(cart.lines[i].rowid) == String(idproduct)) {
+					if (cart.lines[i].adopted === true && parseFloat(delta) < 0) {
+						// A line of the order of the place on the server can only be raised
+						// while the terminal is offline: the merge into the server order
+						// raises a quantity to the captured one, never lowers it.
+						window.alert('A line of the order of this place on the server can only be raised while the terminal is offline. The quantity is changed on the server when the connection is back.');
+						return false;
+					}
 					cart.lines[i].qty = Math.round((cart.lines[i].qty + parseFloat(delta)) * 1000) / 1000;
 					if (cart.lines[i].qty <= 0) {
 						cart.lines.splice(i, 1);
@@ -804,6 +816,13 @@ var FluxPosOffline = {
 				}
 				return false;
 			}
+			if (cart.adopted === true && cart.separate !== true) {
+				// The captured products are merged into the draft invoice which already
+				// exists on the server for this place: that order is paid on the server
+				// (only an order started offline can be paid whole from this terminal).
+				window.alert('This place has an order registered on the server. The products captured while offline are synchronized to it as soon as the connection is back, then it is paid there.');
+				return false;
+			}
 			return self.storeSale(cart, payments || [], 'cart:' + cart.place).then(function (sale) {
 				self._lastSaleNotice = 'Sale of ' + self.formatAmount(sale.total_ttc) + ' stored on this terminal. Its invoice number is given by the server when the connection is back.';
 			}).then(function () {
@@ -830,6 +849,138 @@ var FluxPosOffline = {
 		return takePOSOfflineStoreDelete('cart:' + plc).then(function () {
 			self.updateOfflineStatus();
 			return self.renderCart();
+		});
+	},
+
+	/**
+	 * Keep a snapshot of the order currently displayed for a place (the draft invoice
+	 * registered on the server), taken while the connection is up. It is the baseline
+	 * used when the terminal has to capture on a place with a server order: the first
+	 * product tap adopts the order into the local cart (see captureOnServerOrder()),
+	 * so the cashier can keep capturing and the merge into the server order is exact.
+	 * Called after every load of the order fragment from the server (index.php Refresh
+	 * and addline) and when the POS screen is opened.
+	 *
+	 * @returns {Promise<bool>} Promise of true when the order is cached
+	 */
+	cacheServerOrder: function () {
+		'use strict';
+
+		var invoiceid = parseInt(jQuery('#invoiceid').val(), 10) || 0;
+		var plc = (typeof place != 'undefined') ? place : 0;
+		if (invoiceid <= 0 || !window.indexedDB) {
+			// No order on the server for this place: its snapshot is not needed anymore
+			return takePOSOfflineStoreDelete('order:' + plc).then(function () {
+				return true;
+			}).catch(function () {
+				return false;
+			});
+		}
+		var self = this;
+		var url = this.fluxposbaseurl + 'ajax/ajax.php?action=getInvoice&token=' + this.fluxposnewtoken + '&id=' + invoiceid;
+		return jQuery.ajax(url, { dataType: 'json', timeout: this.requestTimeout, global: false }).then(function (data) {
+			if (!data || !data.lines || !jQuery.isArray(data.lines)) {
+				return false;
+			}
+			var order = {
+				invoiceid: invoiceid,
+				socid: parseInt(data.socid, 10) || 0,
+				created: Math.floor(Date.now() / 1000),
+				lines: []
+			};
+			for (var i = 0; i < data.lines.length; i++) {
+				var srcline = data.lines[i];
+				var lineid = parseInt(srcline.id || srcline.rowid, 10) || 0;
+				var fwproduct = parseInt(srcline.fk_product, 10) || 0;
+				var lineqty = parseFloat(srcline.qty) || 0;
+				if (lineid <= 0 || fwproduct <= 0 || parseInt(srcline.fk_parent_line, 10) > 0 || parseInt(srcline.special_code, 10) == 4) {
+					continue;	// Free lines, sub-lines and discounts are not merged by product (same rule as the server merge)
+				}
+				order.lines.push({
+					rowid: fwproduct,
+					ref: srcline.product_ref || '',
+					label: srcline.label || srcline.product_label || srcline.product_ref || ('Product ' + fwproduct),
+					price_ttc: (lineqty > 0) ? Math.round((parseFloat(srcline.total_ttc) / lineqty) * 1000000) / 1000000 : 0,
+					qty: lineqty,
+					lineid: lineid
+				});
+			}
+			return takePOSOfflineStorePut('order:' + plc, order).then(function () {
+				console.log('FluxPos offline: order ' + invoiceid + ' of place ' + plc + ' cached for offline use (' + order.lines.length + ' product lines)');
+				return true;
+			});
+		}, function (jqxhr, textStatus) {
+			self.handleFailure(jqxhr, textStatus);
+			return false;
+		}).catch(function (error) {
+			console.log('FluxPos offline: caching of the order of place ' + plc + ' failed', error);
+			return false;
+		});
+	},
+
+	/**
+	 * Capture a product tap while offline on a place whose order exists on the server.
+	 * On the first tap, the order of the place is adopted into the local cart from the
+	 * last snapshot cached while online (see cacheServerOrder()): its lines are shown
+	 * again and the new products can be added; the background synchronization merges
+	 * the cart into the draft invoice of the place (same endpoint and rules as for an
+	 * order started offline: quantities raised to the captured ones, never doubled).
+	 * When no snapshot is cached (the order has never been displayed on this screen),
+	 * the cashier is guided to "New" as before: only the lines can then be merged into
+	 * the order of the place, not the price of the lines already on it.
+	 *
+	 * @param  {number} idproduct ID of product
+	 * @param  {number} qty       Quantity to add
+	 * @returns {Promise<bool>} Promise of true when the product is added to the cart
+	 */
+	captureOnServerOrder: function (idproduct, qty) {
+		'use strict';
+
+		var self = this;
+		return this.getCart().then(function (cart) {
+			if (cart != null) {
+				if (cart.separate === true) {
+					// The cashier is capturing a separate order next to the order of the
+					// place: never merge both.
+					self.notifyBlockedCapture();
+					return false;
+				}
+				return self.addProduct(idproduct, qty);
+			}
+			var plc = (typeof place != 'undefined') ? place : 0;
+			return takePOSOfflineStoreGet('order:' + plc).then(function (order) {
+				if (!order || !order.invoiceid) {
+					self.notifyBlockedCapture();
+					return false;
+				}
+				var adopted = {
+					place: String(plc),
+					socid: parseInt(order.socid, 10) || 0,
+					created: Math.floor(Date.now() / 1000),
+					invoiceid: parseInt(order.invoiceid, 10) || 0,
+					adopted: true,
+					lines: []
+				};
+				for (var i = 0; i < order.lines.length; i++) {
+					adopted.lines.push({
+						rowid: order.lines[i].rowid,
+						ref: order.lines[i].ref,
+						label: order.lines[i].label,
+						price_ttc: parseFloat(order.lines[i].price_ttc) || 0,
+						qty: parseFloat(order.lines[i].qty) || 0,
+						lineid: parseInt(order.lines[i].lineid, 10) || 0,
+						adopted: true
+					});
+				}
+				return self.saveCart(adopted).then(function () {
+					// Show the adopted order (its lines, then the added product) at once:
+					// the screen still displays the fragment of the server order, which must
+					// be replaced even though #invoiceid still holds its id
+					return self.renderCart(true);
+				}).then(function () {
+					return self.addProduct(idproduct, qty);
+				});
+			});
 		});
 	},
 
@@ -915,7 +1066,11 @@ var FluxPosOffline = {
 			if (validated) {
 				html += '<div class="fluxposofflinenotice">' + 'This sale is validated. It has been safely stored with its payments: its invoice number and its receipt will be issued by the server as soon as the synchronization can be done.' + '</div>';
 			} else if (lines.length) {
-				html += '<div class="fluxposofflinenotice">' + (!self.isOffline() ? 'This order is synchronized to the server in background.' : 'This order is stored on this terminal and will be synchronized to the server when the connection is back.') + '</div>';
+				if (cart && cart.adopted === true && cart.separate !== true) {
+					html += '<div class="fluxposofflinenotice">' + 'This order is captured on this terminal, its lines included. It is merged into the order of this place on the server as soon as the connection is back (only the quantities of its own lines can be raised while offline).' + '</div>';
+				} else {
+					html += '<div class="fluxposofflinenotice">' + (!self.isOffline() ? 'This order is synchronized to the server in background.' : 'This order is stored on this terminal and will be synchronized to the server when the connection is back.') + '</div>';
+				}
 			} else if (self._lastSaleNotice) {
 				html += '<div class="fluxposofflinenotice">' + self.escapeHtml(self._lastSaleNotice) + '</div>';
 			} else {
@@ -1160,6 +1315,9 @@ var FluxPosOffline = {
 			}
 		}, 60000);
 
+		// Keep a snapshot of the order of the place while the connection is up (baseline
+		// for the capture of new lines while offline on a place with a server order)
+		this.cacheServerOrder();
 		this.migrateLegacyCarts().then(function () {
 			self.updateOfflineStatus();
 		});

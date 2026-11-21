@@ -670,9 +670,10 @@ function ClickProduct(position, qty = 1, qty_std = 0) {
 		}
 
 		// Offline order entry: queue the product into the local cart of the place (it
-		// will be synchronized to the server in background). Only an order with no
-		// invoice created yet on the server can be captured while offline; for the other
-		// places, the cashier is guided to "New" instead of a tap that does nothing.
+		// will be synchronized to the server in background). An order not yet created on
+		// the server becomes a local order; an order already registered on the server is
+		// adopted into the local cart, so the new products are merged into it when the
+		// connection is back.
 		// The service worker of a terminal can still serve the offline.js of the previous
 		// deployment for a moment, so every function of the engine is checked before use.
 		if (typeof FluxPosOffline != 'undefined' && typeof FluxPosOffline.isOffline == 'function' && FluxPosOffline.isOffline()) {
@@ -682,6 +683,10 @@ function ClickProduct(position, qty = 1, qty_std = 0) {
 				} else {
 					console.log('FluxPos offline: this screen runs an older version of the offline engine, reload the POS screen to work offline');
 				}
+			} else if (typeof FluxPosOffline.captureOnServerOrder == 'function') {
+				// The order of the place is on the server: adopt it into the local cart so
+				// the tap is captured and merged into that order later
+				FluxPosOffline.captureOnServerOrder(idproduct, qty);
 			} else if (typeof FluxPosOffline.notifyBlockedCapture == 'function') {
 				FluxPosOffline.notifyBlockedCapture();
 			}
@@ -708,10 +713,18 @@ function ClickProduct(position, qty = 1, qty_std = 0) {
 							if (typeof FluxPosOffline.addProduct == 'function') {
 								FluxPosOffline.addProduct(idproducttotap, qty);
 							}
+						} else if (typeof FluxPosOffline.captureOnServerOrder == 'function') {
+							// The order of the place is on the server: adopt it into the local
+							// cart so the tap is captured and merged into that order later
+							FluxPosOffline.captureOnServerOrder(idproducttotap, qty);
 						} else if (typeof FluxPosOffline.notifyBlockedCapture == 'function') {
 							FluxPosOffline.notifyBlockedCapture();
 						}
 					}
+				} else if (typeof FluxPosOffline != 'undefined' && typeof FluxPosOffline.cacheServerOrder == 'function') {
+					// Keep a snapshot of the order on the server while online (baseline
+					// taken by the engine when this place must be captured while offline)
+					FluxPosOffline.cacheServerOrder();
 				}
 			});
 		};
@@ -864,6 +877,10 @@ function Refresh() {
 					FluxPosOffline.renderCart();
 				}
 			}
+		} else if (typeof FluxPosOffline != 'undefined' && typeof FluxPosOffline.cacheServerOrder == 'function') {
+			// Keep a snapshot of the order on the server while online (baseline taken
+			// by the engine when this place must be captured while offline)
+			FluxPosOffline.cacheServerOrder();
 		}
 		//$('#poslines').scrollTop($('#poslines')[0].scrollHeight);
 	});
