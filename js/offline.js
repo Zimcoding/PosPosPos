@@ -226,6 +226,8 @@ var FluxPosOffline = {
 	probeInterval: 15000,		// ms between two checks of the server while it is down
 	_lastSaleNotice: '',		// message shown after a sale was stored on the terminal
 	_separatePlace: null,		// place where a new order was started offline next to an order on the server
+	_lastTokenReload: 0,		// timestamp of the last automatic reload after a refused token
+	_lastBlockedNotice: 0,		// timestamp of the last "order locked on the server" notice
 
 	/**
 	 * Start a new order on this terminal while the place shows an order stored on the
@@ -293,7 +295,9 @@ var FluxPosOffline = {
 	/**
 	 * To call from the failure handler of an ajax call. When the failure is a network
 	 * failure, the terminal switches to offline mode and true is returned, so the caller
-	 * can fall back to the data stored on the terminal.
+	 * can fall back to the data stored on the terminal. When the server answered that the
+	 * security token of the page is not valid anymore (HTTP 403 of the CSRF check), the
+	 * screen is reloaded to get a fresh one.
 	 *
 	 * @param  {Object} jqxhr      jQuery XHR of the failed call
 	 * @param  {string} textStatus Status text given by jQuery
@@ -306,7 +310,75 @@ var FluxPosOffline = {
 			this.markServerDown();
 			return true;
 		}
+		if (this.isSecurityTokenFailure(jqxhr)) {
+			this.handleSecurityTokenFailure();
+			return false;
+		}
 		return !navigator.onLine;
+	},
+
+	/**
+	 * Does this answer mean that the security token of the page was refused by the CSRF
+	 * check of Dolibarr? A POS screen stays open for days, so its token (and sometimes
+	 * its session) can become invalid while the tab keeps running with the token it was
+	 * born with: every call to the server is then refused with HTTP 403 and, without this
+	 * check, every touch of the cashier silently does nothing.
+	 *
+	 * @param  {Object} jqxhr	jQuery XHR of the failed call
+	 * @returns {boolean} True when the token was refused
+	 */
+	isSecurityTokenFailure: function (jqxhr) {
+		'use strict';
+
+		if (!jqxhr || jqxhr.status != 403) {
+			return false;
+		}
+		var text = (typeof jqxhr.responseText == 'string') ? jqxhr.responseText : '';
+		return /CSRFCHECK|CSRF protection|Token not provided|token/i.test(text);
+	},
+
+	/**
+	 * The security token of this screen was refused by the server. Reload the screen once
+	 * to get a fresh token (orders captured offline are in IndexedDB, a reload keeps them),
+	 * and only tell the cashier to reload manually if the fresh screen is refused too.
+	 */
+	handleSecurityTokenFailure: function () {
+		'use strict';
+
+		var now = Date.now();
+		if (this._lastTokenReload && (now - this._lastTokenReload) < 30000) {
+			return;
+		}
+		this._lastTokenReload = now;
+		if (window.sessionStorage) {
+			try {
+				var last = parseInt(window.sessionStorage.getItem('fluxpossecurityreload'), 10) || 0;
+				if (now - last < 30000) {
+					return;	// The reload of 30 seconds ago did not fix it: never loop
+				}
+				window.sessionStorage.setItem('fluxpossecurityreload', String(now));
+			} catch (error) {
+				// Private mode or disabled storage: fall back on the throttled alert
+			}
+		}
+		console.log('FluxPos offline: security token refused by the server, reloading the POS screen');
+		window.location.reload();
+	},
+
+	/**
+	 * The cashier tapped a product while offline on a place whose order already exists on
+	 * the server: such an order cannot be modified from a terminal that is offline. Guide
+	 * the cashier instead of doing nothing.
+	 */
+	notifyBlockedCapture: function () {
+		'use strict';
+
+		var now = Date.now();
+		if (this._lastBlockedNotice && (now - this._lastBlockedNotice) < 10000) {
+			return;
+		}
+		this._lastBlockedNotice = now;
+		window.alert('This place has an order registered on the server, which cannot be modified while the terminal is offline. Press New to start a new separate order on this terminal.');
 	},
 
 	/**
@@ -385,8 +457,12 @@ var FluxPosOffline = {
 			if (data && data.ok) {
 				self.markServerUp();
 			}
-		}, function () {
-			// Still down: next try at the next interval
+		}, function (jqxhr) {
+			// Still down: next try at the next interval. A 403 is not "down": it says the
+			// security token of this screen is not valid anymore, the screen must reload.
+			if (self.isSecurityTokenFailure(jqxhr)) {
+				self.handleSecurityTokenFailure();
+			}
 		});
 	},
 
@@ -988,8 +1064,17 @@ var FluxPosOffline = {
 			}
 		});
 		jQuery(document).ajaxError(function (event, jqxhr, settings, thrownError) {
+			if (!self.isDolibarrUrl(settings.url)) {
+				return;
+			}
+			if (self.isSecurityTokenFailure(jqxhr)) {
+				// The page has been open too long: Dolibarr refused its token on every
+				// call. Reload once so the terminal gets a fresh token by itself.
+				self.handleSecurityTokenFailure();
+				return;
+			}
 			var textStatus = (thrownError === 'timeout' || thrownError === 'abort') ? thrownError : '';
-			if (self.isDolibarrUrl(settings.url) && self.isNetworkFailure(jqxhr, textStatus)) {
+			if (self.isNetworkFailure(jqxhr, textStatus)) {
 				self.markServerDown();
 			}
 		});

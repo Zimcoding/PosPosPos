@@ -660,9 +660,14 @@ function ClickProduct(position, qty = 1, qty_std = 0) {
 
 		// Offline order entry: queue the product into the local cart of the place (it
 		// will be synchronized to the server in background). Only an order with no
-		// invoice created yet on the server can be captured while offline.
-		if (typeof FluxPosOffline != 'undefined' && FluxPosOffline.isOffline() && ($('#invoiceid').val() || '') == '') {
-			FluxPosOffline.addProduct(idproduct, qty);
+		// invoice created yet on the server can be captured while offline; for the other
+		// places, the cashier is guided to "New" instead of a tap that does nothing.
+		if (typeof FluxPosOffline != 'undefined' && FluxPosOffline.isOffline()) {
+			if (($('#invoiceid').val() || '') == '') {
+				FluxPosOffline.addProduct(idproduct, qty);
+			} else {
+				FluxPosOffline.notifyBlockedCapture();
+			}
 			ClearSearch(false);
 			return;
 		}
