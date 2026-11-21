@@ -1,10 +1,14 @@
 # CHANGELOG FLUXPOS FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.0.7
+
+- After a deployment, a terminal whose service worker still serves the offline.js of the previous version ran the new POS page with an older offline engine: tapping a product while offline threw "FluxPosOffline.notifyBlockedCapture is not a function" and stopped the sale entry. Every call to the offline engine from the POS page is now checked before use, so an out-of-date script can only log a hint asking for a reload instead of breaking the page.
+
 ## 1.0.6
 
 - On the server, the CSRF protection refused every call of a POS screen opened before the last update (`HTTP/2 403`, `token=` empty in the console). A screen that stays open for days keeps the token it was born with; when Dolibarr refuses it, every call and every product tap silently did nothing, and the catalog could not be synchronized into the offline storage. The offline engine now detects the refused token (HTTP 403 CSRF check) and reloads the POS screen once by itself to get a fresh token (orders captured offline live in IndexedDB and survive the reload); if the fresh screen is refused too (server problem), an alert asks for a manual reload instead of looping.
 - Tapping a product while offline on a place whose order already exists on the server did nothing (such an order cannot be modified from a terminal offline). The cashier now gets a notice explaining it and inviting to press New, which starts a separate order on this terminal (already supported).
-- The service worker cache is renewed (`fluxpos-offline-v4`) so terminals load the new offline.js. During the seconds a terminal still serves the offline.js of the previous deployment, the POS page no longer crashes on the new calls: every function of the offline engine is checked before use (the mixed page+script state showed "FluxPosOffline.notifyBlockedCapture is not a function").
+- The service worker cache is renewed (`fluxpos-offline-v4`) so terminals load the new offline.js.
 
 ## 1.0.5
 
