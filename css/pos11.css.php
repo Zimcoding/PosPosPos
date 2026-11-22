@@ -21,7 +21,7 @@
  */
 
 /**
- *		\file       htdocs/fluxpos/css/pos.css.php
+ *		\file       htdocs/fluxpos/css/pos11.css.php
  *		\brief      File for CSS style for FluxPos
  */
 
@@ -59,11 +59,14 @@ require_once DOL_DOCUMENT_ROOT.'/core/lib/functions2.lib.php';
 
 // Define css type
 top_httphead('text/css');
-// Important: Following code is to avoid page request by browser and PHP CPU at each Dolibarr page access.
-// Allow bypassing the cache like stock TakePOS does: index.php also appends ?v=<filemtime> to
-// the stylesheet URL so an updated pos.css.php is picked up even while max-age is running.
+// This stylesheet should never be served stale: it defines the whole POS layout and is
+// byte-identical when unchanged (the ?v=<filemtime> suffix on the link of the POS screens
+// prevents even the intermediate caches from keeping an old body). With no-cache the
+// browser revalidates (cheap 304) instead of running up to 3 hours on an old layout, which
+// is what a terminal saw after every deployment until now.
+echo "/* FluxPos CSS - pos11 (loaded from /custom/fluxpos/css/pos11.css.php) */\n";
 if (empty($dolibarr_nocache)) {
-	header('Cache-Control: max-age=10800, public, must-revalidate');
+	header('Cache-Control: no-cache, must-revalidate');
 } else {
 	header('Cache-Control: no-cache');
 }

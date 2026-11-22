@@ -94,7 +94,7 @@ $vatRateDefault = get_default_tva($mysoc, $soc);
  * View
  */
 
-$arrayofcss = array(dol_buildpath('/fluxpos/css/pos.css.php', 1));
+$arrayofcss = array(dol_buildpath('/fluxpos/css/pos11.css.php', 1));
 $arrayofjs = array();
 
 top_htmlhead('', '', 0, 0, $arrayofjs, $arrayofcss);
