@@ -379,6 +379,16 @@ function FluxPosRepairLayout() {
 	var force = (window.innerWidth >= 768);
 	var main = document.querySelector('.posmain');
 	if (!main) {
+		// Self-heal (1.2.2): versions before 1.2.2 printed the head-bar variant of
+		// the container without its separating space ('posmainwithhead' as one
+		// single class token), so every .posmain selector in every stylesheet
+		// never matched and the page fell back on block stacking. Normalize it.
+		main = document.querySelector('[class*="posmain"]');
+		if (main) {
+			main.classList.add('posmain');
+		}
+	}
+	if (!main) {
 		return; // old screen without the 1.1 structure, reported by the diagnosis
 	}
 	FluxPosForceStyles(main, [['display', 'flex'], ['flex-direction', 'row'], ['flex-wrap', 'nowrap']], force);
@@ -1565,20 +1575,25 @@ $( document ).ready(function() {
 	// fixed bar on top, also when the served page turns out to be older than
 	// expected (the former banner depended on .cartcolumn existing).
 	var fluxposCheckLayout = function () {
-		if (window.innerWidth < 768) {
-			FluxPosRepairLayout();
-			FluxPosShowLayoutDiagnosis('info', 'narrow screen: mobile step-through (Products / Cart tabs). Widen or press Ctrl+0 if this screen is actually large.');
-			return;
-		}
-		var main = document.querySelector('.posmain');
-		if (!main) {
-			FluxPosShowLayoutDiagnosis('danger', '.posmain is not in this page at all: this terminal runs a screen of before version 1.1. Hard refresh (Ctrl+Shift+R); if it persists look for a service worker/stale server copy.');
-			return;
-		}
 		FluxPosRepairLayout();
+		var main = document.querySelector('.posmain');
+		if (window.innerWidth < 768) {
+			console.info('FluxPos: narrow screen of ' + window.innerWidth + 'px switches the POS to the mobile step-through (Products / Cart tabs). Press Ctrl+0 if this screen is actually large.');
+			return;
+		}
+		if (!main) {
+			var candidate = document.querySelector('[class*="posmain"]');
+			FluxPosShowLayoutDiagnosis('danger', '.posmain is not in this page at all: this terminal runs a screen of before version 1.1. Hard refresh (Ctrl+Shift+R); if it persists look for a service worker/stale server copy.' + (candidate ? ' Element found with a similar class: "' + String(candidate.className) + '"' : ''));
+			return;
+		}
 		var mainstyle = window.getComputedStyle(main);
 		if (mainstyle.display == 'flex' && mainstyle.flexDirection == 'row') {
-			FluxPosShowLayoutDiagnosis('info', 'two-column layout active (forced inline); this strip will be slimmed down again in the next version.');
+			// healthy: slim build since 1.2.2 - no strip, only a console line
+			var leftover = document.getElementById('fluxposlayoutdiagnosis');
+			if (leftover) {
+				leftover.parentNode.removeChild(leftover);
+			}
+			console.info('FluxPos: two-column layout OK on a screen of ' + window.innerWidth + 'px (forced inline as a safety net since 1.2.1).');
 		} else if (!document.getElementById('fluxpos-criticallayout')) {
 			FluxPosShowLayoutDiagnosis('danger', 'the inline critical layout is missing from this document although posmain exists: mixed old/new page.');
 		} else {
@@ -1859,7 +1874,7 @@ if (!getDolGlobalString('FLUXPOS_HIDE_HEAD_BAR')) {
 </div>
 
 	<div class="posmain<?php if (!getDolGlobalString('FLUXPOS_HIDE_HEAD_BAR')) {
-		print 'withhead';
+		print ' posmainwithhead';
 					} ?>">
 
 		<!-- Layout 1.1 (Proposal A): product area is the hero (left column, fluid grid),

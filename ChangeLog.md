@@ -1,5 +1,11 @@
 # CHANGELOG FLUXPOS FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.2.2
+
+- Bug fix (**root cause of the whole stacked-layout saga found**): the container of the POS layout printed its class without a separating space since 1.1.0 - `class="posmainwithhead"` instead of `class="posmain posmainwithhead"`. CSS class selectors match whole tokens, so **every rule that starts with `.posmain` never matched anything**: not in pos11.css.php, not in the inline critical block, not the media queries, and in the JavaScript guards. The page has been rendering itself as plain block stacking (cart below the products) since 1.1.0, and every subsequent stylesheet cache fix was correct but irrelevant: the selectors were dead on arrival. The 1.2.1 self-diagnosis strip exposed it in one go: screen 1920x1083, posleft yes, cartcolumn yes, inline critical css yes - and posmain **missing**, which is impossible for a descendant unless the class token itself is wrong. The markup now prints `posmain posmainwithhead` as two separate tokens.
+- Safety: `FluxPosRepairLayout` now also **self-heals** any page that still carries the broken token (adds the `posmain` class when the browser only finds a `[class*="posmain"]` element), so terminals on a stale cached page get the working layout without waiting for a clean reload.
+- The diagnosis strip is **slimmed down as promised**: on a healthy desktop screen there is no strip anymore, only a line in the console; the fixed bar appears only when something is actually wrong (and then reports the facts). On a narrow screen the mobile step-through note stays in the console as before. Module version 1.2.2.
+
 ## 1.2.1
 
 - Bug fix (decisive attempt): the stacked layout survived even the inline critical CSS (1.1.8) and the mobile step-through (1.2.0). The two-column layout is now **forced with inline element styles** (`display:flex;flex-direction:row;...` with `!important` set directly on `.posmain`, `.posleft` and `.cartcolumn` in the browser itself) - an element style cannot be overridden by any stylesheet copy in any cache, theme or other module, so the stacked result is no longer possible as long as the DOM has the right elements. The force only applies on a screen of 768px or wider and is cleared below 768px (also on resize), so the mobile step-through keeps working.
