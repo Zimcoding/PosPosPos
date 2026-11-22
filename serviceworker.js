@@ -25,7 +25,7 @@
  *				intercepted: the JS layers fall back on IndexedDB when offline.
  */
 
-var fluxposCacheName = 'fluxpos-offline-v11';
+var fluxposCacheName = 'fluxpos-offline-v12';
 
 // Directory of the module, derived from the scope of this service worker, so the module
 // works whether it is installed into htdocs/fluxpos or htdocs/custom/fluxpos (or any other
