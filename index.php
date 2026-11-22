@@ -390,7 +390,10 @@ function FluxPosTileHtml(item, index) {
 			} else {
 				echo "val['price_ttc_formated']";
 			} ?>;
-			html += '<div class="productprice" id="proprice'+index+'">'+FluxPosEscapeHtml(pricehtml)+'</div>';
+			// The formatted price comes from the server (price() output) and already
+			// contains the right HTML entities (&nbsp; before the currency): it must be
+			// inserted raw — escaping it would display the entity as plain text.
+			html += '<div class="productprice" id="proprice'+index+'">'+pricehtml+'</div>';
 		} else {
 			html += '<div class="productprice hidden" id="proprice'+index+'"></div>';
 		}
@@ -877,6 +880,13 @@ function New() {
 
 	console.log("New with place = <?php echo $place; ?>, js place="+place+", invoiceid="+invoiceid);
 
+	// A cart that the terminal stored while offline must not come back once the cart
+	// of the server is removed: drop the local copy of the place too (the fragment that
+	// replaces #poslines stops the engine from rendering it again).
+	if ($('#offlinecart').val() == '1' && typeof FluxPosOffline != 'undefined' && typeof FluxPosOffline.clearCart == 'function') {
+		FluxPosOffline.clearCart();
+	}
+
 	if (invoiceid == '') {
 		$("#poslines").load("invoice.php?action=delete&token=<?php echo currentToken(); ?>&place=" + place, function () {
 			//$('#poslines').scrollTop($('#poslines')[0].scrollHeight);
@@ -902,6 +912,11 @@ function New() {
 			$("#poslines").load("invoice.php?action=delete&token=<?php echo currentToken(); ?>&place=" + place, function () {
 				//$('#poslines').scrollTop($('#poslines')[0].scrollHeight);
 				fluxposUpdateCartTotal('');
+				// The order of the place is gone on the server: drop the snapshot cached
+				// for an offline capture of it
+				if (typeof FluxPosOffline != 'undefined' && typeof FluxPosOffline.cacheServerOrder == 'function') {
+					FluxPosOffline.cacheServerOrder();
+				}
 			});
 
 			ClearSearch(false);
@@ -1871,23 +1886,23 @@ if ($reshook == 0) {  //add buttons
 		// Numpad with the same keys as the old permanent pad, reused by the line-edit modal
 		// and by the docked pad of the terminals that set FLUXPOS_DISPLAY_NUMBERPAD = 'always'.
 		$fluxposNumpadHtml = '';
-		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(7);">7</button>\n';
-		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(8);">8</button>\n';
-		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(9);">9</button>\n';
-		$fluxposNumpadHtml .= '<button type="button" id="qty" class="calcbutton2" onclick="Edit(\'qty\')">'.dol_escape_htmltag($langs->trans("Qty")).'</button>\n';
-		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(4);">4</button>\n';
-		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(5);">5</button>\n';
-		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(6);">6</button>\n';
-		$fluxposNumpadHtml .= '<button type="button" id="price" class="calcbutton2" onclick="Edit(\'p\')">'.dol_escape_htmltag($langs->trans("Price")).'</button>\n';
-		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(1);">1</button>\n';
-		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(2);">2</button>\n';
-		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(3);">3</button>\n';
-		$fluxposNumpadHtml .= '<button type="button" id="reduction" class="calcbutton2" onclick="Edit(\'r\')">'.dol_escape_htmltag($langs->trans("LineDiscountShort")).'</button>\n';
-		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(0);">0</button>\n';
-		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(\'.\')">.</button>\n';
-		$fluxposNumpadHtml .= '<button type="button" class="calcbutton poscolorblue" onclick="Edit(\'c\')">C</button>\n';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(7);">7</button>';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(8);">8</button>';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(9);">9</button>';
+		$fluxposNumpadHtml .= '<button type="button" id="qty" class="calcbutton2" onclick="Edit(\'qty\')">'.dol_escape_htmltag($langs->trans("Qty")).'</button>';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(4);">4</button>';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(5);">5</button>';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(6);">6</button>';
+		$fluxposNumpadHtml .= '<button type="button" id="price" class="calcbutton2" onclick="Edit(\'p\')">'.dol_escape_htmltag($langs->trans("Price")).'</button>';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(1);">1</button>';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(2);">2</button>';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(3);">3</button>';
+		$fluxposNumpadHtml .= '<button type="button" id="reduction" class="calcbutton2" onclick="Edit(\'r\')">'.dol_escape_htmltag($langs->trans("LineDiscountShort")).'</button>';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(0);">0</button>';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(\'.\')">.</button>';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton poscolorblue" onclick="Edit(\'c\')">C</button>';
 		if ($user->hasRight('fluxpos', 'editlines')) {
-			$fluxposNumpadHtml .= '<button type="button" class="calcbutton2 poscolordelete" id="delete" onclick="deleteline()"><span class="fa fa-trash"></span></button>\n';
+			$fluxposNumpadHtml .= '<button type="button" class="calcbutton2 poscolordelete" id="delete" onclick="deleteline()"><span class="fa fa-trash"></span></button>';
 		}
 
 		// Quick buttons of the cart footer: the New/Place entry, the print receipt entry and
