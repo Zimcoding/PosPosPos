@@ -16,7 +16,7 @@
  */
 
 /**
- *	\file       htdocs/fluxpos/js/offline.js
+ *	\file       htdocs/fluxpos/js/offline11.js
  *	\brief      Offline support for FluxPos: catalog cache into IndexedDB, online/offline
  *				status and offline order entry with background synchronization.
  *
@@ -219,7 +219,7 @@ var FluxPosOffline = {
 	/**
 	 * Root URL of the module ('/custom/fluxpos/' for a custom placement), resolved at
 	 * call time. Prefers the fluxposbaseuri global of the page; falls back on the URL
-	 * of this script file (.../fluxpos/js/offline.js), the only reliable marker when
+	 * of this script file (.../fluxpos/js/offline11.js), the only reliable marker when
 	 * the page does not define the global.
 	 *
 	 * @returns {string} Root URL of the module, with a trailing slash
@@ -233,8 +233,8 @@ var FluxPosOffline = {
 		var scripts = document.getElementsByTagName('script');
 		for (var i = 0; i < scripts.length; i++) {
 			var src = scripts[i].src || '';
-			if (/(^|\/)offline\.js([?#]|$)/.test(src)) {
-				return src.replace(/js\/offline\.js([?#].*)?$/, '');
+			if (/(^|\/)offline\d*\.js([?#]|$)/.test(src)) {
+				return src.replace(/js\/offline\d*\.js([?#].*)?$/, '');
 			}
 		}
 		return '/fluxpos/';

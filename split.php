@@ -169,7 +169,7 @@ if (isset($invoiceid) && $invoiceid > 0) {
 	}
 }
 
-$arrayofcss = array(dol_buildpath('/fluxpos/css/pos.css.php', 1));
+$arrayofcss = array(dol_buildpath('/fluxpos/css/pos11.css.php', 1));
 if (getDolGlobalInt('FLUXPOS_COLOR_THEME') == 1) {
 	$arrayofcss[] = dol_buildpath('/fluxpos/css/colorful.css', 1);
 }
