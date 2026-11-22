@@ -1,5 +1,9 @@
 # CHANGELOG FLUXPOS FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.0.15
+
+- Bug fix: the terminal setup page (admin/terminal.php) ended in a Dolibarr technical error page, `SQL syntax ... near ':=:1)` on llxos_bank_account`, when opening it. The terminal setup fills the bank accounts with `$form->select_comptes(...)` and passed the account-type filter in the Dolibarr REST API filter syntax (`(courant:=:1)`), but `select_comptes` appends its filter raw to the SQL (unlike the third-party select and the category product searches, which convert their filters through the universal search criteria) so MariaDB refused the page. The five filters now use the raw SQL syntax that TakePOS core itself passes (`courant=2` for the cash account, `courant=1` for cheque, card and SumUp). Module version 1.0.15.
+
 ## 1.0.14
 
 - All messages of the offline engine are translatable: every user-facing string (the notices of the offline status indicator, the messages shown when a product is added, quantities are changed or the cart is validated while offline, and the notices of the cart display) goes through the translation of the module (`langs/en_US/fluxpos.lang`, keys `FluxPosOffline*`), delivered to the terminal with the `fluxposlang` object of the POS screen and resolved at call time with an English fallback. The console messages stay technical English on purpose (they are for debugging, not for the cashier). A translation into Dutch or French can now simply be added as `langs/nl_NL/fluxpos.lang` or `langs/fr_FR/fluxpos.lang`.
