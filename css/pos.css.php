@@ -387,69 +387,51 @@ div.paymentbordline
 	box-sizing: border-box;
 }
 
-.row1{
-	margin: 0 auto;
+/* ---- Layout 1.1 (Proposal A) ------------------------------------------
+   posmain = flex row [ posleft (products, hero) | cartcolumn (28%) ].   */
+.posmain{
+	position: relative;
+	display: flex;
+	flex-direction: row;
+	align-items: stretch;
 	width: 100%;
-	height: 34%;
+	height: 100%;
+	overflow: hidden;
+	box-sizing: border-box;
 }
 
-.row1withhead{
-	margin: 0 auto;
-	width: 100%;
-	height: calc(45% - 50px);
+.posmain.posmainwithhead{
+	height: calc(100% - 50px);
 	padding-top: 9px;
 }
 
-.row2{
-	margin: 0 auto;
-	width: 100%;
-	height: 66%;
-}
-
-.row2withhead{
-	margin: 0 auto;
-	width: 100%;
-	height: 55%;
-	overflow-x: hidden;
-}
-
-.div1{
-	height:100%;
-	width: 34%;
-	float: left;
-	text-align: center;
-	box-sizing: border-box;
-	overflow: auto;
-	/* background-color:white; */
-	padding-top: 1px;
-	padding-bottom: 0;
-	min-height: 180px;
-}
-
-.div2{
+.posleft{
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-width: 0;
 	height: 100%;
-	width: 33%;
-	font-size: 0;
-	float: left;
+	overflow: hidden;
 	box-sizing: border-box;
-	padding-top: 0;
-	padding-bottom: 0;
-	min-height: 180px;
 }
 
-.div3{
+.cartcolumn{
+	display: flex;
+	flex-direction: column;
+	flex: 0 0 28%;
+	min-width: 300px;
+	max-width: 420px;
 	height: 100%;
-	width: 33%;
-	float: left;
+	overflow: hidden;
 	box-sizing: border-box;
-	padding-top: 0;
-	padding-bottom: 0;
+	border-left: 1px solid #DDD;
+	background-color: var(--colorbackbody, #f8f8f8);
 }
 
 .div4{
+	flex: 0 0 48px;
 	height: 48px;
 	width: 100%;
-	float: left;
 	box-sizing: border-box;
 	padding-top: 2px;
 	padding-bottom: 2px;
@@ -462,13 +444,15 @@ div.paymentbordline
 }
 
 .div5{
-	height: calc(100% - 48px);
+	flex: 1 1 auto;
 	width: 100%;
-	float: left;
+	min-height: 0;
 	box-sizing: border-box;
 	font-size: 6px;
 	padding-top:10px;
 	padding-bottom:10px;
+	overflow-y: auto;
+	overflow-x: hidden;
 }
 
 .div5.centpercent{
@@ -536,14 +520,14 @@ div.paymentbordline
 	display: none;
 }
 
-.div1, .div2, .div3, .div4, .div5 {
+.div4, .div5 {
 	padding-right: 5px;
 	padding-left: 5px;
 }
-.div1, .div4 {
+.div4 {
 	padding-left: 8px;
 }
-.div3, .div5 {
+.div5 {
 	padding-right: 8px;
 }
 
@@ -794,37 +778,22 @@ div#moreinfo, div#infowarehouse {
 	div.wrapper {
 		width: 50%;
 	}
-	div.wrapper2 {
-		width: 25%;
-	}
-
-	.row1withhead{
-		height: unset;
-	}
 
 	div#moreinfo, div#infowarehouse {
 		padding: 0 5px 0 5px;
 	}
 
-	div.div1 {
-		padding-bottom: 0;
-		margin-bottom: 10px;
-	}
-	div.div1, div.div2, div.div3 {
-		width: 100%;
+	/* On narrow screens the cart stacks under the product area until the
+	   dedicated mobile step-through layout (1.2) lands */
+	.posmain {
+		flex-direction: column;
 	}
 
-	div.row1 {
-		height: unset;
-	}
-
-	div.div2 {
-		min-height: unset;
-	}
-
-	div.div3 {
-		margin-top: 8px;
-		height: unset;
+	.cartcolumn {
+		flex: 0 0 45%;
+		max-width: none;
+		border-left: none;
+		border-top: 1px solid #DDD;
 	}
 
 	button.calcbutton, button.calcbutton2 {
@@ -1093,8 +1062,7 @@ div#moreinfo, div#infowarehouse {
 		margin-left: 2px;
 	}
 
-	<?php $maxproductgrid = getDolGlobalInt('FLUXPOS_NB_MAXPRODUCT', 24); ?>
-	.div4 .wrapper.divempty, .div4 img, #prodiv<?php echo($maxproductgrid - 2); ?>, #prodiv<?php echo($maxproductgrid - 1); ?>, .catwatermark {
+	.div4 .wrapper.divempty, .catwatermark {
 		display: none!important;
 	}
 
@@ -1112,8 +1080,6 @@ div#moreinfo, div#infowarehouse {
 	}
 
 	.div5 {
-		height: calc(100% - 40px);
-		width: 100%;
 		padding-top: 0px;
 	}
 
@@ -1285,3 +1251,271 @@ html {
 }
 
 <?php } ?>
+
+/* ========================================================================
+   Layout 1.1 (Proposal A) — component styling.
+   Fluid product grid, tile density S/M/L, right cart column with sticky
+   total, payment block and quick actions, contextual and docked numpad.
+   Minimum supported screen: 1280 x 800.
+   ======================================================================== */
+
+body.bodyfluxpos {
+	--fluxpos-tile-w: 160px;	/* default = density M */
+	--fluxpos-tile-h: 140px;
+}
+body.fluxpos-tile-S {
+	--fluxpos-tile-w: 120px;
+	--fluxpos-tile-h: 110px;
+}
+body.fluxpos-tile-M {
+	--fluxpos-tile-w: 160px;
+	--fluxpos-tile-h: 140px;
+}
+body.fluxpos-tile-L {
+	--fluxpos-tile-w: 220px;
+	--fluxpos-tile-h: 180px;
+}
+
+/* Fluid product grid: the whole category renders at once, the area scrolls */
+.productgrid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(var(--fluxpos-tile-w), 1fr));
+	gap: 8px;
+	align-content: start;
+	width: 100%;
+}
+
+.productgrid .wrapper2 {
+	float: none;
+	position: relative;
+	width: auto;
+	height: var(--fluxpos-tile-h);
+	margin: 0;
+	border: 1px solid #EEE;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+}
+
+.productgrid .wrapper2 img.imgwrapper {
+	max-width: 100%;
+	max-height: calc(100% - 26px);
+}
+
+.productgrid .wrapper2:hover {
+	border-color: var(--colorbackhmenu1, #0080c0);
+}
+
+.productgrid .fluxposgridempty {
+	grid-column: 1 / -1;
+	padding: 30px 10px;
+	text-align: center;
+	font-size: 15px;
+}
+
+/* Tile density control (top-right corner of the product area) */
+.tiledensity {
+	display: inline-flex;
+	float: right;
+	margin: 0 8px 6px 0;
+	border: 1px solid #DDD;
+	border-radius: 6px;
+	overflow: hidden;
+	background-color: #fff;
+}
+.tiledensity button {
+	border: none;
+	background-color: #fff;
+	color: #444;
+	font-size: 12px;
+	font-weight: bold;
+	padding: 4px 10px;
+	cursor: pointer;
+	line-height: 1.2;
+}
+.tiledensity button + button {
+	border-left: 1px solid #DDD;
+}
+.tiledensity button.clicked {
+	background-color: var(--colorbackhmenu1, #0080c0);
+	color: #fff;
+}
+
+/* Search input shown inside the grid when the head bar is hidden */
+.gridheadsearch {
+	display: flex;
+	align-items: center;
+	padding: 0 8px 6px 8px;
+}
+.gridheadsearch input[type="text"] {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+.gridheadsearch a {
+	cursor: pointer;
+	padding: 4px 6px;
+}
+
+/* Cart column ---------------------------------------------------------- */
+.cartlines {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	overflow-x: hidden;
+	box-sizing: border-box;
+}
+
+.cartfooter {
+	flex: 0 0 auto;
+	padding: 6px 8px 8px 8px;
+	background-color: #fff;
+	border-top: 1px solid #DDD;
+}
+
+.carttotal {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	padding: 2px 2px 6px 2px;
+}
+.carttotal.emptycart .carttotalvalue {
+	opacity: 0.4;
+}
+.carttotallabel {
+	font-size: 14px;
+	font-weight: bold;
+	color: #333;
+}
+.carttotalvalue {
+	font-size: 22px;
+	font-weight: bold;
+	color: #222;
+}
+
+.paymentblock {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 4px;
+	margin-bottom: 6px;
+}
+button.paymentmode {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	width: 100%;
+	min-height: 44px;
+	padding: 4px 6px;
+	border: 1px solid #DDD;
+	border-radius: 6px;
+	background-color: #8c907e;
+	color: #fff;
+	font-size: 14px;
+	font-weight: bold;
+	cursor: pointer;
+	box-sizing: border-box;
+}
+button.paymentmode:hover {
+	background-color: #75796a;
+}
+.paymentmodelabel {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.cartquick {
+	display: flex;
+	gap: 4px;
+}
+button.cartquickbtn {
+	flex: 1 1 auto;
+	min-height: 40px;
+	min-width: 0;
+	padding: 4px 6px;
+	border: none;
+	border-radius: 6px;
+	background-color: #8c907e;
+	color: #fff;
+	font-size: 13px;
+	font-weight: bold;
+	cursor: pointer;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+button.cartquickbtn:hover {
+	background-color: #75796a;
+}
+button.cartquickbtn.cartmore {
+	flex: 0 0 44px;
+}
+
+/* Docked numberpad (FLUXPOS_DISPLAY_NUMBERPAD = 'always') */
+.numpaddocked {
+	flex: 0 0 auto;
+	padding-top: 6px;
+}
+
+/* Line-edit pad: shared by the contextual modal and the docked variant.
+   Fixed grid geometry: a modal has no intrinsic height so the historical
+   height: calc(25% - 2px) of the numpad buttons cannot work there. */
+.lineeditpad {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 4px;
+	align-content: start;
+}
+.lineeditpad button.calcbutton,
+.lineeditpad button.calcbutton2,
+.lineeditpad button.calcbutton3 {
+	width: 100%;
+	height: 58px;
+	margin: 0;
+}
+.lineeditpad.numpaddocked button.calcbutton,
+.lineeditpad.numpaddocked button.calcbutton2,
+.lineeditpad.numpaddocked button.calcbutton3 {
+	height: 62px;
+}
+.modal .lineeditpad {
+	margin-top: 6px;
+}
+
+/* Cart line visibility: thumbs and qty steppers ---------- */
+img.cartthumb {
+	width: 36px;
+	height: 36px;
+	object-fit: cover;
+	border-radius: 4px;
+	margin-right: 6px;
+	vertical-align: middle;
+	background-color: #f3f3f3;
+}
+
+button.fluxposqtybtn {
+	display: inline-block;
+	width: 24px;
+	height: 24px;
+	line-height: 22px;
+	padding: 0;
+	margin: 0 4px;
+	text-align: center;
+	font-weight: bold;
+	font-size: 15px;
+	border: 1px solid #BBB;
+	border-radius: 4px;
+	background-color: #fff;
+	color: #222;
+	cursor: pointer;
+}
+button.fluxposqtybtn:hover {
+	background-color: #e8e8e8;
+}
+
+/* Preselected payment mode on pay.php (opened from the cart block) */
+button.payvalidatepreselect {
+	outline: 3px solid var(--colorbackhmenu1, #0080c0);
+	outline-offset: 1px;
+}

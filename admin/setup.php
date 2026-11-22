@@ -312,7 +312,7 @@ print "</td></tr>\n";
 print '<tr class="oddeven"><td>';
 print $langs->trans("SortProductField");
 print '<td>';
-$array = array('rowid' => 'ID', 'ref' => 'Ref', 'label' => 'Label', 'datec' => 'DateCreation', 'tms' => 'DateModification');
+$array = array('rowid' => 'ID', 'ref' => 'Ref', 'label' => 'Label', 'datec' => 'DateCreation', 'tms' => 'DateModification', 'position' => $langs->trans('SortProductModePosition'), 'bestsales' => $langs->trans('SortProductModeBestSales'));
 print $form->selectarray('FLUXPOS_SORTPRODUCTFIELD', $array, getDolGlobalString('FLUXPOS_SORTPRODUCTFIELD', 'rowid'), 0, 0, 0, '', 1);
 print "</td></tr>\n";
 

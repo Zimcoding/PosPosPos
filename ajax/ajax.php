@@ -72,6 +72,139 @@ $pricelevel = 1;	// default price level if PRODUIT_MULTIPRICES. TODO Get price l
 
 
 /**
+ * Custom product ordering for the FLUXPOS_SORTPRODUCTFIELD values 'position' and
+ * 'bestsales'. The $sortfield of Categorie::getObjectsInCateg() is applied with the
+ * order() of the database layer to the product table alias (o), while 'position'
+ * lives on the category-product link table (when the column exists there) and
+ * 'bestsales' needs an aggregate over the invoices of a time window, so both need
+ * dedicated SQL.
+ *
+ * @param  int    $categid  ID of category
+ * @param  string $sortmode 'position' or 'bestsales'
+ * @return null|array<int>  null when the sort mode is unavailable (the caller keeps
+ *                          its default order), else the ordered list of product ids
+ */
+function fluxposCustomSortedProductIds($categid, $sortmode)
+{
+	global $db, $conf;
+
+	$categid = (int) $categid;
+	if ($categid <= 0) {
+		return null;
+	}
+
+	if ($sortmode == 'position') {
+		// llx_categorie_product has no 'position' column in Dolibarr 22, so the linked
+		// order falls back to the link insertion order (rowid) unless the column exists.
+		$resql = $db->query("SHOW COLUMNS FROM ".$db->prefix()."categorie_product LIKE 'position'");
+		$hasposition = ($resql && $db->num_rows($resql) > 0);
+		if ($resql) {
+			$db->free($resql);
+		}
+		$sql = "SELECT cp.fk_product as pid FROM ".$db->prefix()."categorie_product as cp";
+		$sql .= " WHERE cp.fk_categorie = ".$categid;
+		$sql .= " ORDER BY ".($hasposition ? "cp.position, " : "")."cp.rowid";
+	} elseif ($sortmode == 'bestsales') {
+		$days = getDolGlobalInt('FLUXPOS_BESTSELLER_DAYS', 90);
+		if ($days <= 0) {
+			$days = 90;
+		}
+		$datelimit = $db->idate(dol_time_plus_duree(dol_now(), -$days, 'd'));
+		$sql = "SELECT cp.fk_product as pid, COALESCE(SUM(fd.qty), 0) as nbqty";
+		$sql .= " FROM ".$db->prefix()."categorie_product as cp";
+		$sql .= " LEFT JOIN ".$db->prefix()."facturedet as fd ON fd.fk_product = cp.fk_product";
+		$sql .= " LEFT JOIN ".$db->prefix()."facture as f ON f.rowid = fd.fk_facture";
+		$sql .= " WHERE cp.fk_categorie = ".$categid;
+		$sql .= " AND (f.rowid IS NULL OR (f.entity IN (".getEntity('invoice').") AND f.fk_statut >= 1 AND f.datef >= '".$datelimit."'))";
+		$sql .= " GROUP BY cp.fk_product ORDER BY nbqty DESC, cp.rowid ASC";
+	} else {
+		return null;
+	}
+
+	$resql = $db->query($sql);
+	if (!$resql) {
+		return null;	// guard: a missing table or column must never break the catalog
+	}
+	$ids = array();
+	while ($obj = $db->fetch_object($resql)) {
+		$ids[] = (int) $obj->pid;
+	}
+	$db->free($resql);
+	return count($ids) ? $ids : null;
+}
+
+/**
+ * Reorder fetched products following an external list of ids (custom sort of the
+ * fluid grid). Products whose id is not in the list keep their relative order at
+ * the end, so nothing is ever dropped.
+ *
+ * @param  array           $products    Array of Product
+ * @param  array<int,int>  $orderedids  Product ids in the wanted order
+ * @return array           Reordered products
+ */
+function fluxposOrderProductsBy($products, $orderedids)
+{
+	if (!is_array($products) || !is_array($orderedids) || count($orderedids) == 0) {
+		return $products;
+	}
+	$order = array();
+	foreach ($orderedids as $i => $pid) {
+		$order[(int) $pid] = $i;
+	}
+	usort($products, function ($a, $b) use ($order) {
+		$aid = (int) (isset($a->id) ? $a->id : 0);
+		$bid = (int) (isset($b->id) ? $b->id : 0);
+		if (!isset($order[$aid]) && !isset($order[$bid])) {
+			return 0;
+		}
+		if (!isset($order[$aid])) {
+			return 1;
+		}
+		if (!isset($order[$bid])) {
+			return -1;
+		}
+		return ($order[$aid] < $order[$bid]) ? -1 : (($order[$aid] > $order[$bid]) ? 1 : 0);
+	});
+	return $products;
+}
+
+/**
+ * Products for sale of a category, with the custom sort of the fluid grid when
+ * FLUXPOS_SORTPRODUCTFIELD is 'position' or 'bestsales'.
+ *
+ * @param  Categorie $object Fetched category
+ * @param  string    $filter Universal search filter of getObjectsInCateg()
+ * @param  int       $limit  See getObjectsInCateg()
+ * @param  int       $offset See getObjectsInCateg()
+ * @return array|int         Array of Product, or -1 on error
+ */
+function fluxposGetProductsOfCategory($object, $filter, $limit, $offset)
+{
+	$sortfield = getDolGlobalString('FLUXPOS_SORTPRODUCTFIELD');
+	if ($sortfield != 'position' && $sortfield != 'bestsales') {
+		return $object->getObjectsInCateg("product", 0, $limit, $offset, $sortfield, 'ASC', $filter);
+	}
+
+	// Custom order: the ids of the custom SQL drive the final order, so the fetch
+	// runs without limit and the historical pagination is applied afterwards.
+	$orderedids = fluxposCustomSortedProductIds($object->id, $sortfield);
+	$prods = $object->getObjectsInCateg("product", 0, 0, 0, '', 'ASC', $filter);
+	if ($prods == -1 || !is_array($prods)) {
+		return $prods;
+	}
+	if (is_array($orderedids)) {
+		$prods = fluxposOrderProductsBy($prods, $orderedids);
+	}
+	if ($offset > 0) {
+		$prods = array_slice($prods, $offset);
+	}
+	if ($limit > 0) {
+		$prods = array_slice($prods, 0, $limit);
+	}
+	return $prods;
+}
+
+/**
  * Return the products for sale of a category, trimmed to the fields used by the POS grid and search.
  * Used to build the catalog synchronized into IndexedDB by js/offline.js.
  *
@@ -89,7 +222,7 @@ function getFluxPosProductsForCategory($categid, $pricelevel)
 		return array();
 	}
 
-	$prods = $object->getObjectsInCateg("product", 0, 0, 0, getDolGlobalString('FLUXPOS_SORTPRODUCTFIELD'), 'ASC', '(o.tosell:=:1)');
+	$prods = fluxposGetProductsOfCategory($object, '(o.tosell:=:1)', 0, 0);
 
 	$res = array();
 	if (is_array($prods) && count($prods) > 0) {
@@ -786,7 +919,7 @@ if ($action == 'getProducts' && $user->hasRight('fluxpos', 'run')) {
 		if ($tosell != '') {
 			$filter = '(o.tosell:=:'.((int) $tosell).')';
 		}
-		$prods = $object->getObjectsInCateg("product", 0, $limit, $offset, getDolGlobalString('FLUXPOS_SORTPRODUCTFIELD'), 'ASC', $filter);
+		$prods = fluxposGetProductsOfCategory($object, $filter, $limit, $offset);
 		// Removed properties we don't need
 		$res = array();
 		if (is_array($prods) && count($prods) > 0) {

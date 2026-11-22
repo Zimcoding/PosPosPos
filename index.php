@@ -94,6 +94,19 @@ $maxproductbydefaultforthisdevice = 24;
 $MAXCATEG = getDolGlobalInt('FLUXPOS_NB_MAXCATEG', $maxcategbydefaultforthisdevice);
 $MAXPRODUCT = getDolGlobalInt('FLUXPOS_NB_MAXPRODUCT', $maxproductbydefaultforthisdevice);
 
+// Layout 1.1 (Proposal A): the numberpad is contextual by default (it opens as a popup
+// when a cart line is tapped) and the product grid is fluid. Constants:
+// - FLUXPOS_DISPLAY_NUMBERPAD = 'lineedit' (default, popup) | 'always' (docked pad like before) | 'never'
+// - FLUXPOS_TILE_SIZE = 'S' (~120 px tiles) | 'M' (~160 px) | 'L' (~220 px)
+$fluxposDisplayNumberpad = getDolGlobalString('FLUXPOS_DISPLAY_NUMBERPAD', 'lineedit');
+if (!in_array($fluxposDisplayNumberpad, array('lineedit', 'always', 'never'), true)) {
+	$fluxposDisplayNumberpad = 'lineedit';
+}
+$fluxposTileSize = getDolGlobalString('FLUXPOS_TILE_SIZE', 'M');
+if (!in_array($fluxposTileSize, array('S', 'M', 'L'), true)) {
+	$fluxposTileSize = 'M';
+}
+
 $term = empty($_SESSION['fluxposterminal']) ? 1 : $_SESSION['fluxposterminal'];
 
 $socid = getDolGlobalInt('FLUXPOS_ID_THIRDPARTY' . $term);
@@ -189,7 +202,7 @@ if (!empty($_SESSION['fluxposterminal'])) {
 }
 ?>
 
-<body class="bodyfluxpos" style="overflow: hidden;">
+<body class="bodyfluxpos fluxpos-tile-<?php echo $fluxposTileSize; ?>" style="overflow: hidden;">
 <div id="fluxposofflinestatus" class="fluxposofflinestatus"></div>
 
 <script>
@@ -205,6 +218,7 @@ var place="<?php echo $place; ?>";
 var fluxposbaseuri = '<?php echo fluxposUrlRoot(); ?>';
 var fluxposnewtoken = '<?php echo newToken(); ?>';
 var fluxposcurrency = '<?php echo $conf->currency; ?>';
+var fluxposhideproductimages = <?php echo getDolGlobalString('FLUXPOS_HIDE_PRODUCT_IMAGES') ? 'true' : 'false'; ?>;
 var fluxposlang = {
 	Qty: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("Qty")); ?>',
 	TotalTTCShort: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("TotalTTCShort")); ?>',
@@ -235,12 +249,19 @@ var fluxposlang = {
 	FluxPosOfflineStatusSalesWaiting: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineStatusSalesWaiting")); ?>',
 	FluxPosOfflineStatusRefused: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineStatusRefused")); ?>',
 	FluxPosOfflineStatusOrdersWaiting: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineStatusOrdersWaiting")); ?>',
-	FluxPosOfflineStatusClickRetry: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineStatusClickRetry")); ?>'
+	FluxPosOfflineStatusClickRetry: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineStatusClickRetry")); ?>',
+	FluxPosTotal: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("TotalTTCShort")); ?>',
+	FluxPosTileSize: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosTileSize")); ?>',
+	FluxPosOtherPaymentModes: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOtherPaymentModes")); ?>',
+	FluxPosLineEditTitle: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosLineEditTitle")); ?>',
+	FluxPosMoreActions: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosMoreActions")); ?>'
 };
 var editaction="qty";
 var editnumber="";
 var invoiceid=0;
 var search2_timer=null;
+var fluxposlastitems=[];	// Products of the category currently displayed in the grid (used to go back from the search)
+var fluxposdisplaynumberpad='<?php echo $fluxposDisplayNumberpad; ?>';
 
 /*
 var app = this;
@@ -349,26 +370,126 @@ function MoreCategories(moreorless) {
 	ClearSearch(false);
 }
 
+// Escape a text for safe insertion into a tile (names are user data)
+function FluxPosEscapeHtml(text) {
+	return jQuery('<div/>').text(text == null ? '' : String(text)).html();
+}
+
+// Tile HTML for the fluid product grid. The tiles keep the historical DOM contract:
+// ids prodivN/proimgN/prodescN/propriceN/prodivdescN (index = position on the grid)
+// and data-rowid/data-iscat/data-unit on the tile, so ClickProduct(position), the
+// weighing scale and the product-display hooks keep working like before.
+function FluxPosTileHtml(item, index) {
+	var val = item.data;
+	if (item.iscat == 1) {
+		var catlabel = FluxPosEscapeHtml(val.label);
+		<?php if (getDolGlobalString('FLUXPOS_SHOW_CATEGORY_DESCRIPTION') == 1) { ?>
+			catlabel = FluxPosEscapeHtml(val.label) + ' - ' + FluxPosEscapeHtml(val.description);
+		<?php } ?>
+		return '<div class="wrapper2" id="prodiv'+index+'" data-rowid="'+val.rowid+'" data-iscat="1" onclick="ClickProduct('+index+')">'
+			+ '<img class="imgwrapper" id="proimg'+index+'" src="genimg/index.php?query=cat&id='+val.rowid+'" title="">'
+			+ '<div class="description" id="prodivdesc'+index+'"><div class="description_content" id="prodesc'+index+'">'+catlabel+'</div></div>'
+			+ '</div>';
+	}
+	var rowid = (typeof val['rowid'] != 'undefined') ? val['rowid'] : val['id'];
+	var label = FluxPosEscapeHtml(val['label']);
+	<?php
+	if (getDolGlobalInt('FLUXPOS_SHOW_PRODUCT_REFERENCE') == 1) {
+		?>
+		label = FluxPosEscapeHtml(val['ref']) + ' - ' + FluxPosEscapeHtml(val['label']);
+		<?php
+	} elseif (getDolGlobalInt('FLUXPOS_SHOW_PRODUCT_REFERENCE') == 2) {
+		?>
+		label = '<b>' + FluxPosEscapeHtml(val['ref']) + '</b>';
+		<?php
+	}
+	?>
+	var imgtitle = <?php echo "'".dol_escape_js($langs->transnoentities('Ref').': ')."' + (val['ref'] || '')"; ?>;
+	imgtitle += <?php echo "' - ".dol_escape_js($langs->trans("Barcode").': ')."' + (val['barcode'] || '')"; ?>;
+	var imgsrc = (typeof val['img'] != 'undefined' && val['img']) ? val['img'] : 'genimg/index.php?query=pro&id='+rowid;
+	var html = '<div class="wrapper2" id="prodiv'+index+'" data-rowid="'+rowid+'" data-iscat="0"';
+	if (typeof val['fk_unit'] != 'undefined') {
+		html += ' data-unit="'+FluxPosEscapeHtml(val['fk_unit'])+'"';
+	}
+	html += ' onclick="ClickProduct('+index+')">';
+	<?php if (!getDolGlobalString('FLUXPOS_HIDE_PRODUCT_PRICES')) { ?>
+		if (val['price_formated']) {
+			var pricehtml = <?php if (getDolGlobalInt('FLUXPOS_CHANGE_PRICE_HT')) {
+				echo "val['price_formated']";
+			} else {
+				echo "val['price_ttc_formated']";
+			} ?>;
+			html += '<div class="productprice" id="proprice'+index+'">'+FluxPosEscapeHtml(pricehtml)+'</div>';
+		} else {
+			html += '<div class="productprice hidden" id="proprice'+index+'"></div>';
+		}
+	<?php } else { ?>
+		html += '<div class="hidden" id="proprice'+index+'"></div>';
+	<?php } ?>
+	<?php if (!getDolGlobalString('FLUXPOS_HIDE_PRODUCT_IMAGES')) { ?>
+		html += '<img class="imgwrapper" id="proimg'+index+'" src="'+imgsrc+'" title="'+FluxPosEscapeHtml(imgtitle)+'">';
+		html += '<div class="description" id="prodivdesc'+index+'"><div class="description_content" id="prodesc'+index+'">'+label+'</div></div>';
+	<?php } else { ?>
+		html += '<img class="imgwrapper hidden" id="proimg'+index+'" src="'+imgsrc+'" title="">';
+		html += '<button type="button" class="productbutton" id="probutton'+index+'">'+label+'</button>';
+	<?php } ?>
+	html += '</div>';
+	return html;
+}
+
+// Render the fluid product grid: every subcategory of the current category first (when
+// wanted), then every product of the data array. No fixed tile pool, no pagination:
+// the whole content of the category is rendered at once and the area scrolls.
+function RenderProducts(data, withsubcats) {
+	console.log("RenderProducts "+data.length+" products, withsubcats="+withsubcats);
+	var grid = jQuery("#productgrid");
+	if (!grid.length) {
+		return;
+	}
+	if (withsubcats !== false) {
+		withsubcats = true;
+	}
+	fluxposlastitems = data;	// keep for the "back to the category" of ClearSearch
+
+	var html = '';
+	var index = 0;
+	var i;
+	if (withsubcats && typeof currentsubcategories != 'undefined') {
+		for (i = 0; i < currentsubcategories.length; i++) {
+			html += FluxPosTileHtml({ iscat: 1, data: currentsubcategories[i] }, index++);
+		}
+	}
+	for (i = 0; i < data.length; i++) {
+		if (typeof (data[i]) == "undefined") {
+			continue;
+		}
+		html += FluxPosTileHtml({ iscat: 0, data: data[i] }, index++);
+	}
+	if (index == 0) {
+		html = '<div class="fluxposgridempty opacitymedium"><?php echo dol_escape_js($langs->trans("Empty")); ?></div>';
+	}
+	grid.html(html);
+	ishow = index;
+	idata = data.length;
+
+	<?php
+	// Add js from hooks
+	$parameters = array();
+	$parameters['caller'] = 'loadProducts';
+	$hookmanager->executeHooks('completeJSProductDisplay', $parameters);
+	print $hookmanager->resPrint;
+	?>
+}
+
 // Show a subcategory into the tile ishow of the product grid
 function PrintSubCategory(ishow, val) {
-	$("#prodivdesc"+ishow).show();
-	<?php if (getDolGlobalString('FLUXPOS_SHOW_CATEGORY_DESCRIPTION') == 1) { ?>
-		$("#prodesc"+ishow).html(val.label.bold() + ' - ' + val.description);
-	   $("#probutton"+ishow).html(val.label);
-	<?php } else { ?>
-		$("#prodesc"+ishow).text(val.label);
-	  $("#probutton"+ishow).text(val.label);
-	<?php } ?>
-	$("#probutton"+ishow).show();
-	$("#proprice"+ishow).attr("class", "hidden");
-	$("#proprice"+ishow).html("");
-	$("#proimg"+ishow).attr("src","genimg/index.php?query=cat&id="+val.rowid);
-	$("#prodiv"+ishow).data("rowid",val.rowid);
-	$("#prodiv"+ishow).attr("data-rowid",val.rowid);
-	$("#prodiv"+ishow).data("iscat", 1);
-	$("#prodiv"+ishow).attr("data-iscat", 1);
-	$("#prodiv"+ishow).removeClass("divempty");
-	$("#prowatermark"+ishow).show();
+	// Legacy fixed-cell renderer: kept as a thin alias for compatibility, the tiles
+	// are (re)rendered by RenderProducts since the fluid grid.
+	if (typeof currentsubcategories != 'undefined') {
+		if (val && typeof val.fk_parent != 'undefined') {
+			RenderProducts(fluxposlastitems || [], true);
+		}
+	}
 }
 
 // LoadProducts
@@ -411,17 +532,6 @@ function LoadProducts(position, issubcat) {
 			}
 		});
 	}
-	// Show the first subcategories, the next ones are shown by MoreProducts()
-	while (ishow < currentsubcategories.length && ishow < maxproduct) {
-		PrintSubCategory(ishow, currentsubcategories[ishow]);
-		ishow++;
-	}
-
-	idata=0; //product data counter
-	var limit = 0;
-	if (maxproduct >= 1) {
-		limit = maxproduct - 1;
-	}
 
 	// Get socid
 	let socid = jQuery('#thirdpartyid').val();
@@ -429,16 +539,17 @@ function LoadProducts(position, issubcat) {
 		socid = parseInt("<?php echo dol_escape_js($socid); ?>");
 	}
 
-	// Only show products for sale (tosell=1)
-	$.getJSON('<?php echo dol_buildpath('/fluxpos/ajax/ajax.php', 1) ?>?action=getProducts&token=<?php echo currentToken();?>&thirdpartyid=' + socid + '&category='+currentcat+'&tosell=1&limit='+limit+'&offset=0', function(data) {
-		console.log("Call ajax.php (in LoadProducts) to get Products of category "+currentcat+" then loop on result to fill image thumbs");
+	// Only show products for sale (tosell=1). The whole category is loaded at once
+	// (limit=0): the fluid grid scrolls instead of paging through a fixed cell pool.
+	$.getJSON('<?php echo dol_buildpath('/fluxpos/ajax/ajax.php', 1) ?>?action=getProducts&token=<?php echo currentToken();?>&thirdpartyid=' + socid + '&category='+currentcat+'&tosell=1&limit=0&offset=0', function(data) {
+		console.log("Call ajax.php (in LoadProducts) to get Products of category "+currentcat+" then render the fluid grid");
 		console.log("Found "+data.length+" record");
 
 		if (data.length == 0 && currentcat == "supplements") {
 			alert("No supplements found into the supplement category. Check the module setup and your product categories.");
 		}
 
-		FillProductsGrid(data);
+		RenderProducts(data);
 	}).fail(function(jqxhr, textStatus) {
 		// Offline fallback: fill the grid from the catalog cached into IndexedDB.
 		// handleFailure() also switches to offline mode when the server is unreachable
@@ -448,7 +559,7 @@ function LoadProducts(position, issubcat) {
 		}
 		FluxPosOffline.getCategoryProducts(currentcat, socid).then(function(data) {
 			if (data !== null) {
-				FillProductsGrid(data);
+				RenderProducts(data);
 			}
 		});
 	});
@@ -456,216 +567,14 @@ function LoadProducts(position, issubcat) {
 	ClearSearch(false);
 }
 
-// Fill the product thumbs of the grid with an array of products (same format as the getProducts ajax action), starting at tile ishow
-function FillProductsGrid(data) {
-	console.log("FillProductsGrid");
-	var maxproduct = <?php echo (int) ($MAXPRODUCT - 2); ?>;
-	while (ishow < maxproduct) {
-			console.log("ishow"+ishow+" idata="+idata);
-			console.log(data[idata]);
-
-			if (typeof (data[idata]) == "undefined") {
-				<?php if (!getDolGlobalString('FLUXPOS_HIDE_PRODUCT_IMAGES')) {
-					echo '$("#prodivdesc"+ishow).hide();';
-					echo '$("#prodesc"+ishow).text("");';
-					echo '$("#proimg"+ishow).attr("title","");';
-					echo '$("#proimg"+ishow).attr("src","genimg/empty.png");';
-				} else {
-					echo '$("#probutton"+ishow).hide();';
-					echo '$("#probutton"+ishow).text("");';
-				}?>
-				$("#proprice"+ishow).attr("class", "hidden");
-				$("#proprice"+ishow).html("");
-
-				$("#prodiv"+ishow).data("rowid","");
-				$("#prodiv"+ishow).attr("data-rowid","");
-
-				$("#prodiv"+ishow).data("iscat","0");
-				$("#prodiv"+ishow).attr("data-iscat","0");
-
-				$("#prodiv"+ishow).attr("class","wrapper2 divempty");
-			} else  {
-				<?php
-					$titlestring = "'".dol_escape_js($langs->transnoentities('Ref').': ')."' + data[idata]['ref']";
-				$titlestring .= " + ' - ".dol_escape_js($langs->trans("Barcode").': ')."' + data[idata]['barcode']";
-				?>
-				var titlestring = <?php echo $titlestring; ?>;
-				<?php if (!getDolGlobalString('FLUXPOS_HIDE_PRODUCT_IMAGES')) {
-					echo '$("#prodivdesc"+ishow).show();';
-					if (getDolGlobalInt('FLUXPOS_SHOW_PRODUCT_REFERENCE') == 1) {
-						echo '$("#prodesc"+ishow).html(data[parseInt(idata)][\'ref\'].bold() + \' - \' + data[parseInt(idata)][\'label\']);';
-					} elseif (getDolGlobalInt('FLUXPOS_SHOW_PRODUCT_REFERENCE') == 2) {
-						echo '$("#prodesc"+ishow).html(data[parseInt(idata)][\'ref\'].bold());';
-					} else {
-						echo '$("#prodesc"+ishow).html(data[parseInt(idata)][\'label\']);';
-					}
-					echo '$("#proimg"+ishow).attr("title", titlestring);';
-					echo '$("#proimg"+ishow).attr("src", "genimg/index.php?query=pro&id="+data[idata][\'id\']);';
-				} else {
-					echo '$("#probutton"+ishow).show();';
-					echo '$("#probutton"+ishow).html(data[parseInt(idata)][\'label\']);';
-				}
-				?>
-				if (data[parseInt(idata)]['price_formated']) {
-					$("#proprice" + ishow).attr("class", "productprice");
-					<?php
-					if (getDolGlobalInt('FLUXPOS_CHANGE_PRICE_HT')) {
-						?>
-						$("#proprice" + ishow).html(data[parseInt(idata)]['price_formated']);
-						<?php
-					} else {
-						?>
-						$("#proprice" + ishow).html(data[parseInt(idata)]['price_ttc_formated']);
-						<?php
-					}
-					?>
-				}
-				console.log("#prodiv"+ishow+".data(rowid)="+data[idata]['id']);
-
-				$("#prodiv"+ishow).data("rowid", data[idata]['id']);
-				$("#prodiv"+ishow).attr("data-rowid", data[idata]['id']);
-				console.log($('#prodiv4').data('rowid'));
-
-				$("#prodiv"+ishow).data("iscat", 0);
-				$("#prodiv"+ishow).attr("data-iscat", 0);
-
-				$("#prodiv"+ishow).attr("class","wrapper2");
-
-				<?php
-				// Add js from hooks
-				$parameters = array();
-				$parameters['caller'] = 'loadProducts';
-				$hookmanager->executeHooks('completeJSProductDisplay', $parameters);
-				print $hookmanager->resPrint;
-				?>
-			}
-			$("#prowatermark"+ishow).hide();
-			ishow++; //Next product to show after print data product
-			idata++; //Next data every time
-		}
-}
-
 function MoreProducts(moreorless) {
-	console.log("MoreProducts");
+	// Legacy page pager of the fixed tile pool: the fluid grid scrolls instead.
+	// Kept as a compatibility shim (the category is simply rendered again).
+	console.log("MoreProducts (legacy shim, no pagination in the fluid grid)");
 
 	if ($('#search_pagination').val() != '') {
 		return Search2('<?php echo(isset($keyCodeForEnter) ? $keyCodeForEnter : ''); ?>', moreorless);
 	}
-
-	var maxproduct = <?php echo($MAXPRODUCT - 2); ?>;
-
-	if (moreorless=="more"){
-		$('#proimg31').animate({opacity: '0.5'}, 1);
-		$('#proimg31').animate({opacity: '1'}, 100);
-		pageproducts=pageproducts+1;
-	}
-	if (moreorless=="less"){
-		$('#proimg30').animate({opacity: '0.5'}, 1);
-		$('#proimg30').animate({opacity: '1'}, 100);
-		if (pageproducts==0) return; //Return if no less pages
-		pageproducts=pageproducts-1;
-	}
-
-	ishow=0; //product to show counter
-	idata=0; //product data counter
-	var limit = 0;
-	if (maxproduct >= 1) {
-		limit = maxproduct-1;
-	}
-
-	// The grid shows the subcategories of currentcat first, then its products
-	var first = maxproduct * pageproducts;	// Rank of the first tile of the page into the list of subcategories then products
-	var offset = Math.max(0, first - currentsubcategories.length);
-
-	// Get socid
-	let socid = jQuery('#thirdpartyid').val();
-	if ((socid === undefined || socid === "") && parseInt("<?php echo dol_escape_js($socid) ?>") > 0) {
-		socid = parseInt("<?php echo dol_escape_js($socid); ?>");
-	}
-
-	// Only show products for sale (tosell=1)
-	$.getJSON('<?php echo dol_buildpath('/fluxpos/ajax/ajax.php', 1) ?>?action=getProducts&token=<?php echo currentToken();?>&thirdpartyid=' + socid + '&category='+currentcat+'&tosell=1&limit='+limit+'&offset='+offset, function(data) {
-		console.log("Call ajax.php (in MoreProducts) to get Products of category "+currentcat);
-
-		if (typeof (data[0]) == "undefined" && first >= currentsubcategories.length && moreorless=="more"){ // Return if no more pages
-			pageproducts=pageproducts-1;
-			return;
-		}
-
-		while (ishow < maxproduct && first + ishow < currentsubcategories.length) {
-			PrintSubCategory(ishow, currentsubcategories[first + ishow]);
-			ishow++;
-		}
-
-		while (ishow < maxproduct) {
-			if (typeof (data[idata]) == "undefined") {
-				$("#prodivdesc"+ishow).hide();
-				$("#prodesc"+ishow).text("");
-				$("#probutton"+ishow).text("");
-				$("#probutton"+ishow).hide();
-				$("#proprice"+ishow).attr("class", "");
-				$("#proprice"+ishow).html("");
-				$("#proimg"+ishow).attr("src","genimg/empty.png");
-				$("#prodiv"+ishow).data("rowid","");
-				$("#prodiv"+ishow).attr("data-rowid","");
-				$("#prodiv"+ishow).data("iscat",0);
-				$("#prodiv"+ishow).attr("data-iscat",0);
-			} else {
-				$("#prodivdesc"+ishow).show();
-				<?php if (getDolGlobalInt('FLUXPOS_SHOW_PRODUCT_REFERENCE') == 1) { ?>
-					$("#prodesc"+ishow).html(data[parseInt(idata)]['ref'].bold() + ' - ' + data[parseInt(idata)]['label']);
-				<?php } elseif (getDolGlobalInt('FLUXPOS_SHOW_PRODUCT_REFERENCE') == 2) { ?>
-					$("#prodesc"+ishow).html(data[parseInt(idata)]['ref'].bold());
-				<?php } else { ?>
-					$("#prodesc"+ishow).html(data[parseInt(idata)]['label']);
-				<?php } ?>
-				$("#probutton"+ishow).html(data[parseInt(idata)]['label']);
-				$("#probutton"+ishow).show();
-				if (data[parseInt(idata)]['price_formated']) {
-					$("#proprice" + ishow).attr("class", "productprice");
-					<?php
-					if (getDolGlobalInt('FLUXPOS_CHANGE_PRICE_HT')) {
-						?>
-						$("#proprice" + ishow).html(data[parseInt(idata)]['price_formated']);
-						<?php
-					} else {
-						?>
-						$("#proprice" + ishow).html(data[parseInt(idata)]['price_ttc_formated']);
-						<?php
-					}
-					?>
-				}
-				$("#proimg"+ishow).attr("src","genimg/index.php?query=pro&id="+data[idata]['id']);
-				$("#prodiv"+ishow).data("rowid",data[idata]['id']);
-				$("#prodiv"+ishow).attr("data-rowid",data[idata]['id']);
-				$("#prodiv"+ishow).data("iscat",0);
-				$("#prodiv"+ishow).attr("data-iscat",0);
-			}
-			$("#prowatermark"+ishow).hide();
-			ishow++; //Next product to show after print data product
-			idata++; //Next data every time
-		}
-	}).fail(function(jqxhr, textStatus) {
-		// Offline fallback: fill the page from the catalog cached into IndexedDB
-		if (typeof FluxPosOffline == 'undefined' || !FluxPosOffline.handleFailure(jqxhr, textStatus)) {
-			return;
-		}
-		FluxPosOffline.getCategoryProducts(currentcat, socid).then(function(products) {
-			if (products === null) {
-				return;
-			}
-			var data = products.slice(offset, offset + limit);
-			if (typeof (data[0]) == "undefined" && first >= currentsubcategories.length && moreorless == "more") { // Return if no more pages
-				pageproducts=pageproducts-1;
-				return;
-			}
-			while (ishow < maxproduct && first + ishow < currentsubcategories.length) {
-				PrintSubCategory(ishow, currentsubcategories[first + ishow]);
-				ishow++;
-			}
-			FillProductsGrid(data);
-		});
-	});
 
 	ClearSearch(false);
 }
@@ -724,6 +633,9 @@ function ClickProduct(position, qty = 1, qty_std = 0) {
 				<?php if (getDolGlobalString('FLUXPOS_CUSTOMER_DISPLAY')) {
 					echo "CustomerDisplay();";
 				}?>
+				if (status != 'error') {
+					fluxposUpdateCartTotal();	// Keep the sticky total of the cart footer in sync
+				}
 				if (status == 'error') {
 					// The server could not be reached (or refused the call): never lose the
 					// tap silently. On a network failure the terminal works offline, so the
@@ -769,6 +681,8 @@ function ChangeThirdparty(idcustomer) {
 	 console.log("ChangeThirdparty");
 		// Call page list.php to change customer
 		$("#poslines").load("<?php echo DOL_URL_ROOT ?>/societe/list.php?action=change&token=<?php echo currentToken();?>&type=t&contextpage=poslist&idcustomer="+idcustomer+"&place="+place+"", function() {
+			// list.php replaces the cart fragment with a customer list: old total must not linger in the cart footer
+			fluxposUpdateCartTotal('');
 		});
 
 	ClearSearch(false);
@@ -779,8 +693,67 @@ function deleteline() {
 	console.log("Delete line invoiceid="+invoiceid);
 	$("#poslines").load("invoice.php?action=deleteline&token=<?php echo currentToken(); ?>&place="+place+"&idline="+selectedline+"&invoiceid="+invoiceid, function() {
 		//$('#poslines').scrollTop($('#poslines')[0].scrollHeight);
+		FluxPosCloseLineEdit();	// The contextual numberpad closes once its change was applied
+		fluxposUpdateCartTotal();
 	});
 	ClearSearch(false);
+}
+
+/*
+ * Line-edit popup (contextual numberpad of the 1.1 layout).
+ * Opens over the cart when a line of a server order is tapped, so the numberpad is
+ * never permanent on the screen (FLUXPOS_DISPLAY_NUMBERPAD = 'lineedit', default).
+ */
+function FluxPosOpenLineEdit() {
+	if (fluxposdisplaynumberpad == 'never') {
+		return;
+	}
+	if (typeof(selectedline) == "undefined" || !selectedline) {
+		return;	// No server line tapped (an offline cart line has its own +/- steppers)
+	}
+	ModalBox('ModalLineEdit');
+}
+
+function FluxPosCloseLineEdit() {
+	var modal = document.getElementById('ModalLineEdit');
+	if (modal) {
+		modal.style.display = 'none';
+	}
+}
+
+/*
+ * Quick quantity stepper of the cart lines (the - qty + control, also used by the
+ * offline cart): one tap = one unit, the numberpad is only needed for free amounts.
+ */
+function FluxPosQtyStep(btn) {
+	invoiceid = $("#invoiceid").val();
+	idline = $(btn).closest('tr').attr('id');
+	qty = $(btn).data('qty');
+	console.log("FluxPosQtyStep line="+idline+" qty="+qty);
+	if (qty == null || invoiceid == '') {
+		return;
+	}
+	$("#poslines").load("invoice.php?action=updateqty&token=<?php echo currentToken(); ?>&place="+place+"&idline="+idline+"&number="+qty, function() {
+		fluxposUpdateCartTotal();
+	});
+}
+
+/*
+ * Sticky total of the cart footer. Called with an explicit amount by the offline
+ * renderer, or computes it from the invoice fragment header of invoice.php when the
+ * cart is on the server.
+ */
+function fluxposUpdateCartTotal(amountText) {
+	var el = document.getElementById('carttotalvalue');
+	if (!el) {
+		return;
+	}
+	if (typeof amountText == 'undefined' || amountText === null) {
+		var spans = jQuery('#poslines span[id="linecolht-span-total"]');
+		amountText = spans.length ? spans.last().text() : '';
+	}
+	el.textContent = amountText;
+	jQuery('.cartfooter').toggleClass('emptycart', !amountText);
 }
 
 function Customer() {
@@ -806,7 +779,7 @@ function Reduction() {
 }
 
 var closeBillParams="";
-function CloseBill() {
+function CloseBill(paycode) {
 	<?php
 	$parameters = array();
 	$reshook = $hookmanager->executeHooks('paramsForCloseBill', $parameters, $obj, $action);
@@ -849,7 +822,11 @@ function CloseBill() {
 		$payurl = dol_buildpath($alternative_payurl, 1);
 	}
 	?>
-	$.colorbox({href:"<?php echo $payurl; ?>?place="+place+"&invoiceid="+invoiceid+closeBillParams, width:"80%", height:"90%", transition:"none", iframe:"true", title:""});
+	// paycode (optional): preselect the payment mode on the payment screen (the payment
+	// block of the cart footer opens the same screen of pay.php with its pad, cash fence
+	// and bank-account overrides untouched)
+	var paycodeparam = (typeof paycode != 'undefined' && paycode) ? '&paycode='+encodeURIComponent(paycode) : '';
+	$.colorbox({href:"<?php echo $payurl; ?>?place="+place+"&invoiceid="+invoiceid+closeBillParams+paycodeparam, width:"80%", height:"90%", transition:"none", iframe:"true", title:""});
 }
 
 function Split() {
@@ -903,6 +880,9 @@ function Refresh() {
 			// by the engine when this place must be captured while offline)
 			FluxPosOffline.cacheServerOrder();
 		}
+		if (status != 'error') {
+			fluxposUpdateCartTotal();	// Keep the sticky total of the cart footer in sync
+		}
 		//$('#poslines').scrollTop($('#poslines')[0].scrollHeight);
 	});
 }
@@ -929,6 +909,7 @@ function New() {
 	if (invoiceid == '') {
 		$("#poslines").load("invoice.php?action=delete&token=<?php echo currentToken(); ?>&place=" + place, function () {
 			//$('#poslines').scrollTop($('#poslines')[0].scrollHeight);
+			fluxposUpdateCartTotal('');
 		});
 
 		ClearSearch(false);
@@ -949,6 +930,7 @@ function New() {
 			// Reload section with invoice lines
 			$("#poslines").load("invoice.php?action=delete&token=<?php echo currentToken(); ?>&place=" + place, function () {
 				//$('#poslines').scrollTop($('#poslines')[0].scrollHeight);
+				fluxposUpdateCartTotal('');
 			});
 
 			ClearSearch(false);
@@ -957,10 +939,14 @@ function New() {
 	});
 }
 /**
- * Search products
+ * Search products: typing filters the tiles of the fluid grid in place. The
+ * individual-barcode behaviors of the original implementation are kept (single exact
+ * thirdparty or product bar code acts at once). The pager of the old fixed grid is
+ * gone: every match is rendered, emptying the search field or pressing Escape brings
+ * the current category back.
  *
  * @param   keyCodeForEnter     Key code for "enter" or '' if not
- * @param   moreorless          "more" or "less"
+ * @param   moreorless          Deprecated (old pager), ignored
  * return   void
  */
 function Search2(keyCodeForEnter, moreorless) {
@@ -974,28 +960,14 @@ function Search2(keyCodeForEnter, moreorless) {
 		return;
 	}
 
-	console.log("Search2 Call ajax search to replace products keyCodeForEnter="+keyCodeForEnter+", eventKeyCode="+eventKeyCode);
+	var search_term = $('#search').val();
+	var search_limit = 500;	// The fluid grid scrolls: search without pagination
 
-	var search_term  = $('#search').val();
-	var search_start = 0;
-	var search_limit = <?php echo $MAXPRODUCT - 2; ?>;
-	if (moreorless != null) {
-		search_term = $('#search_pagination').val();
-		search_start = $('#search_start_'+moreorless).val();
-	}
-
-	console.log("search_term="+search_term);
+	console.log("Search2 keyCodeForEnter="+keyCodeForEnter+", eventKeyCode="+eventKeyCode+", search_term="+search_term);
 
 	if (search_term == '') {
-		$("[id^=prowatermark]").html("");
-		$("[id^=prodesc]").text("");
-		$("[id^=probutton]").text("");
-		$("[id^=probutton]").hide();
-		$("[id^=proprice]").attr("class", "hidden");
-		$("[id^=proprice]").html("");
-		$("[id^=proimg]").attr("src", "genimg/empty.png");
-		$("[id^=prodiv]").data("rowid", "");
-		$("[id^=prodiv]").attr("data-rowid", "");
+		// Empty search: go back to the current category ("Escape" behavior)
+		RenderProducts(fluxposlastitems || [], typeof currentsubcategories != 'undefined');
 		return;
 	}
 
@@ -1014,8 +986,6 @@ function Search2(keyCodeForEnter, moreorless) {
 		// temporization time to give time to type
 		search2_timer = setTimeout(function(){
 			pageproducts = 0;
-			jQuery(".wrapper2 .catwatermark").hide();
-			var nbsearchresults = 0;
 
 			// Only show products for sale (tosell=1)
 			let socid = jQuery('#thirdpartyid').val();
@@ -1023,15 +993,15 @@ function Search2(keyCodeForEnter, moreorless) {
 				socid = parseInt("<?php echo dol_escape_js($socid); ?>");
 			}
 
-			$.getJSON('<?php echo dol_buildpath('/fluxpos/ajax/ajax.php', 1) ?>?action=search&token=<?php echo currentToken();?>&search_term=' + search_term + '&thirdpartyid=' + socid + '&search_start=' + search_start + '&search_limit=' + search_limit, function (data) {
-				nbsearchresults = FillSearchResults(data);
+			$.getJSON('<?php echo dol_buildpath('/fluxpos/ajax/ajax.php', 1) ?>?action=search&token=<?php echo currentToken();?>&search_term=' + search_term + '&thirdpartyid=' + socid + '&search_start=0&search_limit=' + search_limit, function (data) {
+				RenderSearchResults(data);
 			}).fail(function (jqxhr, textStatus) {
 				// Offline fallback: search into the catalog cached into IndexedDB
 				if (typeof FluxPosOffline == 'undefined' || !FluxPosOffline.handleFailure(jqxhr, textStatus)) {
 					return;
 				}
 				FluxPosOffline.searchProducts(search_term, socid, search_limit).then(function (cacheddata) {
-					nbsearchresults = FillSearchResults(cacheddata);
+					RenderSearchResults(cacheddata);
 					searchAlways(cacheddata);
 				});
 			}).always(function (data) {
@@ -1041,7 +1011,7 @@ function Search2(keyCodeForEnter, moreorless) {
 				searchAlways(data);
 			});
 
-			// Post processing of a search: single answer actions, error message and pagination
+			// Post processing of a search: single answer actions and error message
 			var searchAlways = function (data) {
 				// If there is only 1 answer
 				if ($('#search').val().length > 0 && data.length == 1) {
@@ -1065,102 +1035,32 @@ function Search2(keyCodeForEnter, moreorless) {
 					}
 					else ClearSearch(false);
 				}
-				// memorize search_term and start for pagination
-				$("#search_pagination").val($("#search").val());
-				if (search_start == 0) {
-					$("#prodiv<?php echo $MAXPRODUCT - 2; ?> span").hide();
-				}
-				else {
-					$("#prodiv<?php echo $MAXPRODUCT - 2; ?> span").show();
-					var search_start_less = Math.max(0, parseInt(search_start) - parseInt(<?php echo $MAXPRODUCT - 2;?>));
-					$("#search_start_less").val(search_start_less);
-				}
-				if (nbsearchresults != <?php echo $MAXPRODUCT - 2; ?>) {
-					$("#prodiv<?php echo $MAXPRODUCT - 1; ?> span").hide();
-				}
-				else {
-					$("#prodiv<?php echo $MAXPRODUCT - 1; ?> span").show();
-					var search_start_more = parseInt(search_start) + parseInt(<?php echo $MAXPRODUCT - 2;?>);
-					$("#search_start_more").val(search_start_more);
-				}
 			};
 		}, 500); // 500ms delay
 	}
 
 }
 
-// Fill the product thumbs of the grid with search results (same format as the search ajax action) and return the number of results shown
-function FillSearchResults(data) {
-	console.log("FillSearchResults");
-	var nbresults = 0;
-	for (i = 0; i < <?php echo($MAXPRODUCT - 2); ?>; i++) {	// the last 2 slots are the pager arrows, not product slots
+// Render the results of a search into the fluid product grid and return the number of
+// results shown. Thirdparty rows are excluded (they are acted on by the auto-change of
+// searchAlways when unique).
+function RenderSearchResults(data) {
+	console.log("RenderSearchResults");
+	var products = [];
+	var i;
+	for (i = 0; i < data.length; i++) {
 		if (typeof (data[i]) == "undefined") {
-			$("#prowatermark" + i).html("");
-			$("#prodesc" + i).text("");
-			$("#probutton" + i).text("");
-			$("#probutton" + i).hide();
-			$("#proprice" + i).attr("class", "hidden");
-			$("#proprice" + i).html("");
-			$("#proimg" + i).attr("src", "genimg/empty.png");
-			$("#prodiv" + i).data("rowid", "");
-			$("#prodiv" + i).attr("data-rowid", "");
 			continue;
 		}
-		<?php
-		$titlestring = "'".dol_escape_js($langs->transnoentities('Ref').': ')."' + data[i]['ref']";
-		$titlestring .= " + ' - ".dol_escape_js($langs->trans("Barcode").': ')."' + data[i]['barcode']";
-		?>
-		var titlestring = <?php echo $titlestring; ?>;
-		<?php if (getDolGlobalInt('FLUXPOS_SHOW_PRODUCT_REFERENCE') == 1) { ?>
-			$("#prodesc" + i).html(data[i]['ref'].bold() + ' - ' + data[i]['label']);
-		<?php } elseif (getDolGlobalInt('FLUXPOS_SHOW_PRODUCT_REFERENCE') == 2) { ?>
-			$("#prodesc" + i).html(data[i]['ref'].bold());
-		<?php } else { ?>
-			$("#prodesc" + i).html(data[i]['label']);
-		<?php } ?>
-		$("#prodivdesc" + i).show();
-		$("#probutton" + i).html(data[i]['label']);
-		$("#probutton" + i).show();
-		if (data[i]['price_formated']) {
-			$("#proprice" + i).attr("class", "productprice");
-			<?php
-			if (getDolGlobalInt('FLUXPOS_CHANGE_PRICE_HT')) {
-				?>
-				$("#proprice" + i).html(data[i]['price_formated']);
-				<?php
-			} else {
-				?>
-				$("#proprice" + i).html(data[i]['price_ttc_formated']);
-				<?php
-			}
-			?>
+		if (data[i]['object'] == 'thirdparty') {
+			continue;
 		}
-		$("#proimg" + i).attr("title", titlestring);
-		if( undefined !== data[i]['img']) {
-			$("#proimg" + i).attr("src", data[i]['img']);
-		}
-		else {
-			$("#proimg" + i).attr("src", "genimg/index.php?query=pro&id=" + data[i]['rowid']);
-		}
-		$("#prodiv" + i).data("rowid", data[i]['rowid']);
-		$("#prodiv" + i).attr("data-rowid", data[i]['rowid']);
-		$("#prodiv" + i).data("iscat", 0);
-		$("#prodiv" + i).attr("data-iscat", 0);
-
-		<?php
-		// Add js from hooks
-		$parameters = array();
-		$parameters['caller'] = 'search2';
-		$hookmanager->executeHooks('completeJSProductDisplay', $parameters);
-		print $hookmanager->resPrint;
-		?>
-
-		nbresults++;
+		products.push(data[i]);
 	}
-	return nbresults;
+	RenderProducts(products, false);	// No subcategory tiles while searching
+	return products.length;
 }
 
-/* Function called on an action into the PAD */
 function Edit(number) {
 	console.log("We click on PAD on key="+number);
 
@@ -1177,6 +1077,7 @@ function Edit(number) {
 		$("#qty").html("<?php echo $langs->trans("Qty"); ?>").removeClass('clicked');
 		$("#price").html("<?php echo $langs->trans("Price"); ?>").removeClass('clicked');
 		$("#reduction").html("<?php echo $langs->trans("LineDiscountShort"); ?>").removeClass('clicked');
+		FluxPosCloseLineEdit();	// C also closes the contextual numberpad
 		return;
 	} else if (number=='qty') {
 		if (editaction=='qty' && editnumber != '') {
@@ -1184,6 +1085,8 @@ function Edit(number) {
 				editnumber="";
 				//$('#poslines').scrollTop($('#poslines')[0].scrollHeight);
 				$("#qty").html("<?php echo $langs->trans("Qty"); ?>").removeClass('clicked');
+				FluxPosCloseLineEdit();	// The contextual numberpad closes once its change was applied
+				fluxposUpdateCartTotal();
 			});
 
 			setFocusOnSearchField();
@@ -1198,6 +1101,8 @@ function Edit(number) {
 				editnumber="";
 				//$('#poslines').scrollTop($('#poslines')[0].scrollHeight);
 				$("#price").html("<?php echo $langs->trans("Price"); ?>").removeClass('clicked');
+				FluxPosCloseLineEdit();	// The contextual numberpad closes once its change was applied
+				fluxposUpdateCartTotal();
 			});
 
 			ClearSearch(false);
@@ -1212,6 +1117,8 @@ function Edit(number) {
 				editnumber="";
 				//$('#poslines').scrollTop($('#poslines')[0].scrollHeight);
 				$("#reduction").html("<?php echo $langs->trans("LineDiscountShort"); ?>").removeClass('clicked');
+				FluxPosCloseLineEdit();	// The contextual numberpad closes once its change was applied
+				fluxposUpdateCartTotal();
 			});
 
 			ClearSearch(false);
@@ -1333,6 +1240,7 @@ function DirectPayment(){
 	console.log("DirectPayment");
 	$("#poslines").load("invoice.php?place="+place+"&action=valid&token=<?php echo currentToken(); ?>&pay=LIQ", function() {
 		$('#invoiceid').val("");
+		fluxposUpdateCartTotal('');
 	});
 }
 
@@ -1426,6 +1334,7 @@ function WeighingScale(callback) {
 			editnumber = globalWeight;
 			$("#poslines").load("invoice.php?token=<?php echo currentToken(); ?>&action=updateqty&place="+place+"&idline="+selectedline+"&number="+editnumber, function() {
 				editnumber="";
+				fluxposUpdateCartTotal();
 			});
 		<?php } ?>
 	<?php } else { ?> // utilisation du new FluxPos-Connector PHP: envoie "$" à la balance pour avoir le poids
@@ -1437,12 +1346,56 @@ function WeighingScale(callback) {
 	.done(function( editnumber ) {
 		$("#poslines").load("invoice.php?token=<?php echo currentToken(); ?>&action=updateqty&place="+place+"&idline="+selectedline+"&number="+editnumber, function() {
 				editnumber="";
+				fluxposUpdateCartTotal();
 			});
 	});
 	<?php } ?>
 }
 
 $( document ).ready(function() {
+
+	/*
+	 * 1.1 layout wiring
+	 */
+	// Tapping a line of a cart order that lives on the server opens the contextual
+	// line-edit popup (the offline cart lines keep their own +/- steppers)
+	jQuery(document).on('click', 'tr.posinvoiceline', function() {
+		if (this.id && ($('#invoiceid').val() || '') != '') {
+			FluxPosOpenLineEdit();
+		}
+	});
+
+	// Escape in the search field brings the current category back into the grid
+	jQuery('#search').keydown(function(ev) {
+		if (ev.key == 'Escape' || ev.keyCode == 27) {
+			jQuery('#search').val('');
+			RenderProducts(fluxposlastitems || [], typeof currentsubcategories != 'undefined');
+		}
+	});
+
+	// Tile density control (S/M/L), remembered per terminal in localStorage
+	var fluxposTileTerm = '<?php echo (int) $term; ?>';
+	(function() {
+		var pref = null;
+		try { pref = window.localStorage.getItem('fluxposTileSize' + fluxposTileTerm); } catch (e) {}
+		if (pref && ['S', 'M', 'L'].indexOf(pref) >= 0) {
+			jQuery('body').removeClass('fluxpos-tile-S fluxpos-tile-M fluxpos-tile-L').addClass('fluxpos-tile-' + pref);
+		}
+	})();
+	jQuery('#tiledensity button').each(function() {
+		var size = jQuery(this).data('size');
+		jQuery(this).attr('title', fluxposlang.FluxPosTileSize + ' ' + size);
+	}).on('click', function() {
+		var size = jQuery(this).data('size');
+		if (['S', 'M', 'L'].indexOf(size) < 0) {
+			return;
+		}
+		jQuery('body').removeClass('fluxpos-tile-S fluxpos-tile-M fluxpos-tile-L').addClass('fluxpos-tile-' + size);
+		try { window.localStorage.setItem('fluxposTileSize' + fluxposTileTerm, String(size)); } catch (e) {}
+		jQuery('#tiledensity button').removeClass('clicked');
+		jQuery(this).addClass('clicked');
+	});
+
 	PrintCategories(0);
 	LoadProducts(0);
 	Refresh();
@@ -1709,33 +1662,17 @@ if (!getDolGlobalString('FLUXPOS_HIDE_HEAD_BAR')) {
 </div>
 </div>
 
-	<div class="row1<?php if (!getDolGlobalString('FLUXPOS_HIDE_HEAD_BAR')) {
+	<div class="posmain<?php if (!getDolGlobalString('FLUXPOS_HIDE_HEAD_BAR')) {
 		print 'withhead';
 					} ?>">
 
-		<div id="poslines" class="div1">
-		</div>
+		<!-- Layout 1.1 (Proposal A): product area is the hero (left column, fluid grid),
+			 the cart becomes the right column (lines, sticky total, payment block, quick
+			 actions). The numberpad is contextual: it opens as a popup when a cart line is
+			 tapped (or stays docked with FLUXPOS_DISPLAY_NUMBERPAD = 'always'). -->
+		<div id="dialogforpopupfluxpos"></div>
 
-		<div class="div2">
-			<button type="button" class="calcbutton" onclick="Edit(7);">7</button>
-			<button type="button" class="calcbutton" onclick="Edit(8);">8</button>
-			<button type="button" class="calcbutton" onclick="Edit(9);">9</button>
-			<button type="button" id="qty" class="calcbutton2" onclick="Edit('qty')"><?php echo $langs->trans("Qty"); ?></button>
-			<button type="button" class="calcbutton" onclick="Edit(4);">4</button>
-			<button type="button" class="calcbutton" onclick="Edit(5);">5</button>
-			<button type="button" class="calcbutton" onclick="Edit(6);">6</button>
-			<button type="button" id="price" class="calcbutton2" onclick="Edit('p')"><?php echo $langs->trans("Price"); ?></button>
-			<button type="button" class="calcbutton" onclick="Edit(1);">1</button>
-			<button type="button" class="calcbutton" onclick="Edit(2);">2</button>
-			<button type="button" class="calcbutton" onclick="Edit(3);">3</button>
-			<button type="button" id="reduction" class="calcbutton2" onclick="Edit('r')"><?php echo $langs->trans("LineDiscountShort"); ?></button>
-			<button type="button" class="calcbutton" onclick="Edit(0);">0</button>
-			<button type="button" class="calcbutton" onclick="Edit('.')">.</button>
-			<button type="button" class="calcbutton poscolorblue" onclick="Edit('c')">C</button>
-			<?php if ($user->hasRight('fluxpos', 'editlines')) { ?>
-			<button type="button" class="calcbutton2 poscolordelete" id="delete" onclick="deleteline()"><span class="fa fa-trash"></span></button>
-			<?php } ?>
-		</div>
+		<div class="posleft">
 
 <?php
 
@@ -1947,40 +1884,99 @@ if ($reshook == 0) {  //add buttons
 }
 
 ?>
-		<!-- Show buttons -->
-		<div id="dialogforpopupfluxpos"></div>
-
-		<div class="div3">
+		<!-- Layout 1.1: the action buttons move into the cart footer (quick row + overflow menu)
+		 and the numberpad becomes a contextual line-edit popup (FLUXPOS_DISPLAY_NUMBERPAD). -->
 		<?php
-		$i = 0;
-		foreach ($menus as $menu) {
-			$i++;
-			if (count($menus) > 12 and $i == 12) {
-				echo '<button style="'.(empty($menu['style']) ? '' : $menu['style']).'" type="button" id="actionnext" class="actionbutton" onclick="MoreActions('.count($menus).')">'.$langs->trans("Next").'</button>';
-				echo '<button style="display: none;" type="button" id="actionprevious" class="actionbutton" onclick="MoreActions('.count($menus).')">'.$langs->trans("Previous").'</button>';
-				echo '<button style="display: none;" type="button" id="action'.$i.'" class="actionbutton" onclick="'.(empty($menu['action']) ? '' : $menu['action']).'">'.$menu['title'].'</button>';
-			} elseif ($i > 12) {
-				echo '<button style="display: none;" type="button" id="action'.$i.'" class="actionbutton" onclick="'.(empty($menu['action']) ? '' : $menu['action']).'">'.$menu['title'].'</button>';
-				// TODO keep style but hide button
-			} else {
-				echo '<button style="'.(empty($menu['style']) ? '' : $menu['style']).'" type="button" id="action'.$i.'" class="actionbutton" onclick="'.(empty($menu['action']) ? '' : $menu['action']).'">'.$menu['title'].'</button>';
+		// Numpad with the same keys as the old permanent pad, reused by the line-edit modal
+		// and by the docked pad of the terminals that set FLUXPOS_DISPLAY_NUMBERPAD = 'always'.
+		$fluxposNumpadHtml = '';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(7);">7</button>\n';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(8);">8</button>\n';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(9);">9</button>\n';
+		$fluxposNumpadHtml .= '<button type="button" id="qty" class="calcbutton2" onclick="Edit(\'qty\')">'.dol_escape_htmltag($langs->trans("Qty")).'</button>\n';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(4);">4</button>\n';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(5);">5</button>\n';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(6);">6</button>\n';
+		$fluxposNumpadHtml .= '<button type="button" id="price" class="calcbutton2" onclick="Edit(\'p\')">'.dol_escape_htmltag($langs->trans("Price")).'</button>\n';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(1);">1</button>\n';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(2);">2</button>\n';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(3);">3</button>\n';
+		$fluxposNumpadHtml .= '<button type="button" id="reduction" class="calcbutton2" onclick="Edit(\'r\')">'.dol_escape_htmltag($langs->trans("LineDiscountShort")).'</button>\n';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(0);">0</button>\n';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton" onclick="Edit(\'.\')">.</button>\n';
+		$fluxposNumpadHtml .= '<button type="button" class="calcbutton poscolorblue" onclick="Edit(\'c\')">C</button>\n';
+		if ($user->hasRight('fluxpos', 'editlines')) {
+			$fluxposNumpadHtml .= '<button type="button" class="calcbutton2 poscolordelete" id="delete" onclick="deleteline()"><span class="fa fa-trash"></span></button>\n';
+		}
+
+		// Quick buttons of the cart footer: the New/Place entry, the print receipt entry and
+		// (when enabled) the direct payment entry. They are removed from the overflow menu.
+		$fluxposQuickKeys = array();
+		$fluxposMenuNewHtml = '';
+		$fluxposMenuPrintHtml = '';
+		$fluxposMenuDirectHtml = '';
+		foreach ($menus as $mkey => $menu) {
+			$maction = isset($menu['action']) ? $menu['action'] : '';
+			if ($fluxposMenuNewHtml == '' && (strpos($maction, 'New();') !== false || strpos($maction, 'Floors();') !== false)) {
+				$fluxposMenuNewHtml = '<button type="button" class="cartquickbtn" '.(empty($menu['style']) ? '' : 'style="'.dol_escape_htmltag($menu['style']).'"').' onclick="'.$maction.' document.getElementById(\'ModalActions\').style.display=\'none\';">'.$menu['title'].'</button>';
+				$fluxposQuickKeys[] = $mkey;
+				continue;
+			}
+			if ($fluxposMenuPrintHtml == '' && strpos($maction, 'PrintBy') !== false) {
+				$fluxposMenuPrintHtml = '<button type="button" class="cartquickbtn" '.(empty($menu['style']) ? '' : 'style="'.dol_escape_htmltag($menu['style']).'"').' onclick="'.$maction.' document.getElementById(\'ModalActions\').style.display=\'none\';">'.$menu['title'].'</button>';
+				$fluxposQuickKeys[] = $mkey;
+				continue;
+			}
+			if (getDolGlobalString('FLUXPOS_DIRECT_PAYMENT') && $fluxposMenuDirectHtml == '' && strpos($maction, 'DirectPayment();') !== false) {
+				$fluxposMenuDirectHtml = '<button type="button" class="cartquickbtn" '.(empty($menu['style']) ? '' : 'style="'.dol_escape_htmltag($menu['style']).'"').' onclick="'.$maction.' document.getElementById(\'ModalActions\').style.display=\'none\';">'.$menu['title'].'</button>';
+				$fluxposQuickKeys[] = $mkey;
+				continue;
 			}
 		}
-
-		if (getDolGlobalString('FLUXPOS_HIDE_HEAD_BAR') && !getDolGlobalString('FLUXPOS_HIDE_SEARCH')) {
-			print '<!-- Show the search input text -->'."\n";
-			print '<div class="margintoponly">';
-			print '<input type="text" id="search" class="input-search-fluxpos input-nobottom" name="search" onkeyup="Search2(\''.dol_escape_js($keyCodeForEnter).'\', null);" style="width: 80%; width:calc(100% - 51px); font-size: 150%;" placeholder="'.dol_escape_htmltag($langs->trans("Search")).'" autofocus> ';
-			print '<a class="marginleftonly hideonsmartphone" onclick="ClearSearch(false);">'.img_picto('', 'searchclear.png').'</a>';
-			print '</div>';
+		$fluxposMenusOverflow = array();
+		foreach ($menus as $mkey => $menu) {
+			if (in_array($mkey, $fluxposQuickKeys)) {
+				continue;
+			}
+			$fluxposMenusOverflow[] = $menu;
 		}
 		?>
+			<?php if ($fluxposDisplayNumberpad != 'never' && $fluxposDisplayNumberpad != 'always') { ?>
+		<!-- Modal popup to edit a cart line: the contextual numberpad (qty / price / reduction,
+			 delete). It opens when a line of the cart is tapped and closes when a change is
+			 applied. The payment screen (pay.php) has its own pad. -->
+<div id="ModalLineEdit" class="modal">
+	<div class="modal-content modallineedit">
+		<div class="modal-header">
+			<span class="close" href="#" onclick="FluxPosCloseLineEdit();">&times;</span>
+			<h3><?php print $langs->trans("Modify"); ?></h3>
+		</div>
+		<div class="modal-body">
+			<div class="lineeditpad">
+			<?php print $fluxposNumpadHtml; ?>
+			</div>
 		</div>
 	</div>
+</div>
+			<?php } ?>
 
-	<div class="row2<?php if (!getDolGlobalString('FLUXPOS_HIDE_HEAD_BAR')) {
-		print 'withhead';
-					} ?>">
+		<!-- Modal popup with all the other actions (hook-registered buttons included),
+			 opened from the "..." button of the cart footer -->
+<div id="ModalActions" class="modal">
+	<div class="modal-content modalactions">
+		<div class="modal-header">
+			<span class="close" href="#" onclick="document.getElementById('ModalActions').style.display = 'none';">&times;</span>
+			<h3><?php print $langs->trans("Actions"); ?></h3>
+		</div>
+		<div class="modal-body">
+			<?php
+			foreach ($fluxposMenusOverflow as $menu) {
+				print '<button type="button" class="actionbutton block" '.(empty($menu['style']) ? '' : 'style="'.dol_escape_htmltag($menu['style']).'"').' onclick="'.(empty($menu['action']) ? '' : $menu['action']).' document.getElementById(\'ModalActions\').style.display=\'none\';">'.$menu['title'].'</button>';
+			}
+			?>
+		</div>
+	</div>
+</div>
 
 		<!--  Show categories as a tab bar -->
 		<?php
@@ -2026,53 +2022,87 @@ if ($reshook == 0) {  //add buttons
 		<div class="div5<?php if (getDolGlobalInt('FLUXPOS_HIDE_CATEGORIES') == 1) {
 			print ' centpercent';
 						} ?>">
-	<?php
-	$count = 0;
 
-	while ($count < $MAXPRODUCT) {
-		print '<div class="wrapper2'.(($count >= ($MAXPRODUCT - 2)) ? ' arrow' : '').'" id="prodiv'.$count.'" '; ?>
-															<?php if ($count == ($MAXPRODUCT - 2)) {
-																?> onclick="MoreProducts('less')" <?php
-															}
-															if ($count == ($MAXPRODUCT - 1)) {
-																?> onclick="MoreProducts('more')" <?php
-															} else {
-																echo 'onclick="ClickProduct('.((int) $count).')"';
-															} ?>>
-					<?php
-					if ($count == ($MAXPRODUCT - 2)) {
-						//echo '<img class="imgwrapper" src="img/arrow-prev-top.png" height="100%" id="proimg'.$count.'" />';
-						print '<span class="fa fa-chevron-left centerinmiddle" style="font-size: 5em; cursor: pointer;"></span>';
-					} elseif ($count == ($MAXPRODUCT - 1)) {
-						//echo '<img class="imgwrapper" src="img/arrow-next-top.png" height="100%" id="proimg'.$count.'" />';
-						print '<span class="fa fa-chevron-right centerinmiddle" style="font-size: 5em; cursor: pointer;"></span>';
-					} else {
-						if (!getDolGlobalString('FLUXPOS_HIDE_PRODUCT_PRICES')) {
-							print '<div class="" id="proprice'.$count.'"></div>';
-						}
-						if (getDolGlobalString('FLUXPOS_HIDE_PRODUCT_IMAGES')) {
-							print '<button type="button" id="probutton'.$count.'" class="productbutton" style="display: none;"></button>';
-						} else {
-							print '<img class="imgwrapper" title="" id="proimg'.$count.'">';
-						}
-					} ?>
-						<?php if ($count != $MAXPRODUCT - 2 && $count != $MAXPRODUCT - 1 && !getDolGlobalString('FLUXPOS_HIDE_PRODUCT_IMAGES')) { ?>
-					<div class="description" id="prodivdesc<?php echo $count; ?>">
-						<div class="description_content" id="prodesc<?php echo $count; ?>"></div>
-					</div>
-						<?php } ?>
-					<div class="catwatermark" id='prowatermark<?php echo $count; ?>'>...</div>
-				</div>
-						<?php
-						$count++;
-	}
-	?>
-				<input type="hidden" id="search_start_less" value="0">
-				<input type="hidden" id="search_start_more" value="0">
-				<input type="hidden" id="search_pagination" value="">
+			<?php
+			if (getDolGlobalString('FLUXPOS_HIDE_HEAD_BAR') && !getDolGlobalString('FLUXPOS_HIDE_SEARCH')) {
+				print '<!-- Show the search input text (only when the head bar is hidden, otherwise it is in the topnav) -->'."\n";
+				print '<div class="gridheadsearch">';
+				print '<input type="text" id="search" class="input-search-fluxpos input-nobottom" name="search" onkeyup="Search2(\''.dol_escape_js($keyCodeForEnter).'\', null);" placeholder="'.dol_escape_htmltag($langs->trans("Search")).'" autofocus> ';
+				print '<a onclick="ClearSearch(false);"><span class="fa fa-backspace"></span></a>';
+				print '</div>';
+			}
+			?>
+
+			<!-- Tile density control (S / M / L), remembered per terminal in localStorage -->
+			<div id="tiledensity" class="tiledensity">
+				<button type="button" data-size="S" <?php echo $fluxposTileSize == 'S' ? 'class="clicked"' : ''; ?>>S</button><button type="button" data-size="M" <?php echo $fluxposTileSize == 'M' ? 'class="clicked"' : ''; ?>>M</button><button type="button" data-size="L" <?php echo $fluxposTileSize == 'L' ? 'class="clicked"' : ''; ?>>L</button>
+			</div>
+
+			<!-- The fluid product grid: the whole category is rendered at once (subcategories
+			 first, then its products), the area scrolls instead of paging. The tiles keep the
+			 historical DOM ids (prodivN, proimgN, ...) filled by RenderProducts(). -->
+			<div id="productgrid" class="productgrid"></div>
+
+			<input type="hidden" id="search_start_less" value="0">
+			<input type="hidden" id="search_start_more" value="0">
+			<input type="hidden" id="search_pagination" value="">
 		</div>
-	</div>
-</div>
+		</div><!-- /posleft -->
+
+		<!-- Cart column (right): the order lines, a sticky total and the payment block -->
+		<div class="cartcolumn">
+			<div id="poslines" class="cartlines">
+			</div>
+
+			<div class="cartfooter">
+				<div id="carttotal" class="carttotal">
+					<span class="carttotallabel"><?php echo dol_escape_htmltag($langs->trans("TotalTTCShort")); ?></span>
+					<span id="carttotalvalue" class="carttotalvalue"></span>
+				</div>
+
+				<!-- Payment modes configured for this terminal (same gating as today), each
+				 one opens the payment screen of pay.php with this mode preselected -->
+				<div class="paymentblock">
+				<?php
+				if (!empty($paiementsModes)) {
+					foreach ($paiementsModes as $obj) {
+						$pbCode = $obj->code;
+						$pbIcon = 'money-bill-alt';
+						if ($pbCode == 'LIQ') {
+							$pbIcon = 'coins';
+						} elseif ($pbCode == 'CB') {
+							$pbIcon = 'credit-card';
+						} elseif ($pbCode == 'CHQ') {
+							$pbIcon = 'money-check';
+						}
+						$pbLabel = $langs->trans("PaymentTypeShort".$pbCode);
+						if ($pbLabel == 'PaymentTypeShort'.$pbCode && !empty($obj->libelle)) {
+							$pbLabel = $obj->libelle;
+						}
+						print '<button type="button" class="paymentmode" onclick="CloseBill(\''.dol_escape_js($pbCode).'\');"><span class="fa fa-'.$pbIcon.' iconwithlabel"></span><span class="paymentmodelabel">'.dol_escape_htmltag($pbLabel).'</span></button>';
+					}
+				}
+				?>
+					<button type="button" class="paymentmode paymentmore" onclick="CloseBill();"><span class="fa fa-ellipsis-h iconwithlabel"></span><span class="paymentmodelabel"><?php echo dol_escape_htmltag($langs->trans("More")); ?></span></button>
+				</div>
+
+				<!-- Quick actions of the cart footer -->
+				<div class="cartquick">
+					<?php
+					print $fluxposMenuNewHtml.$fluxposMenuDirectHtml.$fluxposMenuPrintHtml;
+					print '<button type="button" class="cartquickbtn cartmore" title="'.dol_escape_htmltag($langs->trans("Actions")).'" onclick="ModalBox(\'ModalActions\');"><span class="fa fa-ellipsis-h"></span><div class="trunc">...</div></button>';
+					?>
+				</div>
+<?php if ($fluxposDisplayNumberpad == 'always') { ?>
+				<!-- Docked numberpad for the terminals that keep it permanent (escape hatch) -->
+				<div class="lineeditpad numpaddocked">
+				<?php print $fluxposNumpadHtml; ?>
+				</div>
+<?php } ?>
+			</div>
+		</div>
+	</div><!-- /posmain -->
+
 </body>
 <?php
 

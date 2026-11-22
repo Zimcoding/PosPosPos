@@ -660,7 +660,7 @@ print '<button type="button" class="calcbutton" onclick="addreceived('.($numpad 
 		}
 	}
 
-	print '<button type="button" class="calcbutton2" onclick="Validate(\''.dol_escape_js($paycode).'\')">'.(!empty($payIcon) ? '<span class="fa fa-2x fa-'.$payIcon.' iconwithlabel"></span><span class="hideonsmartphone"><br>'.$langs->trans("PaymentTypeShort".$arrayOfValidPaymentModes[0]->code) : $langs->trans("PaymentTypeShort".$arrayOfValidPaymentModes[0]->code)).'</span></button>';
+	print '<button type="button" class="calcbutton2" id="payvalidate'.preg_replace('/[^A-Za-z0-9_-]/', '', $paycode).'" onclick="Validate(\''.dol_escape_js($paycode).'\')">'.(!empty($payIcon) ? '<span class="fa fa-2x fa-'.$payIcon.' iconwithlabel"></span><span class="hideonsmartphone"><br>'.$langs->trans("PaymentTypeShort".$arrayOfValidPaymentModes[0]->code) : $langs->trans("PaymentTypeShort".$arrayOfValidPaymentModes[0]->code)).'</span></button>';
 } else {
 	print '<button type="button" class="calcbutton2">'.$langs->trans("NoPaimementModesDefined").'</button>';
 }
@@ -686,7 +686,7 @@ print '<button type="button" class="calcbutton" onclick="addreceived('.($numpad 
 		}
 	}
 
-	print '<button type="button" class="calcbutton2" onclick="Validate(\''.dol_escape_js($paycode).'\')">'.(!empty($payIcon) ? '<span class="fa fa-2x fa-'.$payIcon.' iconwithlabel"></span><br> '.$langs->trans("PaymentTypeShort".$arrayOfValidPaymentModes[1]->code) : $langs->trans("PaymentTypeShort".$arrayOfValidPaymentModes[1]->code)).'</button>';
+	print '<button type="button" class="calcbutton2" id="payvalidate'.preg_replace('/[^A-Za-z0-9_-]/', '', $paycode).'" onclick="Validate(\''.dol_escape_js($paycode).'\')">'.(!empty($payIcon) ? '<span class="fa fa-2x fa-'.$payIcon.' iconwithlabel"></span><br> '.$langs->trans("PaymentTypeShort".$arrayOfValidPaymentModes[1]->code) : $langs->trans("PaymentTypeShort".$arrayOfValidPaymentModes[1]->code)).'</button>';
 } else {
 	$button = array_pop($action_buttons);
 	print '<button type="button" class="calcbutton2" onclick="'.$button["function"].'"><span '.$button["span"].'>'.$button["text"].'</span></button>';
@@ -713,7 +713,7 @@ print '<button type="button" class="calcbutton" onclick="addreceived('.($numpad 
 		}
 	}
 
-	print '<button type="button" class="calcbutton2" onclick="Validate(\''.dol_escape_js($paycode).'\')">'.(!empty($payIcon) ? '<span class="fa fa-2x fa-'.$payIcon.' iconwithlabel"></span><br>'.$langs->trans("PaymentTypeShort".$arrayOfValidPaymentModes[2]->code) : $langs->trans("PaymentTypeShort".$arrayOfValidPaymentModes[2]->code)).'</button>';
+	print '<button type="button" class="calcbutton2" id="payvalidate'.preg_replace('/[^A-Za-z0-9_-]/', '', $paycode).'" onclick="Validate(\''.dol_escape_js($paycode).'\')">'.(!empty($payIcon) ? '<span class="fa fa-2x fa-'.$payIcon.' iconwithlabel"></span><br>'.$langs->trans("PaymentTypeShort".$arrayOfValidPaymentModes[2]->code) : $langs->trans("PaymentTypeShort".$arrayOfValidPaymentModes[2]->code)).'</button>';
 } else {
 	$button = array_pop($action_buttons);
 	print '<button type="button" class="calcbutton2" onclick="'.$button["function"].'"><span '.$button["span"].'>'.$button["text"].'</span></button>';
@@ -741,7 +741,7 @@ while ($i < count($arrayOfValidPaymentModes)) {
 		}
 	}
 
-	print '<button type="button" class="calcbutton2" onclick="Validate(\''.dol_escape_js($paycode).'\')">'.(!empty($payIcon) ? '<span class="fa fa-2x fa-'.$payIcon.' iconwithlabel"></span><br>'.$langs->trans("PaymentTypeShort".$arrayOfValidPaymentModes[$i]->code) : $langs->trans("PaymentTypeShort".$arrayOfValidPaymentModes[$i]->code)).'</button>';
+	print '<button type="button" class="calcbutton2" id="payvalidate'.preg_replace('/[^A-Za-z0-9_-]/', '', $paycode).'" onclick="Validate(\''.dol_escape_js($paycode).'\')">'.(!empty($payIcon) ? '<span class="fa fa-2x fa-'.$payIcon.' iconwithlabel"></span><br>'.$langs->trans("PaymentTypeShort".$arrayOfValidPaymentModes[$i]->code) : $langs->trans("PaymentTypeShort".$arrayOfValidPaymentModes[$i]->code)).'</button>';
 	$i += 1;
 }
 
@@ -783,7 +783,7 @@ foreach ($action_buttons as $button) {
 }
 
 if (getDolGlobalString('FLUXPOS_DELAYED_PAYMENT')) {
-	print '<button type="button" class="calcbutton2" onclick="Validate(\'delayed\')">'.$langs->trans("Reported").'</button>';
+	print '<button type="button" class="calcbutton2" id="payvalidatedelayed" onclick="Validate(\'delayed\')">'.$langs->trans("Reported").'</button>';
 }
 ?>
 
@@ -795,6 +795,24 @@ print $hookmanager->resPrint;
 ?>
 
 </div>
+
+<?php
+// 1.1 layout: a payment mode opened from the cart payment block arrives preselected (GET paycode)
+$fluxposPreselectedPay = preg_replace('/[^A-Za-z0-9_-]/', '', (string) GETPOST('paycode', 'alpha'));
+if ($fluxposPreselectedPay != '') { ?>
+<script type="text/javascript">
+/* Payment mode preselected from the cart payment block of the 1.1 layout */
+(function() {
+	var btn = document.getElementById('payvalidate<?php echo $fluxposPreselectedPay; ?>');
+	if (btn) {
+		btn.classList.add('payvalidatepreselect');
+		if (btn.scrollIntoView) {
+			try { btn.scrollIntoView({ block: 'center' }); } catch (e) { btn.scrollIntoView(); }
+		}
+	}
+})();
+</script>
+<?php } ?>
 
 </body>
 </html>
