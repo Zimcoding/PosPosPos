@@ -2038,7 +2038,13 @@ if (empty($_SESSION["basiclayout"]) || $_SESSION["basiclayout"] != 1) {
 	if (getDolGlobalInt("FLUXPOS_SHOW_SUBPRICE")) {
 		print '<td class="linecolqty right">'.$langs->trans('PriceUHT').'</td>';
 	}
-	print '<td class="linecolqty right">'.$langs->trans('ReductionShort').'</td>';
+	// 1.3: the Disc header above the cart opens the invoice (total) discount popup of
+	// reduction.php when a draft can still be edited
+	if ($user->hasRight('fluxpos', 'editlines') && !empty($invoice->id) && $invoice->status == $invoice::STATUS_DRAFT) {
+		print '<td class="linecolqty right linecoledit cursorpointer" title="'.dol_escape_htmltag($langs->trans('InvoiceDiscountShort')).'" onclick="if (typeof Reduction === \'function\') { Reduction(); }">'.$langs->trans('ReductionShort').'</td>';
+	} else {
+		print '<td class="linecolqty right">'.$langs->trans('ReductionShort').'</td>';
+	}
 	print '<td class="linecolqty right">'.$langs->trans('Qty').'</td>';
 	if (getDolGlobalString('FLUXPOS_SHOW_HT')) {
 		print '<td class="linecolht right nowraponall">';
@@ -2335,16 +2341,29 @@ if ($placeid > 0) {
 				if (getDolGlobalInt("FLUXPOS_SHOW_SUBPRICE")) {
 					$htmlforlines .= '<td class="right">'.price($line->subprice).'</td>';
 				}
-				$htmlforlines .= '<td class="right">'.vatrate(price2num($line->remise_percent), true).'</td>';
+				// 1.3: the discount and the qty of the line are clickable cells that open the
+				// line-edit popup on the matching mode (default remains the row tap = qty)
+				$fluxposLineEditable = (empty($_SESSION["basiclayout"]) || $_SESSION["basiclayout"] != 1) && $user->hasRight('fluxpos', 'editlines');
+				if ($fluxposLineEditable) {
+					$htmlforlines .= '<td class="right linecoledit" title="'.dol_escape_htmltag($langs->trans("Modify").' - '.$langs->trans("LineDiscountShort")).'" onclick="event.stopPropagation(); FluxPosTapLine(this, \'r\');">'.vatrate(price2num($line->remise_percent), true).'</td>';
+				} else {
+					$htmlforlines .= '<td class="right">'.vatrate(price2num($line->remise_percent), true).'</td>';
+				}
 				// nowraponall keeps the qty and its '(stock)' block on one line: on narrow layouts
 				// the native display otherwise wraps over three lines inside the qty column.
 				$htmlforlines .= '<td class="right nowraponall">';
 				// 1.1 cart: +/- steppers next to the qty (server-computed values: qty can be fractional for weight products)
-				if ((empty($_SESSION["basiclayout"]) || $_SESSION["basiclayout"] != 1) && $user->hasRight('fluxpos', 'editlines')) {
+				if ($fluxposLineEditable) {
 					$htmlforlines .= '<button type="button" class="fluxposqtybtn" onclick="event.stopPropagation(); FluxPosQtyStep(this);" data-qty="'.round(max($line->qty - 1, 0), 3).'">-</button>';
 				}
-				$htmlforlines .= $line->qty;
-				if ((empty($_SESSION["basiclayout"]) || $_SESSION["basiclayout"] != 1) && $user->hasRight('fluxpos', 'editlines')) {
+				// 1.3: the qty itself is an aligned value between the steppers, clickable to open
+				// the line-edit popup on the qty mode (fixes the alignment being a bit off)
+				if ($fluxposLineEditable) {
+					$htmlforlines .= '<span class="fluxposqtyvalue cursorpointer" title="'.dol_escape_htmltag($langs->trans("Modify").' - '.$langs->trans("Qty")).'" onclick="event.stopPropagation(); FluxPosTapLine(this, \'qty\');">'.$line->qty.'</span>';
+				} else {
+					$htmlforlines .= '<span class="fluxposqtyvalue">'.$line->qty.'</span>';
+				}
+				if ($fluxposLineEditable) {
 					$htmlforlines .= '<button type="button" class="fluxposqtybtn" onclick="event.stopPropagation(); FluxPosQtyStep(this);" data-qty="'.round($line->qty + 1, 3).'">+</button>';
 				}
 				if (isModEnabled('stock') && $user->hasRight('stock', 'mouvement', 'lire')) {

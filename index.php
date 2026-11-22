@@ -815,11 +815,10 @@ function ClickProduct(position, qty = 1, qty_std = 0) {
 
 function ChangeThirdparty(idcustomer) {
 	 console.log("ChangeThirdparty");
-		// Call page list.php to change customer
-		$("#poslines").load("<?php echo DOL_URL_ROOT ?>/societe/list.php?action=change&token=<?php echo currentToken();?>&type=t&contextpage=poslist&idcustomer="+idcustomer+"&place="+place+"", function() {
-			// list.php replaces the cart fragment with a customer list: old total must not linger in the cart footer
-			fluxposUpdateCartTotal('');
-		});
+		// 1.3: this flow used to load list.php?action=change into the cart, but that core
+		// block is gated on the takepos permission and just replaced the cart with the
+		// customer list. The FluxPos endpoint selects the customer instead.
+		FluxPosSelectCustomer(idcustomer);
 
 	ClearSearch(false);
 }
@@ -840,14 +839,63 @@ function deleteline() {
  * Opens over the cart when a line of a server order is tapped, so the numberpad is
  * never permanent on the screen (FLUXPOS_DISPLAY_NUMBERPAD = 'lineedit', default).
  */
-function FluxPosOpenLineEdit() {
+function FluxPosOpenLineEdit(mode) {
 	if (fluxposdisplaynumberpad == 'never') {
 		return;
 	}
 	if (typeof(selectedline) == "undefined" || !selectedline) {
 		return;	// No server line tapped (an offline cart line has its own +/- steppers)
 	}
+	// Open the pad on the mode the tapped cell asked for (qty by default), pre-synced
+	FluxPosSetEditAction(mode == 'r' ? 'r' : (mode == 'p' ? 'p' : 'qty'));
 	ModalBox('ModalLineEdit');
+}
+
+/*
+ * Pre-sync the numberpad with the mode of the tapped cell: same label flipping as the
+ * tail of Edit(), so the pad opens with OK on the active mode button. editnumber is
+ * reset, a stale digit of a previous edit must not be applied by a mode press.
+ */
+function FluxPosSetEditAction(action) {
+	if (typeof(selectedline) == "undefined" || !selectedline) {
+		return;
+	}
+	editnumber = '';
+	if (action == 'qty') {
+		editaction = "qty";
+		$("#qty").html("OK").addClass("clicked");
+		$("#price").html("<?php echo $langs->trans("Price"); ?>").removeClass('clicked');
+		$("#reduction").html("<?php echo $langs->trans("LineDiscountShort"); ?>").removeClass('clicked');
+	} else if (action == 'p') {
+		editaction = "p";
+		$("#qty").html("<?php echo $langs->trans("Qty"); ?>").removeClass('clicked');
+		$("#price").html("OK").addClass("clicked");
+		$("#reduction").html("<?php echo $langs->trans("LineDiscountShort"); ?>").removeClass('clicked');
+	} else if (action == 'r') {
+		editaction = "r";
+		$("#qty").html("<?php echo $langs->trans("Qty"); ?>").removeClass('clicked');
+		$("#price").html("<?php echo $langs->trans("Price"); ?>").removeClass('clicked');
+		$("#reduction").html("OK").addClass("clicked");
+	}
+}
+
+/*
+ * Tap at invoice.php on the qty or the discount of a cart line: select that line
+ * (same state that the pad relies on) and open the line-edit popup on the mode of
+ * the tapped cell. The cells of invoice.php call it with event.stopPropagation(),
+ * so the row handlers do not double-fire.
+ */
+function FluxPosTapLine(cellEl, mode) {
+	var row = jQuery(cellEl).closest('tr.posinvoiceline');
+	if (!row.length || !row.attr('id')) {
+		return;
+	}
+	console.log("FluxPosTapLine line="+row.attr('id')+" mode="+mode);
+	$('.posinvoiceline').removeClass("selected");
+	row.addClass("selected");
+	selectedline = row.attr('id');
+	selectedtext = $('#'+selectedline).find("td:first").html();
+	FluxPosOpenLineEdit(mode);
 }
 
 function FluxPosCloseLineEdit() {
@@ -897,9 +945,87 @@ function fluxposUpdateCartTotal(amountText) {
 	}
 }
 
+/*
+ * Customer selection (1.3). The list opens in a colorbox iframe; its rows are
+ * selected with the FluxPos endpoint setcustomer (see FluxPosSelectCustomer).
+ * The core list.php "action=change" inline handler of the rows is gated on the
+ * takepos permission and would just re-render the list on this install.
+ */
+function FluxPosCustomerFrameClick(ev) {
+	var t = ev.target;
+	if (!t || !t.closest) {
+		return;
+	}
+	var row = t.closest('tr[data-rowid]');
+	if (!row) {
+		return;
+	}
+	var idcustomer = parseInt(row.getAttribute('data-rowid'), 10);
+	if (!idcustomer || isNaN(idcustomer)) {
+		return;
+	}
+	// Capture phase interception: core prints an inline location.href onclick on each
+	// row, and a bubbling listener would fire after it is already too late
+	ev.stopPropagation();
+	ev.preventDefault();
+	console.log("FluxPos customer selected by tap id="+idcustomer);
+	FluxPosSelectCustomer(idcustomer);
+}
+
+function FluxPosHookCustomerFrame() {
+	var iframe = document.querySelector('#cboxLoadedContent iframe');
+	if (!iframe) {
+		return;
+	}
+	var wire = function() {
+		var doc = null;
+		try { doc = iframe.contentDocument || iframe.contentWindow.document; } catch (e) { return; }
+		if (!doc || !doc.body || doc.getElementById('fluxposCustomerHook')) {
+			return;	// already wired for this document of the iframe
+		}
+		var marker = doc.createElement('div');
+		marker.id = 'fluxposCustomerHook';
+		marker.style.display = 'none';
+		doc.body.appendChild(marker);
+		doc.addEventListener('click', FluxPosCustomerFrameClick, true);
+	};
+	wire();
+	// A search or a pagination re-navigates the iframe: wire() re-runs on every load and
+	// adds the tap interception to the new document again (the marker keeps it idempotent)
+	if (!iframe.dataset) { iframe.dataset = {}; }
+	if (!iframe.dataset.fluxposHook) {
+		iframe.dataset.fluxposHook = '1';
+		iframe.addEventListener('load', wire);
+	}
+}
+
+function FluxPosSelectCustomer(idcustomer) {
+	if (typeof FluxPosOffline != 'undefined' && FluxPosOffline.isOffline()) {
+		window.alert('Selecting a customer requires the connection.');
+		return;
+	}
+	console.log("FluxPosSelectCustomer id="+idcustomer);
+	$.getJSON('<?php echo dol_buildpath('/fluxpos/ajax/ajax.php', 1) ?>?action=setcustomer&token=<?php echo currentToken(); ?>&place='+place+'&idcustomer='+idcustomer, function (data) {
+		if (data && data.success) {
+			if (jQuery.colorbox) {
+				jQuery.colorbox.close();	// Close the customer window
+			}
+			$("#poslines").load("invoice.php?place="+place, function() {
+				fluxposUpdateCartTotal();
+			});
+		} else if (data && data.error == 'SaleNotADraftAnymore') {
+			window.alert('This sale is not an open draft anymore. Start a new sale (New) to select another customer.');
+		} else {
+			window.alert('Error: failed to select the customer.');
+		}
+	}).fail(function () {
+		window.alert('Error: failed to select the customer.');
+	});
+}
+
 function Customer() {
 	console.log("Open box to select the thirdparty place="+place);
-	$.colorbox({href:"<?php echo DOL_URL_ROOT ?>/societe/list.php?type=t&contextpage=poslist&nomassaction=1&place="+place, width:"90%", height:"80%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("Customer"); ?>"});
+	$.colorbox({href:"<?php echo DOL_URL_ROOT ?>/societe/list.php?type=t&contextpage=poslist&nomassaction=1&place="+place, width:"90%", height:"80%", transition:"none", iframe:"true", title:"<?php echo $langs->trans("Customer"); ?>", onComplete: FluxPosHookCustomerFrame});
 }
 
 function Contact() {
@@ -1392,6 +1518,30 @@ function DirectPayment(){
 	}
 	console.log("DirectPayment");
 	$("#poslines").load("invoice.php?place="+place+"&action=valid&token=<?php echo currentToken(); ?>&pay=LIQ", function() {
+		$('#invoiceid').val("");
+		fluxposUpdateCartTotal('');
+	});
+}
+
+/*
+ * Direct payment of a full sale with one specific payment mode (1.3): the payment
+ * mode buttons of the cart footer call this instead of the payment screen popup when
+ * FLUXPOS_PAYMENT_MODE_DIRECT<term> is on. The "More" button keeps CloseBill(), the
+ * pad of pay.php stays reachable for a split payment or another amount.
+ */
+function CloseBillDirect(paycode) {
+	if (typeof FluxPosOffline != 'undefined' && FluxPosOffline.isOffline()) {
+		if ($('#offlinecart').val() == '1' && ($('#invoiceid').val() || '') == '') {
+			// Offline: pay the full sale with this mode, the payment and the invoice
+			// number will be registered at the synchronization (amount 0 = full remaining)
+			FluxPosOffline.validateCart([{ pay: paycode, amount: 0, excess: 0 }]);
+		} else {
+			window.alert('Payment of an order already registered on the server requires the connection.');
+		}
+		return;
+	}
+	console.log("CloseBillDirect paycode="+paycode);
+	$("#poslines").load("invoice.php?place="+place+"&action=valid&token=<?php echo currentToken(); ?>&pay="+encodeURIComponent(paycode), function() {
 		$('#invoiceid').val("");
 		fluxposUpdateCartTotal('');
 	});
@@ -2129,12 +2279,14 @@ if ($reshook == 0) {  //add buttons
 			$fluxposNumpadHtml .= '<button type="button" class="calcbutton2 poscolordelete" id="delete" onclick="deleteline()"><span class="fa fa-trash"></span></button>';
 		}
 
-		// Quick buttons of the cart footer: the New/Place entry, the print receipt entry and
-		// (when enabled) the direct payment entry. They are removed from the overflow menu.
+		// Quick buttons of the cart footer: the New/Place entry, the print receipt entry
+		// and (when enabled) the direct payment + free text product entries. They are
+		// removed from the overflow menu.
 		$fluxposQuickKeys = array();
 		$fluxposMenuNewHtml = '';
 		$fluxposMenuPrintHtml = '';
 		$fluxposMenuDirectHtml = '';
+		$fluxposMenuFreezoneHtml = '';
 		foreach ($menus as $mkey => $menu) {
 			$maction = isset($menu['action']) ? $menu['action'] : '';
 			if ($fluxposMenuNewHtml == '' && (strpos($maction, 'New();') !== false || strpos($maction, 'Floors();') !== false)) {
@@ -2149,6 +2301,13 @@ if ($reshook == 0) {  //add buttons
 			}
 			if (getDolGlobalString('FLUXPOS_DIRECT_PAYMENT') && $fluxposMenuDirectHtml == '' && strpos($maction, 'DirectPayment();') !== false) {
 				$fluxposMenuDirectHtml = '<button type="button" class="cartquickbtn" '.(empty($menu['style']) ? '' : 'style="'.dol_escape_htmltag($menu['style']).'"').' onclick="'.$maction.' document.getElementById(\'ModalActions\').style.display=\'none\';">'.$menu['title'].'</button>';
+				$fluxposQuickKeys[] = $mkey;
+				continue;
+			}
+			if (!getDolGlobalString('FLUXPOS_NO_FREE_ZONE_PRODUCT') && $fluxposMenuFreezoneHtml == '' && strpos($maction, 'FreeZone();') !== false) {
+				// 1.3: free text product moves from the overflow menu to the quick row to be
+				// easily accessible
+				$fluxposMenuFreezoneHtml = '<button type="button" class="cartquickbtn" '.(empty($menu['style']) ? '' : 'style="'.dol_escape_htmltag($menu['style']).'"').' onclick="'.$maction.' document.getElementById(\'ModalActions\').style.display=\'none\';">'.$menu['title'].'</button>';
 				$fluxposQuickKeys[] = $mkey;
 				continue;
 			}
@@ -2284,10 +2443,13 @@ if ($reshook == 0) {  //add buttons
 					<span id="carttotalvalue" class="carttotalvalue"></span>
 				</div>
 
-				<!-- Payment modes configured for this terminal (same gating as today), each
-				 one opens the payment screen of pay.php with this mode preselected -->
-				<div class="paymentblock">
 				<?php
+				// 1.3: the payment mode buttons can pay directly with their mode instead of
+				// opening the payment screen (FLUXPOS_PAYMENT_MODE_DIRECT<term>), and the whole
+				// footer can be rendered as ONE row in a per-terminal order
+				// (FLUXPOS_PAYMENT_BLOCK<term>: new, freezone, direct, paymodes, pay, print, actions).
+				$fluxposPaymentDirect = getDolGlobalString('FLUXPOS_PAYMENT_MODE_DIRECT'.$_SESSION["fluxposterminal"]);
+				$fluxposPaymentModesHtml = '';
 				if (!empty($paiementsModes)) {
 					foreach ($paiementsModes as $obj) {
 						$pbCode = $obj->code;
@@ -2303,20 +2465,63 @@ if ($reshook == 0) {  //add buttons
 						if ($pbLabel == 'PaymentTypeShort'.$pbCode && !empty($obj->libelle)) {
 							$pbLabel = $obj->libelle;
 						}
-						print '<button type="button" class="paymentmode" onclick="CloseBill(\''.dol_escape_js($pbCode).'\');"><span class="fa fa-'.$pbIcon.' iconwithlabel"></span><span class="paymentmodelabel">'.dol_escape_htmltag($pbLabel).'</span></button>';
+						$pbCall = $fluxposPaymentDirect ? 'CloseBillDirect' : 'CloseBill';
+						$fluxposPaymentModesHtml .= '<button type="button" class="paymentmode" onclick="'.$pbCall.'(\''.dol_escape_js($pbCode).'\');"><span class="fa fa-'.$pbIcon.' iconwithlabel"></span><span class="paymentmodelabel">'.dol_escape_htmltag($pbLabel).'</span></button>';
 					}
 				}
+				$fluxposPayPadHtml = '<button type="button" class="paymentmode" onclick="CloseBill();"><span class="fa fa-cash-register iconwithlabel"></span><span class="paymentmodelabel">'.dol_escape_htmltag($langs->trans("FluxPosPayAll")).'</span></button>';
+				$fluxposPaymentMoreHtml = '<button type="button" class="paymentmode paymentmore" onclick="CloseBill();"><span class="fa fa-ellipsis-h iconwithlabel"></span><span class="paymentmodelabel">'.dol_escape_htmltag($langs->trans("More")).'</span></button>';
+				$fluxposCartMoreHtml = '<button type="button" class="cartquickbtn cartmore" title="'.dol_escape_htmltag($langs->trans("Actions")).'" onclick="ModalBox(\'ModalActions\');"><span class="fa fa-ellipsis-h"></span><div class="trunc">...</div></button>';
+
+				$fluxposPaymentItems = array();
+				foreach (preg_split('/[,\s;]+/', (string) getDolGlobalString('FLUXPOS_PAYMENT_BLOCK'.$_SESSION["fluxposterminal"])) as $fluxposPBItem) {
+					$fluxposPBItem = strtolower(trim($fluxposPBItem));
+					if ($fluxposPBItem != '' && !in_array($fluxposPBItem, $fluxposPaymentItems) && in_array($fluxposPBItem, array('new', 'freezone', 'direct', 'paymodes', 'pay', 'print', 'actions'))) {
+						$fluxposPaymentItems[] = $fluxposPBItem;
+					}
+				}
+				if (!empty($fluxposPaymentItems)) {
+					// ONE footer row, rendered in the order configured for this terminal
+					print '<div class="paymentblock cartquick">';
+					foreach ($fluxposPaymentItems as $fluxposPBItem) {
+						if ($fluxposPBItem == 'new') {
+							print $fluxposMenuNewHtml;
+						} elseif ($fluxposPBItem == 'print') {
+							print $fluxposMenuPrintHtml;
+						} elseif ($fluxposPBItem == 'direct') {
+							print $fluxposMenuDirectHtml;
+						} elseif ($fluxposPBItem == 'freezone') {
+							print $fluxposMenuFreezoneHtml;
+						} elseif ($fluxposPBItem == 'paymodes') {
+							print $fluxposPaymentModesHtml;
+						} elseif ($fluxposPBItem == 'pay') {
+							print $fluxposPayPadHtml;
+						} elseif ($fluxposPBItem == 'actions') {
+							print $fluxposCartMoreHtml;
+						}
+					}
+					print '</div>';
+				} else {
+					// Default (option empty): the two rows of today, with the freezone quick
+					// button and the direct payment mode of the buttons
+					?>
+				<!-- Payment modes configured for this terminal (same gating as today), each
+				 one opens the payment screen of pay.php with this mode preselected -->
+				<div class="paymentblock">
+				<?php
+				print $fluxposPaymentModesHtml;
 				?>
-					<button type="button" class="paymentmode paymentmore" onclick="CloseBill();"><span class="fa fa-ellipsis-h iconwithlabel"></span><span class="paymentmodelabel"><?php echo dol_escape_htmltag($langs->trans("More")); ?></span></button>
+					<?php print $fluxposPaymentMoreHtml; ?>
 				</div>
 
 				<!-- Quick actions of the cart footer -->
 				<div class="cartquick">
 					<?php
-					print $fluxposMenuNewHtml.$fluxposMenuDirectHtml.$fluxposMenuPrintHtml;
-					print '<button type="button" class="cartquickbtn cartmore" title="'.dol_escape_htmltag($langs->trans("Actions")).'" onclick="ModalBox(\'ModalActions\');"><span class="fa fa-ellipsis-h"></span><div class="trunc">...</div></button>';
+					print $fluxposMenuNewHtml.$fluxposMenuFreezoneHtml.$fluxposMenuDirectHtml.$fluxposMenuPrintHtml;
+					print $fluxposCartMoreHtml;
 					?>
 				</div>
+				<?php } ?>
 <?php if ($fluxposDisplayNumberpad == 'always') { ?>
 				<!-- Docked numberpad for the terminals that keep it permanent (escape hatch) -->
 				<div class="lineeditpad numpaddocked">

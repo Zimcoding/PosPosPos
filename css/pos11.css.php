@@ -1618,6 +1618,38 @@ button.fluxposqtybtn:hover {
 	background-color: #e8e8e8;
 }
 
+/* 1.3: the qty value between the +/- steppers is centered in its own inline box (the
+ * plain text value was a little off against the buttons) and the discount and qty cells
+ * are clickable: they open the line-edit popup on the matching mode */
+.fluxposqtyvalue {
+	display: inline-block;
+	min-width: 2.4em;
+	text-align: center;
+	vertical-align: middle;
+	font-weight: bold;
+}
+td.linecoledit {
+	cursor: pointer;
+}
+td.linecoledit:hover {
+	background-color: #e8e8e8;
+}
+
+/* 1.3: the cart footer as ONE row (FLUXPOS_PAYMENT_BLOCK<term>): the payment block
+ * takes the flex layout of the quick row and every button shares the row width */
+.paymentblock.cartquick {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: stretch;
+	gap: 4px;
+	grid-template-columns: none;
+}
+.paymentblock.cartquick > button {
+	flex: 1 1 auto;
+	min-width: 0;
+	width: auto;
+}
+
 /* Preselected payment mode on pay.php (opened from the cart block) */
 button.payvalidatepreselect {
 	outline: 3px solid var(--colorbackhmenu1, #0080c0);
