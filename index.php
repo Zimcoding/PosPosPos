@@ -166,6 +166,24 @@ $head = '<meta name="apple-mobile-web-app-title" content="FluxPos"/>
 
 top_htmlhead($head, $title, $disablejs, $disablehead, $arrayofjs, $arrayofcss);
 
+// Inline critical layout (1.1.8), printed in the HTML document itself: the two-column
+// POS layout (products on the left, cart on the right) does not depend anymore on an
+// external stylesheet copy. No intermediate cache (browser, LiteSpeed or an old service
+// worker) can serve a document body stale, but every one of them could serve the
+// linked pos11.css.php from before 1.1 and break the layout silently. This block is
+// the last declaration source in the head, so it also repairs a screen on which an
+// old stylesheet copy still arrives: the external file only adds the details
+// (colors, sizes, animations) on top of this guaranteed structure.
+print '<style type="text/css" id="fluxpos-criticallayout">'."\n";
+print '/* FluxPos critical layout inline - always mirror the two-column structure of pos11.css.php */'."\n";
+print '.posmain{display:flex;flex-direction:row;align-items:stretch;width:100%;height:100%;overflow:hidden;box-sizing:border-box;}'."\n";
+print '.posmain.posmainwithhead{height:calc(100% - 50px);padding-top:9px;}'."\n";
+print '.posmain .posleft{display:flex;flex-direction:column;flex:1 1 auto;min-width:0;height:100%;overflow:hidden;box-sizing:border-box;}'."\n";
+print '.posmain .cartcolumn{display:flex;flex-direction:column;flex:0 0 28%;min-width:300px;max-width:420px;height:100%;overflow:hidden;box-sizing:border-box;border-left:1px solid #DDD;}'."\n";
+print '.posmain .div4{flex:0 0 48px;height:48px;width:100%;box-sizing:border-box;padding-top:2px;}'."\n";
+print '@media screen and (max-width: 767px){.posmain{flex-direction:column;}.posmain .cartcolumn{flex:0 0 45%;max-width:none;border-left:none;border-top:1px solid #DDD;}}'."\n";
+print '</style>'."\n";
+
 
 $categories = $categorie->get_full_arbo('product', getDolGlobalInt('FLUXPOS_ROOT_CATEGORY_ID'), 1);
 
@@ -316,6 +334,37 @@ function FluxPosScrollTabs(step) {
 		return;
 	}
 	bar.scrollBy({ left: step * Math.max(bar.clientWidth * 0.8, 200), behavior: 'smooth' });
+}
+
+/**
+ * Href of the pos11 stylesheet link for diagnostics (used by the layout guard).
+ *
+ * @param   Element|null    linkEl   The <link> element found, if any
+ * @return  string                   The href or an explicit not-found text
+ */
+function detectCssLinkHref(linkEl) {
+	'use strict';
+	return (linkEl && linkEl.getAttribute('href')) ? linkEl.getAttribute('href') : 'pos11.css.php (link not found in this page)';
+}
+
+/**
+ * Show the layout-guard banner above the cart (1.1.8): makes a degraded layout visible
+ * and says what to do, instead of an old screen that only the console reveals.
+ *
+ * @param   string  text    Explanation shown to the user
+ * @return  void
+ */
+function FluxPosShowLayoutWarning(text) {
+	'use strict';
+	var col = document.querySelector('.cartcolumn');
+	if (!col || document.getElementById('fluxposlayoutwarning')) {
+		return;
+	}
+	var warn = document.createElement('div');
+	warn.id = 'fluxposlayoutwarning';
+	warn.style.cssText = 'padding:4px 6px;background:#f8d7da;border:1px solid #f5c2c7;color:#842029;font-size:12px;';
+	warn.textContent = text;
+	col.insertBefore(warn, col.firstChild);
 }
 
 // Show the tab arrows (before and after the strip) only when the strip overflows and the
@@ -1387,6 +1436,30 @@ $( document ).ready(function() {
 	jQuery('#tabbar').on('scroll', FluxPosUpdateTabArrows);
 	jQuery(window).on('resize', FluxPosUpdateTabArrows);
 	FluxPosUpdateTabArrows();
+	// Layout guard (1.1.8): if the cart is not a right column although the screen is
+	// wide enough, the terminal is running an old stylesheet. Report it visibly in the
+	// page (with the facts needed to know who is wrong: the viewport and the orientation
+	// actually applied), instead of a two-column layout that fails silently.
+	window.addEventListener('load', function () {
+		var main = document.querySelector('.posmain');
+		if (!main) {
+			return;
+		}
+		var mainstyle = window.getComputedStyle(main);
+		var direction = (mainstyle.display == 'flex') ? (mainstyle.flexDirection || 'row') : 'none';
+		if (direction == 'none') {
+			var csslink = document.querySelector('link[href*="pos11.css.php"]');
+			console.error('FluxPos layout guard: .posmain is not a flex container on a screen of ' + window.innerWidth + 'px. The stylesheet ' + (detectCssLinkHref(csslink)) + ' did not apply on this terminal.');
+			FluxPosShowLayoutWarning('FluxPos: the stylesheet did not apply on this terminal (no flex layout at all). Reload the page with Ctrl+Shift+R (or empty the caches) so the current pos11.css.php can be served.');
+		} else if (direction == 'column') {
+			if (window.innerWidth > 767) {
+				FluxPosShowLayoutWarning('FluxPos: a stacked (mobile) layout was served on a screen of ' + window.innerWidth + 'px. The stylesheet of this terminal predates version 1.1: reload the page with Ctrl+Shift+R (or empty the caches) so the current pos11.css.php can be served.');
+			} else {
+				console.log('FluxPos layout guard: viewport is only ' + window.innerWidth + 'px wide (browser zoom or small window?): the designed stacked layout for narrow screens applies. Widen the window or reduce the zoom for the two-column layout.');
+				FluxPosShowLayoutWarning('FluxPos: the viewport of this terminal is only ' + window.innerWidth + 'px wide (browser zoom or narrow window): the stacked layout for narrow screens applies by design. Reduce the zoom (Ctrl+0) or widen the window to get the cart back on the right.');
+			}
+		}
+	});
 	window.addEventListener('load', FluxPosUpdateTabArrows);
 	if (document.fonts && document.fonts.ready && document.fonts.ready.then) {
 		document.fonts.ready.then(FluxPosUpdateTabArrows);
