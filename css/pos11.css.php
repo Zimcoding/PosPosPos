@@ -828,8 +828,9 @@ div#moreinfo, div#infowarehouse {
 		padding: 0 5px 0 5px;
 	}
 
-	/* On narrow screens the cart stacks under the product area until the
-	   dedicated mobile step-through layout (1.2) lands */
+	/* Mobile step-through (1.2): the POS is two steps instead of one crammed page.
+	   The step navigation stays on top with the running total; the customer and the
+	   carts strip stay in the header. One pane visible at a time. */
 	.posmain {
 		flex-direction: column;
 	}
@@ -839,6 +840,58 @@ div#moreinfo, div#infowarehouse {
 		max-width: none;
 		border-left: none;
 		border-top: 1px solid #DDD;
+	}
+
+	.mobilenav {
+		display: flex;
+		flex: 0 0 auto;
+		flex-direction: row;
+		align-items: stretch;
+		width: 100%;
+		height: 52px;
+		box-sizing: border-box;
+		border-bottom: 1px solid #DDD;
+		background-color: var(--colorbackbody, #f8f8f8);
+	}
+
+	.mobilenavtab {
+		flex: 1 1 50%;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border: none;
+		border-radius: 0;
+		background-color: transparent;
+		color: var(--colortextbackhmenu, #333);
+		font-size: 1.1em;
+		min-height: 52px;
+		cursor: pointer;
+	}
+
+	.mobilenavtab.clicked {
+		background-color: var(--colorbackhmenu1, #eee);
+		font-weight: bold;
+	}
+
+	.mobilenavtab .mobilenavtotal span {
+		font-weight: bold;
+	}
+
+	/* One step visible at a time */
+	body.fluxposview-products .posmain .cartcolumn {
+		display: none;
+	}
+
+	body.fluxposview-cart .posmain .posleft {
+		display: none;
+	}
+
+	body.fluxposview-cart .posmain .cartcolumn {
+		flex: 1 1 auto;
+		max-width: none;
+		height: auto;
+		border-top: none;
+		overflow: auto;
 	}
 
 	button.calcbutton, button.calcbutton2 {

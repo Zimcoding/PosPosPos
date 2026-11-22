@@ -181,7 +181,9 @@ print '.posmain.posmainwithhead{height:calc(100% - 50px);padding-top:9px;}'."\n"
 print '.posmain .posleft{display:flex;flex-direction:column;flex:1 1 auto;min-width:0;height:100%;overflow:hidden;box-sizing:border-box;}'."\n";
 print '.posmain .cartcolumn{display:flex;flex-direction:column;flex:0 0 28%;min-width:300px;max-width:420px;height:100%;overflow:hidden;box-sizing:border-box;border-left:1px solid #DDD;}'."\n";
 print '.posmain .div4{flex:0 0 48px;height:48px;width:100%;box-sizing:border-box;padding-top:2px;}'."\n";
-print '@media screen and (max-width: 767px){.posmain{flex-direction:column;}.posmain .cartcolumn{flex:0 0 45%;max-width:none;border-left:none;border-top:1px solid #DDD;}}'."\n";
+print '.mobilenav{display:none;}'."\n";
+// Mobile step-through (1.2): only one pane of the narrow screen shows at a time
+print '@media screen and (max-width: 767px){.posmain{flex-direction:column;}.posmain .mobilenav{display:flex;flex:0 0 auto;}.posmain .cartcolumn{flex:0 0 45%;max-width:none;border-left:none;border-top:1px solid #DDD;}body.fluxposview-products .posmain .cartcolumn{display:none;}body.fluxposview-cart .posmain .posleft{display:none;}body.fluxposview-cart .posmain .cartcolumn{flex:1 1 auto;max-width:none;}}'."\n";
 print '</style>'."\n";
 
 
@@ -365,6 +367,37 @@ function FluxPosShowLayoutWarning(text) {
 	warn.style.cssText = 'padding:4px 6px;background:#f8d7da;border:1px solid #f5c2c7;color:#842029;font-size:12px;';
 	warn.textContent = text;
 	col.insertBefore(warn, col.firstChild);
+}
+
+/**
+ * Mobile step-through navigation (1.2): on a narrow screen switch the POS between the
+ * Products step and the Cart step (lines, total and payment block). The customer and
+ * the carts strip stay in the header on top; the running total of the sale stays in
+ * the step navigation on both steps. The chosen step is remembered per terminal.
+ *
+ * @param   string  view    'products' or 'cart'
+ * @return  void
+ */
+function FluxPosMobileView(view) {
+	'use strict';
+	if (view != 'products' && view != 'cart') {
+		view = 'products';
+	}
+	document.body.classList.remove('fluxposview-products', 'fluxposview-cart');
+	document.body.classList.add('fluxposview-' + view);
+	try { window.localStorage.setItem('fluxposMobileView<?php echo (int) $term; ?>', String(view)); } catch (e) {}
+	var tabs = { products: 'mobiletabproducts', cart: 'mobiletabcart' };
+	for (var tabname in tabs) {
+		var tab = document.getElementById(tabs[tabname]);
+		if (tab) {
+			tab.classList.toggle('clicked', tabname == view);
+		}
+	}
+	if (view == 'cart') {
+		// The cart step must show the content as it is now: reload the fragment of the
+		// server (or render the local cart while offline) instead of a stale copy
+		Refresh();
+	}
 }
 
 // Show the tab arrows (before and after the strip) only when the strip overflows and the
@@ -777,6 +810,11 @@ function fluxposUpdateCartTotal(amountText) {
 	}
 	el.textContent = amountText;
 	jQuery('.cartfooter').toggleClass('emptycart', !amountText);
+	// The mobile step-through nav shows the running total on both steps
+	var mobiletotal = document.getElementById('mobiletotalvalue');
+	if (mobiletotal) {
+		mobiletotal.textContent = amountText;
+	}
 }
 
 function Customer() {
@@ -1394,7 +1432,13 @@ $( document ).ready(function() {
 	 */
 	// Tapping a line of a cart order that lives on the server opens the contextual
 	// line-edit popup (the offline cart lines keep their own +/- steppers)
-	jQuery(document).on('click', 'tr.posinvoiceline', function() {
+	jQuery(document).on('click', 'tr.posinvoiceline', function(ev) {
+		// The fragment of invoice.php selects the line just added programmatically
+		// (auto-select .click()): a synthetic event must not pop the numberpad up after
+		// every product tap — only a real tap of the user does
+		if (ev.isTrigger) {
+			return;
+		}
 		if (this.id && ($('#invoiceid').val() || '') != '') {
 			FluxPosOpenLineEdit();
 		}
@@ -1431,6 +1475,14 @@ $( document ).ready(function() {
 		jQuery(this).addClass('clicked');
 	});
 
+	// Mobile step-through (1.2): come back to the step used last on this terminal (only
+	// meaningful on a narrow screen; on desktop the class has no effect)
+	(function () {
+		var lastview = null;
+		try { lastview = window.localStorage.getItem('fluxposMobileView<?php echo (int) $term; ?>'); } catch (e) {}
+		FluxPosMobileView(lastview == 'cart' ? 'cart' : 'products');
+	})();
+
 	// Category tab strip: update the scroll arrows when needed (window resize, strip
 	// scrolled, tiles images loaded, fonts ready) and once on load
 	jQuery('#tabbar').on('scroll', FluxPosUpdateTabArrows);
@@ -1455,8 +1507,9 @@ $( document ).ready(function() {
 			if (window.innerWidth > 767) {
 				FluxPosShowLayoutWarning('FluxPos: a stacked (mobile) layout was served on a screen of ' + window.innerWidth + 'px. The stylesheet of this terminal predates version 1.1: reload the page with Ctrl+Shift+R (or empty the caches) so the current pos11.css.php can be served.');
 			} else {
-				console.log('FluxPos layout guard: viewport is only ' + window.innerWidth + 'px wide (browser zoom or small window?): the designed stacked layout for narrow screens applies. Widen the window or reduce the zoom for the two-column layout.');
-				FluxPosShowLayoutWarning('FluxPos: the viewport of this terminal is only ' + window.innerWidth + 'px wide (browser zoom or narrow window): the stacked layout for narrow screens applies by design. Reduce the zoom (Ctrl+0) or widen the window to get the cart back on the right.');
+				// Narrow screen: the mobile step-through (Products / Cart tabs) applies by
+				// design since 1.2 — no warning, just an information line in the console
+				console.info('FluxPos: viewport of ' + window.innerWidth + 'px switches the POS to the mobile step-through (Products / Cart tabs in the navigation bar on top). Widen the window or reduce the browser zoom (Ctrl+0) for the two-column desktop layout.');
 			}
 		}
 	});
@@ -1740,6 +1793,15 @@ if (!getDolGlobalString('FLUXPOS_HIDE_HEAD_BAR')) {
 			 actions). The numberpad is contextual: it opens as a popup when a cart line is
 			 tapped (or stays docked with FLUXPOS_DISPLAY_NUMBERPAD = 'always'). -->
 		<div id="dialogforpopupfluxpos"></div>
+
+		<!-- Mobile step-through navigation (1.2): on a narrow screen the POS becomes two
+			 steps instead of one crammed page: Products and Cart (with the payment block).
+			 The customer and the carts strip stay in the header on top; the running total
+			 of the sale stays in the navigation, on both steps. Hidden on desktop. -->
+		<div class="mobilenav" id="mobilenav">
+			<button type="button" class="mobilenavtab" id="mobiletabproducts" onclick="FluxPosMobileView('products');"><span class="fa fa-th-large paddingrightonly"></span><span class="mobilenavlabel"><?php echo dol_escape_htmltag($langs->transnoentitiesnoconv("Products")); ?></span></button>
+			<button type="button" class="mobilenavtab" id="mobiletabcart" onclick="FluxPosMobileView('cart');"><span class="fa fa-shopping-cart paddingrightonly"></span><span class="mobilenavlabel mobilenavtotal"><?php echo dol_escape_htmltag($langs->transnoentitiesnoconv("TotalTTCShort")); ?>: <span id="mobiletotalvalue"></span></span></button>
+		</div>
 
 		<div class="posleft">
 
