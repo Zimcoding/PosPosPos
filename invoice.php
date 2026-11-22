@@ -2239,6 +2239,10 @@ if ($placeid > 0) {
 			}
 			$htmlforlines .= '>';
 			$htmlforlines .= '<td class="left">';
+			// 1.1 cart: product thumbnail on server cart lines (offline renderer mirrors this contract)
+			if ($line->fk_product > 0 && !getDolGlobalString('FLUXPOS_HIDE_PRODUCT_IMAGES')) {
+				$htmlforlines .= '<img class="cartthumb" loading="lazy" alt="" src="genimg/index.php?query=pro&id='.((int) $line->fk_product).'">';
+			}
 			if (!empty($_SESSION["basiclayout"]) && $_SESSION["basiclayout"] == 1) {
 				$htmlforlines .= '<span class="phoneqty">'.$line->qty."</span> x ";
 			}
@@ -2347,7 +2351,14 @@ if ($placeid > 0) {
 				// nowraponall keeps the qty and its '(stock)' block on one line: on narrow layouts
 				// the native display otherwise wraps over three lines inside the qty column.
 				$htmlforlines .= '<td class="right nowraponall">';
+				// 1.1 cart: +/- steppers next to the qty (server-computed values: qty can be fractional for weight products)
+				if ((empty($_SESSION["basiclayout"]) || $_SESSION["basiclayout"] != 1) && $user->hasRight('fluxpos', 'editlines')) {
+					$htmlforlines .= '<button type="button" class="fluxposqtybtn" onclick="event.stopPropagation(); FluxPosQtyStep(this);" data-qty="'.round(max($line->qty - 1, 0), 3).'">-</button>';
+				}
 				$htmlforlines .= $line->qty;
+				if ((empty($_SESSION["basiclayout"]) || $_SESSION["basiclayout"] != 1) && $user->hasRight('fluxpos', 'editlines')) {
+					$htmlforlines .= '<button type="button" class="fluxposqtybtn" onclick="event.stopPropagation(); FluxPosQtyStep(this);" data-qty="'.round($line->qty + 1, 3).'">+</button>';
+				}
 				if (isModEnabled('stock') && $user->hasRight('stock', 'mouvement', 'lire')) {
 					$constantforkey = 'FLUXPOS_ID_WAREHOUSE'.$_SESSION["fluxposterminal"];
 					if (getDolGlobalString($constantforkey) && $line->fk_product > 0 && !getDolGlobalString('FLUXPOS_HIDE_STOCK_ON_LINE')) {

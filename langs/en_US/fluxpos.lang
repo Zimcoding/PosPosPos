@@ -268,3 +268,10 @@ FluxPosOfflineStatusSalesWaiting=%s sale(s) waiting
 FluxPosOfflineStatusRefused=%s refused by the server, see the browser console
 FluxPosOfflineStatusOrdersWaiting=%s open order(s) waiting
 FluxPosOfflineStatusClickRetry=- click to retry
+
+FluxPosTileSize=Tile size
+FluxPosOtherPaymentModes=Other payment modes
+FluxPosLineEditTitle=Edit line
+FluxPosMoreActions=More actions
+SortProductModePosition=Category order
+SortProductModeBestSales=Best sellers (last 90 days)

@@ -1033,7 +1033,13 @@ var FluxPosOffline = {
 			for (i = lines.length - 1; i >= 0; i--) {
 				line = lines[i];
 				html += '<tr class="drag drop oddeven posinvoiceline fluxposofflinecartline">';
-				html += '<td class="left"><span class="fluxposofflinelabel">' + self.escapeHtml(line.label) + '</span></td>';
+				html += '<td class="left">';
+				// Same thumbnail as the server cart lines (line.rowid holds the product id,
+				// also for the lines adopted from the order of the place on the server)
+				if (line.rowid > 0 && !window.fluxposhideproductimages) {
+					html += '<img class="cartthumb" loading="lazy" alt="" src="' + self.fluxposbaseurl + 'genimg/index.php?query=pro&id=' + parseInt(line.rowid, 10) + '">';
+				}
+				html += '<span class="fluxposofflinelabel">' + self.escapeHtml(line.label) + '</span></td>';
 				html += '<td class="right nowraponall fluxposofflineqty">';
 				if (!validated) {
 					html += '<button type="button" class="fluxposofflineqtybtn" onclick="FluxPosOffline.changeQty(' + line.rowid + ', -1);">-</button>';
@@ -1078,6 +1084,10 @@ var FluxPosOffline = {
 				html += '<div class="fluxposofflinenotice opacitymedium">' + self.escapeHtml(self.t('FluxPosOfflineEmptyCartNotice', 'Offline mode: a new order can be captured, it will be synchronized to the server when the connection is back. An order already registered on the server is shown again when the connection is back.')) + '</div>';
 			}
 			jQuery('#poslines').html(html);
+			// The sticky total of the cart footer of the 1.1 layout follows the local cart
+			if (typeof fluxposUpdateCartTotal == 'function') {
+				fluxposUpdateCartTotal(self.formatAmount(total));
+			}
 			return true;
 		});
 	},
