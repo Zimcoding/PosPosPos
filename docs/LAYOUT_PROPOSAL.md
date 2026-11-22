@@ -132,7 +132,76 @@ This is roughly half a day of CSS/HTML moving and immediately delivers
 - Every proposal step = its own PR with version bump + ChangeLog
   (house rules).
 
-## 6. Suggested delivery as PRs
+## 6. Cart visibility (part of L3): every element readable at arm's length
+
+The cart is where mistakes are caught, so its lines get their own layout in
+both renderers (the online fragment and the offline `renderCart` already
+share the CSS classes as the contract):
+
+```
++------------------------------------------------------------+
+| [thumb] Appel-gloeikruidensap 500ml        [-] 2 [+]  9.50 |
+|         ref AB123 - 4.75 / pc                              |
++------------------------------------------------------------+
+```
+
+- **Bigger rows** (min-height 48 px, 2-line clamp on the label); the tap
+  target is the whole row (opens the L1 line-edit popup).
+- **Thumbnail** of the product at the left (same `genimg` source as the
+  grid, cached offline with the catalog).
+- **Qty stepper on each line** (the `- qty +` control the offline cart
+  already has) — the numberpad is never needed for the most common change.
+- **Unit price and line total** as two clearly separated, right-aligned
+  columns (today they are concatenated in one); a reduced line shows the
+  original price struck through.
+- The selected line stays visually marked while its edit popup is open.
+- Sticky customer header and **sticky total footer** so the amount due
+  never scrolls away; a high-contrast variant for bright daylight counters.
+- Above the lines, a compact **status strip**: customer, place, synchronized
+  state (the translated offline notice from 1.0.14 moves here).
+
+## 7. Payment options: a block under the cart
+
+Yes — under the cart, as the last block of the right column (with a shortcut
+for the common cases, not a separate screen hop):
+
+- Cart footer, top to bottom: **status strip · lines · TOTAL (large,
+  sticky) · payment block**.
+- The payment block shows the **payment modes configured for the terminal**
+  (the `c_paiement` codes gated per terminal in index.php today) as large
+  buttons with icons — Cash and Card first. Tapping one opens `pay.php`
+  preselected on that mode: the pad, the cash fence and the bank-account
+  override stay there, nothing in the payment logic moves.
+- "Other / more" keeps the full set (cheque, SumUp, credit note…).
+- Payment stays **blocked** for adopted orders exactly as the engine already
+  enforces, with the same translated notice.
+- Extra action buttons (Scale, Order ticket, …) move into the "…" overflow
+  of the same footer; hook-registered buttons keep their groups.
+
+## 8. Mobile phone layout (L6, after L1–L3 — builds on `phone.php`)
+
+`phone.php` is the separate minimal order-entry page (~320 lines, chosen per
+terminal in the setup); it does not load the offline engine today. Proposal
+A's concepts map onto it in a dedicated mobile round:
+
+- **Same visual language**: category tabs as a horizontal strip on top,
+  product tiles 2–3 per row below — the same CSS variables and tile classes
+  as the desktop grid, one styling contract for both pages.
+- **Cart as a bottom sheet** (Loyverse-phones pattern): a collapsed bar
+  "3 lines · 23.75 · v" that expands over the lower half of the screen; the
+  payment block at its bottom. The full-height right column that A uses on
+  desktop does not fit a 6-inch portrait screen.
+- The **L1 line-edit popup** is phone-native: a half-screen sheet with the
+  same stepper.
+- **Bring the offline engine to the phone**: the same IndexedDB caches and
+  the same endpoint set (catalog, carts and order snapshots are keyed per
+  place, not per screen), so phones get the same offline capture and the
+  same adoption path for places whose order exists on the server.
+- Service worker: same cache + `?v=` busting; `phone.php` registers it too.
+- Sequencing: after L1–L3 ship on the desktop screens, because the tile CSS
+  and the line-edit popup are the reusable pieces.
+
+## 9. Suggested delivery as PRs
 
 | PR | Scope | Notes |
 |---|---|---|
@@ -141,12 +210,13 @@ This is roughly half a day of CSS/HTML moving and immediately delivers
 | L3 | Cart as right column (or keep, per decision) + action buttons into cart footer / "…" menu | Skeleton change |
 | L4 | Product ordering `position`/`bestsales` + favorites strip (+ offline cache of the order) | Needs the sales-history query |
 | L5 | Search-in-grid behavior + polish (thumbnails in tabs, counts) | Optional round 2 |
+| L6 | Mobile: `phone.php` restyle (bottom-sheet cart, shared tile CSS) + offline engine on the phone | After L1–L3 |
 
-Versions 1.0.16+; L1–L2 are the candidates for the next terminal deploy.
+Versions 1.0.17+ for the code PRs; L1–L2 are the candidates for the next terminal deploy.
 
-## 7. Open decisions
+## 10. Open decisions
 
-1. Numberpad: remove to modal (A/B) or keep per-terminal option only?
-2. Cart: move to a right column now (A) or later (B first)?
-3. Bestsellers window: 30 or 90 days, and favorites strip on by default?
-4. Minimum supported screen: is 1280×800 (small tablets) a requirement?
+1. Numberpad: pure contextual popup, or per-terminal config (contextual / always / never)?
+2. Bestsellers window: 30 or 90 days, and favorites strip on by default?
+3. Minimum supported screen: is 1280×800 (small tablets) a requirement?
+4. Payment block: quick modes only (Cash, Card, Other) or all configured modes visible at once?
