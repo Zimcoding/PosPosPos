@@ -1,5 +1,13 @@
 # CHANGELOG FLUXPOS FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.5.0
+
+- New (**compatible with Deposito, the deposit on returnable packaging module**): a sale that needs no code change was already covered - FluxPos creates its receipts through the standard invoice class, so the Deposito trigger adds the deposit line of every product that names a deposit product, follows the quantities and forces 0% VAT / no discount on deposit and leeggoed lines, and FluxPos receipts are recognised by Deposito from its 0.2.5. Two gaps are closed now:
+  - **Returned empties are no longer blocked by the terminal stock guard.** With FLUXPOS_QTY_IN_STOCK enabled, adding or raising a leeggoed product that is not (yet) in stock was refused with "stock is not enough" - although a return puts the empties back INTO stock at validation. Leeggoed products (Deposito field: Leeggoed ticked) are now exempt from that guard on the addline and the merge-into-same-line paths.
+  - **The offline cart says what the server will book.** The offline cart lives on the terminal without the deposit lines the server will add, so its total can differ from the booked total (the payment is capped to the booked amount server-side, money is safe). When the Deposito module is enabled, the offline view shows a notice that deposit charges and returned empties are applied server-side.
+- New **docs/DEPOSITO.md**: how to run Deposito with FluxPos (products, behaviour at the till, credit notes for empties-only sales, the offline caveat).
+- Module version 1.5.0.
+
 ## 1.4.0
 
 - Change (**payment mode buttons pay directly by default**): after 1.3.0 the cash/card/check buttons still opened the payment screen popup because the new behaviour was opt-in. Now the default is flipped: **FLUXPOS_PAYMENT_MODE_DIRECT<term> defaults to yes** - the buttons pay the full remaining amount directly with their mode, no popup. Only an explicitly saved "no" opens the payment screen (pad) from those buttons again; the More button always keeps the payment screen as the escape hatch (split payments, other amounts).

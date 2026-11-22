@@ -128,6 +128,31 @@ function fail($message)
 }
 
 /**
+ * Is the product a returned empty (leeggoed) of the Deposito module?
+ *
+ * Deposito stores a returned empty as a negative quantity on a POS receipt so that
+ * validation puts the empties back into stock (see the Deposito module). Because a
+ * return INCREASES the stock, it must not be blocked by the terminal stock guard
+ * (FLUXPOS_QTY_IN_STOCK), even when the empties are not in stock yet.
+ *
+ * @param   DoliDB  $db         Database handler
+ * @param   int     $idproduct  Product id
+ * @return  bool
+ */
+function fluxposProductIsReturnedEmpty($db, $idproduct)
+{
+	$idproduct = (int) $idproduct;
+	if ($idproduct <= 0 || !isModEnabled('deposito')) {
+		return false;
+	}
+	$sql = "SELECT fk_object FROM ".MAIN_DB_PREFIX."product_extrafields";
+	$sql .= " WHERE fk_object = ".((int) $idproduct);
+	$sql .= " AND deposito_return = 1 AND COALESCE(deposito_deposit, 0) <= 0";
+	$resql = $db->query($sql);
+	return ($resql && $db->num_rows($resql) > 0);
+}
+
+/**
  * Delete an invoice line and the FluxPos supplement lines attached to it.
  *
  * @param	Facture	$invoice	Invoice object
@@ -961,8 +986,9 @@ if (empty($reshook)) {
 					if ($line->special_code == 4) {
 						continue;
 					} // If this line is sended to printer create new line
-					// check if qty in stock
-					if (getDolGlobalString('FLUXPOS_QTY_IN_STOCK') && (($line->qty + $qty) > $prod->stock_reel)) {
+					// check if qty in stock. A returned empty of Deposito is skipped: it is a
+					// return, validation puts the empties back into stock (see 1.5)
+					if (getDolGlobalString('FLUXPOS_QTY_IN_STOCK') && !fluxposProductIsReturnedEmpty($db, $idproduct) && (($line->qty + $qty) > $prod->stock_reel)) {
 						$invoice->error = $langs->trans("ErrorStockIsNotEnough");
 						dol_htmloutput_errors($invoice->error, $invoice->errors, 1);
 						$err++;
@@ -1019,8 +1045,9 @@ if (empty($reshook)) {
 					$line = $hookmanager->resArray;
 				}
 
-				// check if qty in stock
-				if (getDolGlobalString('FLUXPOS_QTY_IN_STOCK') && $qty > $prod->stock_reel) {
+				// check if qty in stock. A returned empty of Deposito is skipped: it is a
+				// return, validation puts the empties back into stock (see 1.5)
+				if (getDolGlobalString('FLUXPOS_QTY_IN_STOCK') && !fluxposProductIsReturnedEmpty($db, $idproduct) && $qty > $prod->stock_reel) {
 					$invoice->error = $langs->trans("ErrorStockIsNotEnough");
 					dol_htmloutput_errors($invoice->error, $invoice->errors, 1);
 					$err++;

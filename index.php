@@ -242,6 +242,9 @@ var fluxposbaseuri = '<?php echo fluxposUrlRoot(); ?>';
 var fluxposnewtoken = '<?php echo newToken(); ?>';
 var fluxposcurrency = '<?php echo $conf->currency; ?>';
 var fluxposhideproductimages = <?php echo getDolGlobalString('FLUXPOS_HIDE_PRODUCT_IMAGES') ? 'true' : 'false'; ?>;
+// Deposito module (deposit on returnable packaging): the server adds the deposit
+// lines itself, but the offline cart is computed on the terminal without them
+var fluxposDeposito = <?php echo isModEnabled('deposito') ? 'true' : 'false'; ?>;
 var fluxposlang = {
 	Qty: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("Qty")); ?>',
 	TotalTTCShort: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("TotalTTCShort")); ?>',
@@ -263,6 +266,7 @@ var fluxposlang = {
 	FluxPosOfflineSaleStored: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineSaleStored")); ?>',
 	FluxPosOfflineSaleStoredNotice: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineSaleStoredNotice")); ?>',
 	FluxPosOfflineAdoptedNotice: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineAdoptedNotice")); ?>',
+	FluxPosOfflineDepositoNotice: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineDepositoNotice")); ?>',
 	FluxPosOfflineOrderSynced: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineOrderSynced")); ?>',
 	FluxPosOfflineOrderStoredOffline: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineOrderStoredOffline")); ?>',
 	FluxPosOfflineEmptyCartNotice: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineEmptyCartNotice")); ?>',

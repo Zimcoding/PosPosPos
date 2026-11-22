@@ -258,6 +258,7 @@ FluxPosOfflineAdoptedValidate=This place has an order registered on the server. 
 FluxPosOfflineSaleStored=Sale of %s stored on this terminal. Its invoice number is given by the server when the connection is back.
 FluxPosOfflineSaleStoredNotice=This sale is validated. It has been safely stored with its payments: its invoice number and its receipt will be issued by the server as soon as the synchronization can be done.
 FluxPosOfflineAdoptedNotice=This order is captured on this terminal, its lines included. It is merged into the order of this place on the server as soon as the connection is back (only the quantities of its own lines can be raised while offline).
+FluxPosOfflineDepositoNotice=Deposito: deposit charges and returned empties are applied by the server when this sale is booked, so the booked total can differ from the total shown here.
 FluxPosOfflineOrderSynced=This order is synchronized to the server in background.
 FluxPosOfflineOrderStoredOffline=This order is stored on this terminal and will be synchronized to the server when the connection is back.
 FluxPosOfflineEmptyCartNotice=Offline mode: a new order can be captured, it will be synchronized to the server when the connection is back. An order already registered on the server is shown again when the connection is back.
