@@ -339,34 +339,104 @@ function FluxPosScrollTabs(step) {
 }
 
 /**
- * Href of the pos11 stylesheet link for diagnostics (used by the layout guard).
+ * Apply a set of CSS declarations on an element with !important, or clear the
+ * same declarations when force is false (1.2.1). Used by FluxPosRepairLayout so
+ * the forced two-column layout can also give control back to the mobile
+ * step-through (media queries in the stylesheets) on a narrow window.
  *
- * @param   Element|null    linkEl   The <link> element found, if any
- * @return  string                   The href or an explicit not-found text
+ * @param   Element   el             Target element
+ * @param   array     declarations   Array of [property, value] pairs
+ * @param   bool      force          True to set with !important, false to clear
+ * @return  void
  */
-function detectCssLinkHref(linkEl) {
+function FluxPosForceStyles(el, declarations, force) {
 	'use strict';
-	return (linkEl && linkEl.getAttribute('href')) ? linkEl.getAttribute('href') : 'pos11.css.php (link not found in this page)';
+	if (!el) {
+		return;
+	}
+	for (var i = 0; i < declarations.length; i++) {
+		if (force) {
+			el.style.setProperty(declarations[i][0], declarations[i][1], 'important');
+		} else {
+			el.style.removeProperty(declarations[i][0]);
+		}
+	}
 }
 
 /**
- * Show the layout-guard banner above the cart (1.1.8): makes a degraded layout visible
- * and says what to do, instead of an old screen that only the console reveals.
+ * Force the two-column layout with inline element styles (1.2.1): whatever the
+ * cascade contains (a stale stylesheet, a theme or another module rule), the
+ * truth is set directly on the DOM elements with !important, so no stylesheet
+ * copy can produce the stacked layout anymore. Only applied on a screen wide
+ * enough for the desktop layout; below 768px the declarations are cleared so
+ * the mobile step-through keeps working on window resizes. Runs on load and on
+ * resize; idempotent.
  *
- * @param   string  text    Explanation shown to the user
  * @return  void
  */
-function FluxPosShowLayoutWarning(text) {
+function FluxPosRepairLayout() {
 	'use strict';
-	var col = document.querySelector('.cartcolumn');
-	if (!col || document.getElementById('fluxposlayoutwarning')) {
-		return;
+	var force = (window.innerWidth >= 768);
+	var main = document.querySelector('.posmain');
+	if (!main) {
+		return; // old screen without the 1.1 structure, reported by the diagnosis
 	}
-	var warn = document.createElement('div');
-	warn.id = 'fluxposlayoutwarning';
-	warn.style.cssText = 'padding:4px 6px;background:#f8d7da;border:1px solid #f5c2c7;color:#842029;font-size:12px;';
-	warn.textContent = text;
-	col.insertBefore(warn, col.firstChild);
+	FluxPosForceStyles(main, [['display', 'flex'], ['flex-direction', 'row'], ['flex-wrap', 'nowrap']], force);
+	FluxPosForceStyles(main.querySelector('.posleft'), [['display', 'flex'], ['flex-direction', 'column'], ['flex', '1 1 auto'], ['min-width', '0']], force);
+	FluxPosForceStyles(main.querySelector('.cartcolumn'), [['display', 'flex'], ['flex-direction', 'column'], ['flex', '0 0 28%'], ['min-width', '300px'], ['max-width', '420px'], ['border-left', '1px solid #DDD']], force);
+}
+
+/**
+ * Show the layout diagnosis strip (1.2.1): a fixed bar on the very top of the
+ * viewport, attached to document.body itself so it also appears on an old or
+ * partially served page (the former guard hung its banner inside .cartcolumn
+ * and was therefore completely silent exactly when the page is wrong). Shows
+ * the facts of the terminal so a wrong page can be identified at first sight.
+ *
+ * @param   string  level   'danger' (red) or 'info' (yellow)
+ * @param   string  title   The short conclusion shown first
+ * @return  void
+ */
+function FluxPosShowLayoutDiagnosis(level, title) {
+	'use strict';
+	var facts = ['screen ' + window.innerWidth + 'x' + window.innerHeight];
+	var main = document.querySelector('.posmain');
+	facts.push('posmain: ' + (main ? 'yes' : 'MISSING'));
+	if (main) {
+		var mainstyle = window.getComputedStyle(main);
+		facts.push('display: ' + mainstyle.display + ', direction: ' + mainstyle.flexDirection);
+		var kids = [];
+		for (var i = 0; i < main.children.length; i++) {
+			kids.push(main.children[i].className ? String(main.children[i].className).split(' ')[0] : main.children[i].nodeName.toLowerCase());
+		}
+		facts.push('children: ' + kids.join('|'));
+	}
+	facts.push('posleft: ' + (document.querySelector('.posleft') ? 'yes' : 'MISSING'));
+	facts.push('cartcolumn: ' + (document.querySelector('.cartcolumn') ? 'yes' : 'MISSING'));
+	facts.push('inline critical css: ' + (document.getElementById('fluxpos-criticallayout') ? 'yes' : 'MISSING'));
+	var sheets = [];
+	for (var j = 0; j < document.styleSheets.length; j++) {
+		var href = document.styleSheets[j].href;
+		if (href && href.indexOf('pos') != -1) {
+			sheets.push(href.split('/').pop().split('?')[0]);
+		}
+	}
+	facts.push('pos stylesheets: ' + sheets.join(', '));
+	var bar = document.getElementById('fluxposlayoutdiagnosis');
+	if (!bar) {
+		bar = document.createElement('div');
+		bar.id = 'fluxposlayoutdiagnosis';
+		bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;padding:3px 8px;font-size:11px;line-height:1.4;text-align:center;';
+		if (document.body.firstChild) {
+			document.body.insertBefore(bar, document.body.firstChild);
+		} else {
+			document.body.appendChild(bar);
+		}
+	}
+	bar.style.background = (level == 'danger') ? '#b02a37' : '#fff3cd';
+	bar.style.color = (level == 'danger') ? '#ffffff' : '#664d03';
+	bar.textContent = 'FluxPos layout diagnosis \u2014 ' + title + ' [' + facts.join(' | ') + ']';
+	console[level == 'danger' ? 'error' : 'info']('FluxPos layout diagnosis: ' + title + ' [' + facts.join(' | ') + ']');
 }
 
 /**
@@ -1488,31 +1558,35 @@ $( document ).ready(function() {
 	jQuery('#tabbar').on('scroll', FluxPosUpdateTabArrows);
 	jQuery(window).on('resize', FluxPosUpdateTabArrows);
 	FluxPosUpdateTabArrows();
-	// Layout guard (1.1.8): if the cart is not a right column although the screen is
-	// wide enough, the terminal is running an old stylesheet. Report it visibly in the
-	// page (with the facts needed to know who is wrong: the viewport and the orientation
-	// actually applied), instead of a two-column layout that fails silently.
-	window.addEventListener('load', function () {
-		var main = document.querySelector('.posmain');
-		if (!main) {
+	// Layout guard, now with active repair (1.2.1): on load (and on every resize)
+	// force the two-column layout with inline !important styles on the elements
+	// themselves, so no stylesheet copy anywhere in the chain can produce the
+	// stacked layout. The diagnosis strip reports the facts of this terminal in a
+	// fixed bar on top, also when the served page turns out to be older than
+	// expected (the former banner depended on .cartcolumn existing).
+	var fluxposCheckLayout = function () {
+		if (window.innerWidth < 768) {
+			FluxPosRepairLayout();
+			FluxPosShowLayoutDiagnosis('info', 'narrow screen: mobile step-through (Products / Cart tabs). Widen or press Ctrl+0 if this screen is actually large.');
 			return;
 		}
-		var mainstyle = window.getComputedStyle(main);
-		var direction = (mainstyle.display == 'flex') ? (mainstyle.flexDirection || 'row') : 'none';
-		if (direction == 'none') {
-			var csslink = document.querySelector('link[href*="pos11.css.php"]');
-			console.error('FluxPos layout guard: .posmain is not a flex container on a screen of ' + window.innerWidth + 'px. The stylesheet ' + (detectCssLinkHref(csslink)) + ' did not apply on this terminal.');
-			FluxPosShowLayoutWarning('FluxPos: the stylesheet did not apply on this terminal (no flex layout at all). Reload the page with Ctrl+Shift+R (or empty the caches) so the current pos11.css.php can be served.');
-		} else if (direction == 'column') {
-			if (window.innerWidth > 767) {
-				FluxPosShowLayoutWarning('FluxPos: a stacked (mobile) layout was served on a screen of ' + window.innerWidth + 'px. The stylesheet of this terminal predates version 1.1: reload the page with Ctrl+Shift+R (or empty the caches) so the current pos11.css.php can be served.');
-			} else {
-				// Narrow screen: the mobile step-through (Products / Cart tabs) applies by
-				// design since 1.2 — no warning, just an information line in the console
-				console.info('FluxPos: viewport of ' + window.innerWidth + 'px switches the POS to the mobile step-through (Products / Cart tabs in the navigation bar on top). Widen the window or reduce the browser zoom (Ctrl+0) for the two-column desktop layout.');
-			}
+		var main = document.querySelector('.posmain');
+		if (!main) {
+			FluxPosShowLayoutDiagnosis('danger', '.posmain is not in this page at all: this terminal runs a screen of before version 1.1. Hard refresh (Ctrl+Shift+R); if it persists look for a service worker/stale server copy.');
+			return;
 		}
-	});
+		FluxPosRepairLayout();
+		var mainstyle = window.getComputedStyle(main);
+		if (mainstyle.display == 'flex' && mainstyle.flexDirection == 'row') {
+			FluxPosShowLayoutDiagnosis('info', 'two-column layout active (forced inline); this strip will be slimmed down again in the next version.');
+		} else if (!document.getElementById('fluxpos-criticallayout')) {
+			FluxPosShowLayoutDiagnosis('danger', 'the inline critical layout is missing from this document although posmain exists: mixed old/new page.');
+		} else {
+			FluxPosShowLayoutDiagnosis('danger', 'even with inline important styles the container does not flex (display ' + mainstyle.display + ', direction ' + mainstyle.flexDirection + '): the DOM of this page is not the 1.1 structure, see children list.');
+		}
+	};
+	window.addEventListener('load', fluxposCheckLayout);
+	window.addEventListener('resize', fluxposCheckLayout);
 	window.addEventListener('load', FluxPosUpdateTabArrows);
 	if (document.fonts && document.fonts.ready && document.fonts.ready.then) {
 		document.fonts.ready.then(FluxPosUpdateTabArrows);
