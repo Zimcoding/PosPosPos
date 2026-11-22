@@ -181,25 +181,54 @@ for the common cases, not a separate screen hop):
 ## 8. Mobile phone layout (L6, after L1–L3 — builds on `phone.php`)
 
 `phone.php` is the separate minimal order-entry page (~320 lines, chosen per
-terminal in the setup); it does not load the offline engine today. Proposal
-A's concepts map onto it in a dedicated mobile round:
+terminal in the setup); it does not load the offline engine today. On the
+phone the layout is a **step-through system**, not one crammed page: the
+screen is split into a persistent header, a tab selector and the active
+step:
 
-- **Same visual language**: category tabs as a horizontal strip on top,
-  product tiles 2–3 per row below — the same CSS variables and tile classes
-  as the desktop grid, one styling contract for both pages.
-- **Cart as a bottom sheet** (Loyverse-phones pattern): a collapsed bar
-  "3 lines · 23.75 · v" that expands over the lower half of the screen; the
-  payment block at its bottom. The full-height right column that A uses on
-  desktop does not fit a 6-inch portrait screen.
-- The **L1 line-edit popup** is phone-native: a half-screen sheet with the
-  same stepper.
+```
++------------------------------------+
+| wim.rappe · Table 5      TOTAL 23.75 |  <- sticky header: customer,
++------------------------------------+     place and total, always visible
+| [ Products ] [ Cart (3) ] [ Payment ] |  <- step tabs (sticky, cart tab
++------------------------------------+     shows its line count live)
+|                                    |
+|  active step fills the rest        |
+|  Products: category strip + tiles  |
+|  Cart:     the full line list with |
+|            steppers (section 6)    |
+|  Payment:  mode buttons + total    |
+|            breakdown               |
++------------------------------------+
+```
+
+- **Sticky header**: customer/place and the running **total stay on top at
+  all times** — whatever step is active, the chef d'orchestre information
+  never scrolls away. Offline status badge joins the header.
+- **Step tabs** (`Products / Cart / Payment`), sticky under the header. The
+  cart tab carries a live **line-count badge**; after each product tap, a
+  small pulse on the badge confirms the tap landed (important when the
+  product grid fills the whole screen).
+- **Products step**: category tabs strip + the fluid tile grid from L2 (2–3
+  per row), using the same CSS variables and tile classes as the desktop —
+  one styling contract for both pages.
+- **Cart step**: the full-height cart of section 6 (thumbnails, steppers,
+  separated prices) — tapping a line opens the **L1 line-edit popup**, which
+  on the phone is a half-screen sheet.
+- **Payment step**: the payment block of section 7 (terminal payment modes
+  as large buttons, "Other/more" for the full set). It stays reachable but
+  shows the guard notice when the cart is adopted (paid on server), and it
+  opens `pay.php` preselected exactly as on desktop — nothing in the payment
+  logic moves.
+- A **bottom swipe gesture** between Cart and Products is a bonus, not a
+  dependency (useful with wet/gloved hands at a fruit counter).
 - **Bring the offline engine to the phone**: the same IndexedDB caches and
   the same endpoint set (catalog, carts and order snapshots are keyed per
   place, not per screen), so phones get the same offline capture and the
   same adoption path for places whose order exists on the server.
 - Service worker: same cache + `?v=` busting; `phone.php` registers it too.
-- Sequencing: after L1–L3 ship on the desktop screens, because the tile CSS
-  and the line-edit popup are the reusable pieces.
+- Sequencing: after L1–L3 ship on the desktop screens, because the tile CSS,
+  the cart line layout and the line-edit popup are the reusable pieces.
 
 ## 9. Suggested delivery as PRs
 
@@ -210,7 +239,7 @@ A's concepts map onto it in a dedicated mobile round:
 | L3 | Cart as right column (or keep, per decision) + action buttons into cart footer / "…" menu | Skeleton change |
 | L4 | Product ordering `position`/`bestsales` + favorites strip (+ offline cache of the order) | Needs the sales-history query |
 | L5 | Search-in-grid behavior + polish (thumbnails in tabs, counts) | Optional round 2 |
-| L6 | Mobile: `phone.php` restyle (bottom-sheet cart, shared tile CSS) + offline engine on the phone | After L1–L3 |
+| L6 | Mobile: `phone.php` restyle as a step-through system (sticky header with total/customer, Products–Cart–Payment step tabs, shared tile/cart CSS) + offline engine on the phone | After L1–L3 |
 
 Versions 1.0.17+ for the code PRs; L1–L2 are the candidates for the next terminal deploy.
 
