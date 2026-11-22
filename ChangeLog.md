@@ -1,5 +1,9 @@
 # CHANGELOG FLUXPOS FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.0.16
+
+- Interface proposal added: `docs/LAYOUT_PROPOSAL.md` collects the layout round of Phase 4 — product grid as the hero of the screen (more space for products), the always-visible numberpad replaced by a contextual line-editor (and the payment screen pad), the cart as a right-hand column with a pinned total, a fluid product grid with a tile-density setting and infinite scroll instead of the fixed 24-tile pool with page arrows, and extended product ordering (category position / bestsellers of the last days, cached for offline). Inspired by Square POS, Shopify POS, Lightspeed and Loyverse; split into a suggested sequence of small PRs (L1 numberpad removal to L5 search polish) with the module rules observed (offline renderer parity, service worker bump, translations, hooks). No code change in this version (documentation only); module version 1.0.16.
+
 ## 1.0.15
 
 - Bug fix: the terminal setup page (admin/terminal.php) ended in a Dolibarr technical error page, `SQL syntax ... near ':=:1)` on llxos_bank_account`, when opening it. The terminal setup fills the bank accounts with `$form->select_comptes(...)` and passed the account-type filter in the Dolibarr REST API filter syntax (`(courant:=:1)`), but `select_comptes` appends its filter raw to the SQL (unlike the third-party select and the category product searches, which convert their filters through the universal search criteria) so MariaDB refused the page. The five filters now use the raw SQL syntax that TakePOS core itself passes (`courant=2` for the cash account, `courant=1` for cheque, card and SumUp). Module version 1.0.15.
