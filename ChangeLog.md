@@ -1,5 +1,9 @@
 # CHANGELOG FLUXPOS FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.1.3
+
+- Bug fix: the 1.1 layout still did not appear on the production terminal after the deployment, even after cache-busting the stylesheet URL (1.1.1): **the offline service worker itself was serving an old copy**. Its fetch handler answered every request in the module `css/` and `js/` directories (and any static file) with a pure **cache-first** strategy without any expiry, so `css/pos.css.php` and `js/offline.js` pre-captured at some earlier date were served straight from the IndexedDB cache — before the network, before the browser HTTP cache, and in practice unchanged by a hard refresh. Stylesheets and scripts of the module are now served **network first with a cached fallback only when the server cannot be reached** (which is also what the offline engine needs), so every update reaches the terminal as soon as the connection is up; the cache-first strategy is kept for real static images. The service worker cache is renewed (`fluxpos-offline-v12`), which also deletes every stale URL captured by the previous versions. Module version 1.1.3.
+
 ## 1.1.2
 
 - **Category tab bar**: the legacy TakePOS paging is gone. Every category of the terminal is rendered at once in a single scrollable strip that uses the full width of the product area; arrows appear in front of and behind the strip only when it actually overflows (and only on the side with hidden tabs), and the strip can also be scrolled directly on a touch screen. The historical DOM ids (`catdivN`, `catimgN`, `catdescN`) and the `LoadProducts(position)` contract are kept, and `PrintCategories`/`MoreCategories` stay as harmless shims for any external caller.
