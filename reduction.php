@@ -101,7 +101,7 @@ if (!isset($conf->global->FLUXPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString
 	$htmlReductionAmount = $langs->trans('ReductionShort').'<br>'.$langs->trans('Amount');
 }
 ?>
-<link rel="stylesheet" href="css/pos.css.php">
+<link rel="stylesheet" href="css/pos.css.php?v=<?php echo (int) @filemtime(__DIR__.'/css/pos.css.php'); ?>">
 </head>
 
 <body>

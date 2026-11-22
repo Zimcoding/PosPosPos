@@ -1,5 +1,9 @@
 # CHANGELOG FLUXPOS FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.1.1
+
+- Bug fix: after updating, the new 1.1 layout did not appear and the cart stacked under the product grid instead of standing as a right column: `css/pos.css.php` is served with `Cache-Control: max-age=10800` (copied from stock TakePOS) while the POS screen linked it without any cache-busting parameter, so Firefox (and LiteSpeed in front of it) kept serving the pre-1.1 stylesheet for up to three hours after the files were replaced — the 1.1 HTML rendered without the 1.1 CSS, exactly what the screenshot showed. The stylesheet URL of the POS screen, the payment screen, the floors screen and the reduction popup now carries `?v=<filemtime of pos.css.php>` (the same mechanism the POS javascript files already used), the cart column returns to the right without any manual action, and every future CSS change reaches the terminals immediately. The `$dolibarr_nocache` guard of stock TakePOS was restored inside `css/pos.css.php` for good measure. Module version 1.1.1.
+
 ## 1.1.0
 
 - New POS screen layout ("Proposal A" of `docs/LAYOUT_PROPOSAL.md`, designed from Square, Shopify POS, Lightspeed and Loyverse): the product area becomes the hero of the screen with a **fluid CSS-grid** (`#productgrid`) that renders the whole category at once — no 24-tile fixed pool, no page arrows, the area scrolls instead — and the cart becomes a **right column** of the screen (28%, 300–420 px) containing the order lines, a **sticky total**, the **payment modes as a block** and a quick-row of actions. Minimum supported screen is 1280 x 800. On narrow screens the cart stacks under the product area until the dedicated mobile step-through layout lands (next phase).

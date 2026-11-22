@@ -144,7 +144,10 @@ foreach ($fluxpos_javascripts as $fluxpos_javascript) {
 	$fluxpos_javascript_mtime = (int) @filemtime(dol_buildpath($fluxpos_javascript, 0));
 	$arrayofjs[] = dol_buildpath($fluxpos_javascript, 1).($fluxpos_javascript_mtime > 0 ? '?v='.$fluxpos_javascript_mtime : '');
 }
-$arrayofcss = array(dol_buildpath('/fluxpos/css/pos.css.php', 1), dol_buildpath('/fluxpos/css/colorbox.css', 1));
+// Same mtime-based cache busting as the JS files above; without this, browsers and proxies keep
+// an old pos.css.php for up to 3 hours (Cache-Control max-age inside the file) after an update.
+$fluxpos_css_mtime = (int) @filemtime(dol_buildpath('/fluxpos/css/pos.css.php', 0));
+$arrayofcss = array(dol_buildpath('/fluxpos/css/pos.css.php', 1).($fluxpos_css_mtime > 0 ? '?v='.$fluxpos_css_mtime : ''), dol_buildpath('/fluxpos/css/colorbox.css', 1));
 
 if (getDolGlobalInt('FLUXPOS_COLOR_THEME') == 1) {
 	$arrayofcss[] =  dol_buildpath('/fluxpos/css/colorful.css', 1);

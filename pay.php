@@ -81,7 +81,8 @@ $title = '';
 $disablejs = 0;
 $disablehead = 0;
 
-$head = '<link rel="stylesheet" href="css/pos.css.php">';
+$fluxpos_css_mtime = (int) @filemtime(__DIR__.'/css/pos.css.php');
+$head = '<link rel="stylesheet" href="css/pos.css.php'.($fluxpos_css_mtime > 0 ? '?v='.$fluxpos_css_mtime : '').'">';
 if (getDolGlobalInt('FLUXPOS_COLOR_THEME') == 1) {
 	$head .= '<link rel="stylesheet" href="css/colorful.css">';
 }
