@@ -1037,7 +1037,7 @@ var FluxPosOffline = {
 				// Same thumbnail as the server cart lines (line.rowid holds the product id,
 				// also for the lines adopted from the order of the place on the server)
 				if (line.rowid > 0 && !window.fluxposhideproductimages) {
-					html += '<img class="cartthumb" loading="lazy" alt="" src="' + self.fluxposbaseurl + 'genimg/index.php?query=pro&id=' + parseInt(line.rowid, 10) + '">';
+					html += '<img class="cartthumb" loading="lazy" alt="" onerror="this.style.display=\'none\';" src="' + self.fluxposbaseurl + 'genimg/index.php?query=pro&id=' + parseInt(line.rowid, 10) + '">';
 				}
 				html += '<span class="fluxposofflinelabel">' + self.escapeHtml(line.label) + '</span></td>';
 				html += '<td class="right nowraponall fluxposofflineqty">';

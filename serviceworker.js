@@ -25,7 +25,7 @@
  *				intercepted: the JS layers fall back on IndexedDB when offline.
  */
 
-var fluxposCacheName = 'fluxpos-offline-v13';
+var fluxposCacheName = 'fluxpos-offline-v14';
 
 // Directory of the module, derived from the scope of this service worker, so the module
 // works whether it is installed into htdocs/fluxpos or htdocs/custom/fluxpos (or any other
@@ -81,14 +81,15 @@ self.addEventListener('fetch', function (event) {
 	}
 	var pathname = url.pathname;
 
-	// Static assets of the module and of Dolibarr core: cache first, then network
-	var isStaticAsset = pathname.indexOf(fluxposModulePath + '/css/') >= 0 ||
-		pathname.indexOf(fluxposModulePath + '/js/') >= 0 ||
-		pathname.indexOf(fluxposModulePath + '/img/') >= 0 ||
-		pathname.indexOf(fluxposModulePath + '/genimg/') >= 0 ||
-		/\.(css|js|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)$/.test(pathname);
-	if (isStaticAsset) {
-		event.respondWith(fluxposCacheFirst(request));
+	// Stylesheets and scripts of the module (css/pos11.css.php, css/colorbox.css,
+	// js/offline11.js, ...): NETWORK FIRST, cached copy only when the server cannot
+	// be reached. A cache-first strategy here would serve a stylesheet or an engine
+	// captured long ago even after an update and even on a hard refresh, which is how
+	// terminals kept running an old layout after deploying a new version.
+	var isModuleCodeAsset = pathname.indexOf(fluxposModulePath + '/css/') >= 0 ||
+		pathname.indexOf(fluxposModulePath + '/js/') >= 0;
+	if (isModuleCodeAsset) {
+		event.respondWith(fluxposNetworkFirst(request));
 		return;
 	}
 
@@ -98,31 +99,14 @@ self.addEventListener('fetch', function (event) {
 		return;
 	}
 
-	// Everything else (ajax calls, dynamic PHP fragments): network only
+	// Everything else (images of any kind, ajax calls, dynamic PHP fragments, ...):
+	// left untouched, no interception at all. Product, category and placeholder
+	// images go straight to the browser HTTP cache, so a redirect (genimg/index.php
+	// answers with a redirect to the nophoto placeholder for the products without a
+	// photo) can never end in a service worker error again, and images simply break
+	// gracefully when offline instead of failing inside the cache.
 });
 
-
-/**
- * Serve a request from the cache, filling the cache from the network on miss.
- *
- * @param  {Request} request Request to serve
- * @returns {Promise<Response>} Promise of the response
- */
-function fluxposCacheFirst(request) {
-	return caches.open(fluxposCacheName).then(function (cache) {
-		return cache.match(request).then(function (cached) {
-			if (cached) {
-				return cached;
-			}
-			return fetch(request).then(function (response) {
-				if (response.ok) {
-					cache.put(request, response.clone());
-				}
-				return response;
-			});
-		});
-	});
-}
 
 /**
  * Serve a request from the network, falling back on the cached copy when offline.
@@ -133,8 +117,12 @@ function fluxposCacheFirst(request) {
 function fluxposNetworkFirst(request) {
 	return caches.open(fluxposCacheName).then(function (cache) {
 		return fetch(request).then(function (response) {
-			if (response.ok) {
-				cache.put(request, response.clone());
+			if (response.ok && response.type === 'basic') {
+				// A failing cache write (quota, redirected or opaque response, ...)
+				// must never break the request: the copy is just dropped.
+				Promise.resolve(cache.put(request, response.clone())).catch(function (error) {
+					console.log('FluxPos offline: cache write failed', error);
+				});
 			}
 			return response;
 		}).catch(function () {
