@@ -445,8 +445,44 @@ div.paymentbordline
 	flex-direction: row;
 	align-items: stretch;
 	justify-content: flex-start;
+	overflow: visible;
+	gap: 4px;
+}
+
+/* The tab strip itself holds every category (server rendered) and scrolls horizontally;
+   the arrows in front of and behind it are shown only while it actually overflows. */
+.tabbar {
+	flex: 0 1 auto;
+	min-width: 0;
+	height: 100%;
+	display: flex;
+	flex-direction: row;
+	align-items: stretch;
 	overflow-x: auto;
 	overflow-y: hidden;
+	scrollbar-width: none;
+}
+.tabbar::-webkit-scrollbar {
+	display: none;
+}
+
+.tabarrow {
+	flex: 0 0 auto;
+	display: none; /* shown by FluxPosUpdateTabArrows() when the strip overflows */
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	color: #333;
+	background-color: #fff;
+	border: 1px solid #EEE;
+	border-radius: 4px;
+	cursor: pointer;
+}
+.tabarrow:hover {
+	background-color: #f2f2f2;
+}
+.tabarrow i {
+	pointer-events: none;
 }
 
 .div5{
@@ -953,18 +989,22 @@ div#moreinfo, div#infowarehouse {
 	font-family: sans-serif;
 }
 
+/* Offline / synchronization status pill: docked at the top of the cart column, above the
+   cart lines, so it never covers the tabs, the product tiles or the payment buttons. */
 .fluxposofflinestatus {
 	display: none;
-	position: fixed;
-	top: 5px;
-	right: 8px;
+	position: static;
+	flex: 0 0 auto;
+	width: 100%;
+	box-sizing: border-box;
 	z-index: 1100;
 	padding: 4px 10px;
-	border-radius: 4px;
+	border-radius: 0;
 	background-color: #e0533d;
 	color: #fff;
 	font-size: 13px;
 	font-weight: bold;
+	text-align: center;
 }
 
 .fluxposofflinestatus.offline {
@@ -1320,11 +1360,13 @@ body.fluxpos-tile-L {
 	font-size: 15px;
 }
 
-/* Tile density control (top-right corner of the product area) */
+/* Tile density control (S/M/L) on the tab row, right after the tabs, sitting a bit lower */
 .tiledensity {
 	display: inline-flex;
-	float: right;
-	margin: 0 8px 6px 0;
+	float: none;
+	flex: 0 0 auto;
+	align-self: flex-end;
+	margin: auto 8px 3px 8px;
 	border: 1px solid #DDD;
 	border-radius: 6px;
 	overflow: hidden;

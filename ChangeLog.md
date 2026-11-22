@@ -1,5 +1,12 @@
 # CHANGELOG FLUXPOS FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.1.2
+
+- **Category tab bar**: the legacy TakePOS paging is gone. Every category of the terminal is rendered at once in a single scrollable strip that uses the full width of the product area; arrows appear in front of and behind the strip only when it actually overflows (and only on the side with hidden tabs), and the strip can also be scrolled directly on a touch screen. The historical DOM ids (`catdivN`, `catimgN`, `catdescN`) and the `LoadProducts(position)` contract are kept, and `PrintCategories`/`MoreCategories` stay as harmless shims for any external caller.
+- **Tile density control (S/M/L)** moves onto the tab row, right after the tabs, sitting a bit lower, so it no longer takes space inside the product area.
+- **Offline / synchronization status pill** leaves its fixed position over the top-right corner (where it covered the tabs and the payment controls) and is docked at the top of the cart column, just above the cart lines.
+- Service worker cache renewed (`fluxpos-offline-v11`). Module version 1.1.2.
+
 ## 1.1.1
 
 - Bug fix: after updating, the new 1.1 layout did not appear and the cart stacked under the product grid instead of standing as a right column: `css/pos.css.php` is served with `Cache-Control: max-age=10800` (copied from stock TakePOS) while the POS screen linked it without any cache-busting parameter, so Firefox (and LiteSpeed in front of it) kept serving the pre-1.1 stylesheet for up to three hours after the files were replaced — the 1.1 HTML rendered without the 1.1 CSS, exactly what the screenshot showed. The stylesheet URL of the POS screen, the payment screen, the floors screen and the reduction popup now carries `?v=<filemtime of pos.css.php>` (the same mechanism the POS javascript files already used), the cart column returns to the right without any manual action, and every future CSS change reaches the terminals immediately. The `$dolibarr_nocache` guard of stock TakePOS was restored inside `css/pos.css.php` for good measure. Module version 1.1.1.

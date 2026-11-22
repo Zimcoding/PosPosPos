@@ -206,7 +206,6 @@ if (!empty($_SESSION['fluxposterminal'])) {
 ?>
 
 <body class="bodyfluxpos fluxpos-tile-<?php echo $fluxposTileSize; ?>" style="overflow: hidden;">
-<div id="fluxposofflinestatus" class="fluxposofflinestatus"></div>
 
 <script>
 var categories = <?php echo json_encode($maincategories); ?>;
@@ -307,70 +306,39 @@ function setFocusOnSearchField() {
 }
 
 function PrintCategories(first) {
-	console.log("PrintCategories");
-	for (i = 0; i < <?php echo($MAXCATEG - 2); ?>; i++) {
-		if (typeof (categories[parseInt(i)+parseInt(first)]) == "undefined")
-		{
-			$("#catdivdesc"+i).hide();
-			$("#catdesc"+i).text("");
-			$("#catimg"+i).attr("src","genimg/empty.png");
-			$("#catdiv"+i).attr('class', 'wrapper divempty');
-			continue;
-		}
-		$("#catdivdesc"+i).show();
-		<?php
-		if (getDolGlobalString('FLUXPOS_SHOW_CATEGORY_DESCRIPTION') == 1) { ?>
-			$("#catdesc"+i).html(categories[parseInt(i)+parseInt(first)]['label'].bold() + ' - ' + categories[parseInt(i)+parseInt(first)]['description']);
-		<?php } else { ?>
-			$("#catdesc"+i).text(categories[parseInt(i)+parseInt(first)]['label']);
-		<?php }	?>
-		$("#catimg"+i).attr("src","genimg/index.php?query=cat&id="+categories[parseInt(i)+parseInt(first)]['rowid']);
-		$("#catdiv"+i).data("rowid",categories[parseInt(i)+parseInt(first)]['rowid']);
-		$("#catdiv"+i).attr("data-rowid",categories[parseInt(i)+parseInt(first)]['rowid']);
-		$("#catdiv"+i).attr('class', 'wrapper');
+	console.log("PrintCategories (legacy shim: the 1.1 tab bar renders every category server side)");
+}
+
+// Scroll the category tab strip by roughly one visible page in the given direction.
+function FluxPosScrollTabs(step) {
+	var bar = document.getElementById('tabbar');
+	if (!bar) {
+		return;
+	}
+	bar.scrollBy({ left: step * Math.max(bar.clientWidth * 0.8, 200), behavior: 'smooth' });
+}
+
+// Show the tab arrows (before and after the strip) only when the strip overflows and the
+// hidden side is not already fully visible.
+function FluxPosUpdateTabArrows() {
+	var bar = document.getElementById('tabbar');
+	if (!bar) {
+		return;
+	}
+	var left = document.querySelector('.tabarrowleft');
+	var right = document.querySelector('.tabarrowright');
+	if (left) {
+		left.style.display = (bar.scrollLeft > 2) ? 'flex' : 'none';
+	}
+	if (right) {
+		right.style.display = (bar.scrollWidth - bar.clientWidth - bar.scrollLeft > 2) ? 'flex' : 'none';
 	}
 }
 
 function MoreCategories(moreorless) {
-	console.log("MoreCategories moreorless="+moreorless+" pagecategories="+pagecategories);
-	if (moreorless == "more") {
-		$('#catimg'+<?php echo ($MAXCATEG - 1); ?>).animate({opacity: '0.5'}, 1);
-		$('#catimg'+<?php echo ($MAXCATEG - 1); ?>).animate({opacity: '1'}, 100);
-		pagecategories=pagecategories+1;
-	}
-	if (moreorless == "less") {
-		$('#catimg'+<?php echo ($MAXCATEG - 2); ?>).animate({opacity: '0.5'}, 1);
-		$('#catimg'+<?php echo ($MAXCATEG - 2); ?>).animate({opacity: '1'}, 100);
-		if (pagecategories==0) return; //Return if no less pages
-		pagecategories=pagecategories-1;
-	}
-	if (typeof (categories[<?php echo($MAXCATEG - 2); ?> * pagecategories] && moreorless == "more") == "undefined") { // Return if no more pages
-		pagecategories=pagecategories-1;
-		return;
-	}
-
-	for (i = 0; i < <?php echo($MAXCATEG - 2); ?>; i++) {
-		if (typeof (categories[i+(<?php echo($MAXCATEG - 2); ?> * pagecategories)]) == "undefined") {
-			// complete with empty record
-			console.log("complete with empty record");
-			$("#catdivdesc"+i).hide();
-			$("#catdesc"+i).text("");
-			$("#catimg"+i).attr("src","genimg/empty.png");
-			continue;
-		}
-		$("#catdivdesc"+i).show();
-		<?php
-		if (getDolGlobalString('FLUXPOS_SHOW_CATEGORY_DESCRIPTION') == 1) { ?>
-			$("#catdesc"+i).html(categories[i+(<?php echo($MAXCATEG - 2); ?> * pagecategories)]['label'].bold() + ' - ' + categories[i+(<?php echo($MAXCATEG - 2); ?> * pagecategories)]['description']);
-		<?php } else { ?>
-			$("#catdesc"+i).text(categories[i+(<?php echo($MAXCATEG - 2); ?> * pagecategories)]['label']);
-		<?php } ?>
-		$("#catimg"+i).attr("src","genimg/index.php?query=cat&id="+categories[i+(<?php echo($MAXCATEG - 2); ?> * pagecategories)]['rowid']);
-		$("#catdiv"+i).data("rowid",categories[i+(<?php echo($MAXCATEG - 2); ?> * pagecategories)]['rowid']);
-		$("#catdiv"+i).attr("data-rowid",categories[i+(<?php echo($MAXCATEG - 2); ?> * pagecategories)]['rowid']);
-	}
-
-	ClearSearch(false);
+	// Legacy TakePOS category paging: useless since the tab bar holds every category
+	// at once and scrolls instead (kept as a shim for external callers).
+	console.log("MoreCategories (legacy shim, no paging in the 1.1 tab bar)");
 }
 
 // Escape a text for safe insertion into a tile (names are user data)
@@ -1399,6 +1367,16 @@ $( document ).ready(function() {
 		jQuery(this).addClass('clicked');
 	});
 
+	// Category tab strip: update the scroll arrows when needed (window resize, strip
+	// scrolled, tiles images loaded, fonts ready) and once on load
+	jQuery('#tabbar').on('scroll', FluxPosUpdateTabArrows);
+	jQuery(window).on('resize', FluxPosUpdateTabArrows);
+	FluxPosUpdateTabArrows();
+	window.addEventListener('load', FluxPosUpdateTabArrows);
+	if (document.fonts && document.fonts.ready && document.fonts.ready.then) {
+		document.fonts.ready.then(FluxPosUpdateTabArrows);
+	}
+
 	PrintCategories(0);
 	LoadProducts(0);
 	Refresh();
@@ -1981,44 +1959,49 @@ if ($reshook == 0) {  //add buttons
 	</div>
 </div>
 
-		<!--  Show categories as a tab bar -->
+		<!--  Show categories as a tab bar: one scrollable strip holding ALL the categories of the
+		     terminal (server rendered, historical DOM ids catdivN/catimgN/catdescN kept), with
+		     arrows on both sides that appear only when the strip actually overflows, and the tile
+		     density control on the same row, right after the tabs, sitting a bit lower. -->
 		<?php
 		if (getDolGlobalInt('FLUXPOS_HIDE_CATEGORIES') == 1) {
 			print '<div class="div4" style="display: none;">';
 		} else {
 			print '<div class="div4">';
 		}
-
-		$count = 0;
-		while ($count < $MAXCATEG) {
+		?>
+		<a class="tabarrow tabarrowleft" onclick="FluxPosScrollTabs(-1);"><span class="fa fa-chevron-left"></span></a>
+		<div class="tabbar" id="tabbar">
+		<?php
+		$catindex = 0;
+		foreach ($maincategories as $maincategory) {
 			?>
-			<div class="wrapper" <?php if ($count == ($MAXCATEG - 2)) {
-				echo 'onclick="MoreCategories(\'less\')"';
-								 } elseif ($count == ($MAXCATEG - 1)) {
-									 echo 'onclick="MoreCategories(\'more\')"';
-								 } else {
-									 echo 'onclick="LoadProducts('.$count.')"';
-								 } ?> id="catdiv<?php echo $count; ?>">
+			<div class="wrapper" onclick="LoadProducts(<?php echo $catindex; ?>)" id="catdiv<?php echo $catindex; ?>" data-rowid="<?php echo $maincategory['rowid']; ?>">
 				<?php
-				if ($count == ($MAXCATEG - 2)) {
-					echo '<span class="fa fa-chevron-left"></span>';
-				} elseif ($count == ($MAXCATEG - 1)) {
-					echo '<span class="fa fa-chevron-right"></span>';
-				} else {
-					if (!getDolGlobalString('FLUXPOS_HIDE_CATEGORY_IMAGES')) {
-						echo '<img class="imgwrapper" id="catimg'.$count.'" />';
+				if (!getDolGlobalString('FLUXPOS_HIDE_CATEGORY_IMAGES')) {
+					echo '<img class="imgwrapper" id="catimg'.$catindex.'" src="genimg/index.php?query=cat&id='.$maincategory['rowid'].'" />';
+				}
+				?>
+				<div class="description" id="catdivdesc<?php echo $catindex; ?>">
+					<div class="description_content" id="catdesc<?php echo $catindex; ?>"><?php
+					if (getDolGlobalString('FLUXPOS_SHOW_CATEGORY_DESCRIPTION') == 1) {
+						echo dol_escape_htmltag($maincategory['label']).' - '.$maincategory['description'];
+					} else {
+						echo dol_escape_htmltag($maincategory['label']);
 					}
-				} ?>
-				<?php if ($count != $MAXCATEG - 2 && $count != $MAXCATEG - 1) { ?>
-				<div class="description" id="catdivdesc<?php echo $count; ?>">
-					<div class="description_content" id="catdesc<?php echo $count; ?>"></div>
+					?></div>
 				</div>
-				<?php } ?>
 			</div>
 			<?php
-			$count++;
+			$catindex++;
 		}
 		?>
+		</div>
+		<a class="tabarrow tabarrowright" onclick="FluxPosScrollTabs(1);"><span class="fa fa-chevron-right"></span></a>
+		<!-- Tile density control (S / M / L), remembered per terminal in localStorage -->
+		<div id="tiledensity" class="tiledensity">
+			<button type="button" data-size="S" <?php echo $fluxposTileSize == 'S' ? 'class="clicked"' : ''; ?>>S</button><button type="button" data-size="M" <?php echo $fluxposTileSize == 'M' ? 'class="clicked"' : ''; ?>>M</button><button type="button" data-size="L" <?php echo $fluxposTileSize == 'L' ? 'class="clicked"' : ''; ?>>L</button>
+		</div>
 		</div>
 
 		<!--  Show product -->
@@ -2036,11 +2019,6 @@ if ($reshook == 0) {  //add buttons
 			}
 			?>
 
-			<!-- Tile density control (S / M / L), remembered per terminal in localStorage -->
-			<div id="tiledensity" class="tiledensity">
-				<button type="button" data-size="S" <?php echo $fluxposTileSize == 'S' ? 'class="clicked"' : ''; ?>>S</button><button type="button" data-size="M" <?php echo $fluxposTileSize == 'M' ? 'class="clicked"' : ''; ?>>M</button><button type="button" data-size="L" <?php echo $fluxposTileSize == 'L' ? 'class="clicked"' : ''; ?>>L</button>
-			</div>
-
 			<!-- The fluid product grid: the whole category is rendered at once (subcategories
 			 first, then its products), the area scrolls instead of paging. The tiles keep the
 			 historical DOM ids (prodivN, proimgN, ...) filled by RenderProducts(). -->
@@ -2052,8 +2030,12 @@ if ($reshook == 0) {  //add buttons
 		</div>
 		</div><!-- /posleft -->
 
-		<!-- Cart column (right): the order lines, a sticky total and the payment block -->
+		<!-- Cart column (right): the order lines, a sticky total and the payment block.
+		     The offline / synchronization status pill sits at the top of this column, above the
+		     cart, so it never blocks the product tiles, the tabs or the payment buttons. -->
 		<div class="cartcolumn">
+			<div id="fluxposofflinestatus" class="fluxposofflinestatus"></div>
+
 			<div id="poslines" class="cartlines">
 			</div>
 
