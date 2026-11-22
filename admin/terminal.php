@@ -159,6 +159,14 @@ if (GETPOST('action', 'alpha') == 'set') {
 		$res = dolibarr_set_const($db, 'FLUXPOS_FOOTER'.$terminaltouse, GETPOST('FLUXPOS_FOOTER'.$terminaltouse, 'restricthtml'), 'chaine', 0, '', $conf->entity);
 	}
 
+	// 1.3: layout of the payment block + direct payment of the mode buttons
+	if (GETPOSTISSET('FLUXPOS_PAYMENT_BLOCK'.$terminaltouse)) {
+		$res = dolibarr_set_const($db, 'FLUXPOS_PAYMENT_BLOCK'.$terminaltouse, GETPOST('FLUXPOS_PAYMENT_BLOCK'.$terminaltouse, 'alpha'), 'chaine', 0, '', $conf->entity);
+	}
+	if (GETPOSTISSET('FLUXPOS_PAYMENT_MODE_DIRECT'.$terminaltouse)) {
+		$res = dolibarr_set_const($db, 'FLUXPOS_PAYMENT_MODE_DIRECT'.$terminaltouse, (GETPOST('FLUXPOS_PAYMENT_MODE_DIRECT'.$terminaltouse, 'alpha') ? 1 : 0), 'chaine', 0, '', $conf->entity);
+	}
+
 	dol_syslog("admin/terminal.php: level ".GETPOST('level', 'alpha'));
 
 	if (!($res > 0)) {
@@ -380,6 +388,19 @@ if (isModEnabled('project')) {
 print '<tr class="oddeven"><td>'.$langs->trans('CashDeskReaderKeyCodeForEnter').'</td>';
 print '<td>';
 print '<input type="text" class="width50" name="FLUXPOS_READER_KEYCODE_FOR_ENTER'.$terminaltouse.'" value="'.getDolGlobalString('FLUXPOS_READER_KEYCODE_FOR_ENTER'.$terminaltouse).'" />';
+print '</td></tr>';
+
+// 1.3: the cart footer as one row in a per-terminal order, and payment mode buttons
+// that pay directly (or the escape hatch to the payment screen popup)
+print '<tr class="oddeven"><td>'.$langs->trans('FluxPosPaymentBlock').'</td>';
+print '<td>';
+print '<input type="text" class="width100" name="FLUXPOS_PAYMENT_BLOCK'.$terminaltouse.'" value="'.getDolGlobalString('FLUXPOS_PAYMENT_BLOCK'.$terminaltouse).'" />';
+print '<span class="opacitymedium">'.dol_escape_htmltag($langs->trans('FluxPosPaymentBlockDesc')).'</span>';
+print '</td></tr>';
+print '<tr class="oddeven"><td>'.$langs->trans('FluxPosPaymentModeDirect').'</td>';
+print '<td>';
+print $form->selectyesno('FLUXPOS_PAYMENT_MODE_DIRECT'.$terminaltouse, getDolGlobalInt('FLUXPOS_PAYMENT_MODE_DIRECT'.$terminaltouse), 1);
+print '<span class="opacitymedium">'.dol_escape_htmltag($langs->trans('FluxPosPaymentModeDirectDesc')).'</span>';
 print '</td></tr>';
 
 // Numbering module (TODO When this is used ?)

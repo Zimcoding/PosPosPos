@@ -1383,4 +1383,84 @@ if ($action == 'getProducts' && $user->hasRight('fluxpos', 'run')) {
 	$printer = new dolReceiptPrinter($db);
 
 	$printer->sendToPrinter($object, getDolGlobalInt('FLUXPOS_TEMPLATE_TO_USE_FOR_INVOICES'.$term), getDolGlobalInt('FLUXPOS_PRINTER_TO_USE'.$term));
+} elseif ($action == 'setcustomer' && $user->hasRight('fluxpos', 'run')) {
+	// Select the customer of the current place (1.3). Core list.php does this with its
+	// own "action=change" block, but that one is gated on the takepos permission: on an
+	// install that only runs FluxPos it is silently skipped and the customer list just
+	// reloads itself. This endpoint does the same thing with the FluxPos constants.
+	top_httphead('application/json');
+
+	require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
+
+	$idcustomerSetCust = GETPOSTINT('idcustomer');
+	$placeSetCust = GETPOST('place', 'alphanohtml');
+	$termSetCust = empty($_SESSION["fluxposterminal"]) ? 1 : $_SESSION["fluxposterminal"];
+
+	$setcustomerResp = array('success' => false, 'error' => 'CustomerNotFound', 'placeid' => 0);
+
+	// Only an existing thirdparty of this install can be selected
+	$socSetCust = new Societe($db);
+	if ($idcustomerSetCust > 0 && $socSetCust->fetch($idcustomerSetCust) > 0) {
+		$setcustomerResp = array('success' => false, 'error' => 'SaleNotADraftAnymore', 'placeid' => 0);
+
+		$db->begin();
+
+		// Check if the draft of this place already exists, if not create it
+		// (same draft creation as invoice.php)
+		$placeidSetCust = 0;
+		$sqlSetCust = "SELECT rowid FROM ".MAIN_DB_PREFIX."facture";
+		$sqlSetCust .= " WHERE ref='(PROV-POS".$db->escape($termSetCust)."-".$db->escape($placeSetCust).")' AND entity IN (".getEntity('invoice').")";
+		$resqlSetCust = $db->query($sqlSetCust);
+		if ($resqlSetCust && $db->num_rows($resqlSetCust) > 0) {
+			$objSetCust = $db->fetch_object($resqlSetCust);
+			$placeidSetCust = (int) $objSetCust->rowid;
+			$db->free($resqlSetCust);
+		}
+		if ($placeidSetCust == 0) {
+			$invoiceSetCust = new Facture($db);
+			$invoiceSetCust->socid = (int) getDolGlobalInt('FLUXPOS_ID_THIRDPARTY'.$termSetCust);
+
+			$dolnowtzuserrel = dol_now('tzuserrel');	// If user is 02 january 22:00, we want to store '02 january'
+			$monthuserSetCust = dol_print_date($dolnowtzuserrel, '%m', 'gmt');
+			$dayuserSetCust = dol_print_date($dolnowtzuserrel, '%d', 'gmt');
+			$yearuserSetCust = dol_print_date($dolnowtzuserrel, '%Y', 'gmt');
+			$invoiceSetCust->date = dol_mktime(0, 0, 0, (int) $monthuserSetCust, (int) $dayuserSetCust, (int) $yearuserSetCust, 'tzserver');
+
+			$invoiceSetCust->module_source = 'fluxpos';
+			$invoiceSetCust->pos_source = $termSetCust;
+			$invoiceSetCust->entity = !empty($_SESSION["fluxposinvoiceentity"]) ? $_SESSION["fluxposinvoiceentity"] : $conf->entity;
+
+			$placeidSetCust = $invoiceSetCust->create($user);
+			if ($placeidSetCust > 0) {
+				$sqlSetCust = "UPDATE ".MAIN_DB_PREFIX."facture";
+				$sqlSetCust .= " SET ref='(PROV-POS".$db->escape($termSetCust)."-".$db->escape($placeSetCust).")'";
+				$sqlSetCust .= " WHERE rowid = ".((int) $placeidSetCust);
+				$db->query($sqlSetCust);
+			} else {
+				$setcustomerResp = array('success' => false, 'error' => 'DraftCreateFailed', 'placeid' => 0);
+				dol_syslog('ajax.php setcustomer: DraftCreateFailed '.$invoiceSetCust->error, LOG_ERR);
+			}
+		}
+
+		if ($placeidSetCust > 0) {
+			// Guard on the status: a sale that is not an open draft anymore (validated
+			// or paid first, then the connection returned) cannot get another customer
+			$sqlSetCust = "UPDATE ".MAIN_DB_PREFIX."facture SET fk_soc = ".((int) $idcustomerSetCust);
+			$sqlSetCust .= " WHERE rowid = ".((int) $placeidSetCust)." AND fk_statut = ".Facture::STATUS_DRAFT;
+			$resqlSetCust = $db->query($sqlSetCust);
+			if ($resqlSetCust && $db->affected_rows($resqlSetCust) > 0) {
+				$setcustomerResp = array('success' => true, 'error' => '', 'placeid' => $placeidSetCust);
+			} else {
+				$setcustomerResp = array('success' => false, 'error' => 'SaleNotADraftAnymore', 'placeid' => $placeidSetCust);
+			}
+		}
+
+		if ($setcustomerResp['success']) {
+			$db->commit();
+		} else {
+			$db->rollback();
+		}
+	}
+
+	echo json_encode($setcustomerResp);
 }
