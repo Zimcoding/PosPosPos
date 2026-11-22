@@ -427,9 +427,10 @@ div.paymentbordline
 .cartcolumn{
 	display: flex;
 	flex-direction: column;
-	flex: 0 0 28%;
-	min-width: 300px;
-	max-width: 420px;
+	/* 1.4: a bit wider than before (a third of the screen, between 300 and 460px) and
+	   clamp() instead of min/max so the column can never be squeezed away nor push the
+	   products out of the viewport (no horizontal scrollbar, always cleanly visible) */
+	flex: 0 0 clamp(300px, 30%, 460px);
 	height: 100%;
 	overflow: hidden;
 	box-sizing: border-box;
@@ -912,6 +913,74 @@ div#moreinfo, div#infowarehouse {
 	}
 }
 
+/* 1.4: the step-through of the 1.2 layout now also applies on small tablets and on
+   narrow desktop windows (raised breakpoint 767 -> 1023). Below 1024px the POS is two
+   steps (Products / Cart), the running total stays visible in the step navigation and
+   the cart column is always cleanly visible (never squeezed off the viewport). */
+@media screen and (max-width: 1023px) {
+	.posmain {
+		flex-direction: column;
+	}
+
+	.cartcolumn {
+		flex: 0 0 45%;
+		max-width: none;
+		border-left: none;
+		border-top: 1px solid #DDD;
+	}
+
+	.mobilenav {
+		display: flex;
+		flex: 0 0 auto;
+		flex-direction: row;
+		align-items: stretch;
+		width: 100%;
+		height: 52px;
+		box-sizing: border-box;
+		border-bottom: 1px solid #DDD;
+		background-color: var(--colorbackbody, #f8f8f8);
+	}
+
+	.mobilenavtab {
+		flex: 1 1 50%;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border: none;
+		border-radius: 0;
+		background-color: transparent;
+		color: var(--colortextbackhmenu, #333);
+		font-size: 1.1em;
+		min-height: 52px;
+		cursor: pointer;
+	}
+
+	.mobilenavtab.clicked {
+		background-color: var(--colorbackhmenu1, #eee);
+		font-weight: bold;
+	}
+
+	.mobilenavtab .mobilenavtotal span {
+		font-weight: bold;
+	}
+
+	body.fluxposview-products .posmain .cartcolumn {
+		display: none;
+	}
+
+	body.fluxposview-cart .posmain .posleft {
+		display: none;
+	}
+
+	body.fluxposview-cart .posmain .cartcolumn {
+		flex: 1 1 auto;
+		max-width: none;
+		height: auto;
+		border-top: none;
+		overflow: auto;
+	}
+}
+
 /* Modal box */
 .modal {
   display: none; /* Hidden by default */
@@ -1381,7 +1450,10 @@ body.fluxpos-tile-L {
 /* Fluid product grid: the whole category renders at once, the area scrolls */
 .productgrid {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(var(--fluxpos-tile-w), 1fr));
+	/* 1.4: min(var(--fluxpos-tile-w), 100%) makes the minimum track size shrink to the
+	   available width, so a tile column can never be wider than the products area
+	   (canonical fix for a last-column clip on narrow screens) */
+	grid-template-columns: repeat(auto-fill, minmax(min(var(--fluxpos-tile-w), 100%), 1fr));
 	gap: 8px;
 	align-content: start;
 	width: 100%;
@@ -1391,6 +1463,9 @@ body.fluxpos-tile-L {
 	float: none;
 	position: relative;
 	width: auto;
+	/* 1.4: a long product name may not blow the track out of the grid */
+	min-width: 0;
+	overflow: hidden;
 	height: var(--fluxpos-tile-h);
 	margin: 0;
 	border: 1px solid #EEE;
@@ -1398,6 +1473,12 @@ body.fluxpos-tile-L {
 	align-items: center;
 	justify-content: center;
 	cursor: pointer;
+}
+
+/* 1.4: long names wrap (or break) inside the tile instead of pushing the grid wider */
+.productgrid .description_content {
+	overflow-wrap: anywhere;
+	word-break: break-word;
 }
 
 .productgrid .wrapper2 img.imgwrapper {
@@ -1585,6 +1666,20 @@ button.cartquickbtn.cartmore {
 }
 .modal .lineeditpad {
 	margin-top: 6px;
+}
+
+/* 1.4: the line-edit popup carries only digits, a backspace and one full-width OK */
+.lineeditpad button.lineeditok {
+	grid-column: 1 / -1;
+	height: 52px;
+	font-size: 1.5em;
+	font-weight: bold;
+	background-color: var(--colorbackhmenu1, #0080c0);
+	border-color: var(--colorbackhmenu1, #0080c0);
+	color: #fff;
+}
+.lineeditpad button.lineeditok:hover {
+	opacity: 0.9;
 }
 
 /* Cart line visibility: thumbs and qty steppers ---------- */

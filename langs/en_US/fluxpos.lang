@@ -277,6 +277,6 @@ FluxPosPayAll=Payment
 FluxPosPaymentBlock=Payment block layout
 FluxPosPaymentBlockDesc=Order of the elements of the cart footer when they are all shown in one row (empty = the default two rows): new, freezone, direct, paymodes, pay, print, actions.
 FluxPosPaymentModeDirect=Payment mode buttons pay directly
-FluxPosPaymentModeDirectDesc=The cash, card and check buttons of the cart row pay directly with that mode instead of opening the payment screen. The More button keeps the payment screen (for split payments or another amount).
+FluxPosPaymentModeDirectDesc=Default yes: the cash, card and check buttons pay the full remaining amount directly with that mode, no popup. Set to no to open the payment screen (pad) from those buttons. The More button always opens the payment screen (for split payments or another amount).
 SortProductModePosition=Category order
 SortProductModeBestSales=Best sellers (last 90 days)

@@ -179,11 +179,12 @@ print '/* FluxPos critical layout inline - always mirror the two-column structur
 print '.posmain{display:flex;flex-direction:row;align-items:stretch;width:100%;height:100%;overflow:hidden;box-sizing:border-box;}'."\n";
 print '.posmain.posmainwithhead{height:calc(100% - 50px);padding-top:9px;}'."\n";
 print '.posmain .posleft{display:flex;flex-direction:column;flex:1 1 auto;min-width:0;height:100%;overflow:hidden;box-sizing:border-box;}'."\n";
-print '.posmain .cartcolumn{display:flex;flex-direction:column;flex:0 0 28%;min-width:300px;max-width:420px;height:100%;overflow:hidden;box-sizing:border-box;border-left:1px solid #DDD;}'."\n";
+print '.posmain .cartcolumn{display:flex;flex-direction:column;flex:0 0 clamp(300px,30%,460px);height:100%;overflow:hidden;box-sizing:border-box;border-left:1px solid #DDD;}'."\n";
 print '.posmain .div4{flex:0 0 48px;height:48px;width:100%;box-sizing:border-box;padding-top:2px;}'."\n";
 print '.mobilenav{display:none;}'."\n";
-// Mobile step-through (1.2): only one pane of the narrow screen shows at a time
-print '@media screen and (max-width: 767px){.posmain{flex-direction:column;}.posmain .mobilenav{display:flex;flex:0 0 auto;}.posmain .cartcolumn{flex:0 0 45%;max-width:none;border-left:none;border-top:1px solid #DDD;}body.fluxposview-products .posmain .cartcolumn{display:none;}body.fluxposview-cart .posmain .posleft{display:none;}body.fluxposview-cart .posmain .cartcolumn{flex:1 1 auto;max-width:none;}}'."\n";
+// Mobile step-through (1.2, breakpoint raised to 1023px in 1.4): below 1024px only one
+// pane shows at a time, with the running total always visible in the step navigation
+print '@media screen and (max-width: 1023px){.posmain{flex-direction:column;}.posmain .mobilenav{display:flex;flex:0 0 auto;}.posmain .cartcolumn{flex:0 0 45%;max-width:none;border-left:none;border-top:1px solid #DDD;}body.fluxposview-products .posmain .cartcolumn{display:none;}body.fluxposview-cart .posmain .posleft{display:none;}body.fluxposview-cart .posmain .cartcolumn{flex:1 1 auto;max-width:none;}}'."\n";
 print '</style>'."\n";
 
 
@@ -368,7 +369,7 @@ function FluxPosForceStyles(el, declarations, force) {
  * cascade contains (a stale stylesheet, a theme or another module rule), the
  * truth is set directly on the DOM elements with !important, so no stylesheet
  * copy can produce the stacked layout anymore. Only applied on a screen wide
- * enough for the desktop layout; below 768px the declarations are cleared so
+ * enough for the desktop layout; below 1024px the declarations are cleared so
  * the mobile step-through keeps working on window resizes. Runs on load and on
  * resize; idempotent.
  *
@@ -376,7 +377,7 @@ function FluxPosForceStyles(el, declarations, force) {
  */
 function FluxPosRepairLayout() {
 	'use strict';
-	var force = (window.innerWidth >= 768);
+	var force = (window.innerWidth >= 1024);
 	var main = document.querySelector('.posmain');
 	if (!main) {
 		// Self-heal (1.2.2): versions before 1.2.2 printed the head-bar variant of
@@ -393,7 +394,7 @@ function FluxPosRepairLayout() {
 	}
 	FluxPosForceStyles(main, [['display', 'flex'], ['flex-direction', 'row'], ['flex-wrap', 'nowrap']], force);
 	FluxPosForceStyles(main.querySelector('.posleft'), [['display', 'flex'], ['flex-direction', 'column'], ['flex', '1 1 auto'], ['min-width', '0']], force);
-	FluxPosForceStyles(main.querySelector('.cartcolumn'), [['display', 'flex'], ['flex-direction', 'column'], ['flex', '0 0 28%'], ['min-width', '300px'], ['max-width', '420px'], ['border-left', '1px solid #DDD']], force);
+	FluxPosForceStyles(main.querySelector('.cartcolumn'), [['display', 'flex'], ['flex-direction', 'column'], ['flex', '0 0 clamp(300px, 30%, 460px)'], ['border-left', '1px solid #DDD']], force);
 }
 
 /**
@@ -902,6 +903,44 @@ function FluxPosCloseLineEdit() {
 	var modal = document.getElementById('ModalLineEdit');
 	if (modal) {
 		modal.style.display = 'none';
+	}
+}
+
+/*
+ * OK of the line-edit popup (1.4): the popup only carries the digits, a backspace and
+ * one OK button - the mode the change applies to (qty, price or line discount) was
+ * chosen by the tapped cell. Applies the typed number to the selected line with the
+ * active mode (same request as the mode button of the old pad) and closes the popup.
+ * An empty entry just closes.
+ */
+function FluxPosApplyLineEdit() {
+	if (typeof(selectedline) == 'undefined' || !selectedline) {
+		FluxPosCloseLineEdit();
+		return;
+	}
+	if (typeof(editnumber) == 'undefined' || editnumber == '') {
+		FluxPosCloseLineEdit();	// Nothing typed: just close
+		return;
+	}
+	var actionName = (editaction == 'p') ? 'updateprice' : ((editaction == 'r') ? 'updatereduction' : 'updateqty');
+	var actionNum = editnumber;
+	editnumber = '';
+	console.log("FluxPosApplyLineEdit action="+actionName+" number="+actionNum);
+	$("#poslines").load("invoice.php?action="+actionName+"&token=<?php echo currentToken(); ?>&place="+place+"&idline="+selectedline+"&number="+actionNum, function() {
+		FluxPosCloseLineEdit();
+		fluxposUpdateCartTotal();
+	});
+}
+
+/*
+ * Backspace of the line-edit popup (1.4): remove the last typed digit.
+ */
+function FluxPosLineEditBackspace() {
+	if (typeof(editnumber) != 'undefined' && editnumber.length > 0) {
+		editnumber = editnumber.slice(0, -1);
+		if (typeof(selectedline) != 'undefined' && selectedline) {
+			$('#'+selectedline).find("td:first").html(selectedtext+"<br> "+editnumber);
+		}
 	}
 }
 
@@ -1727,8 +1766,8 @@ $( document ).ready(function() {
 	var fluxposCheckLayout = function () {
 		FluxPosRepairLayout();
 		var main = document.querySelector('.posmain');
-		if (window.innerWidth < 768) {
-			console.info('FluxPos: narrow screen of ' + window.innerWidth + 'px switches the POS to the mobile step-through (Products / Cart tabs). Press Ctrl+0 if this screen is actually large.');
+		if (window.innerWidth < 1024) {
+			console.info('FluxPos: narrow screen of ' + window.innerWidth + 'px switches the POS to the mobile step-through (Products / Cart tabs, total always visible). Press Ctrl+0 if this screen is actually large.');
 			return;
 		}
 		if (!main) {
@@ -2279,6 +2318,27 @@ if ($reshook == 0) {  //add buttons
 			$fluxposNumpadHtml .= '<button type="button" class="calcbutton2 poscolordelete" id="delete" onclick="deleteline()"><span class="fa fa-trash"></span></button>';
 		}
 
+		// Line-edit popup pad (1.4): only the digits, a backspace and ONE OK button -
+		// the mode the change applies to (qty, price or line discount) comes from the
+		// tapped cell, so the popup carries no mode buttons anymore.
+		$fluxposLineEditPadHtml = '';
+		$fluxposLineEditPadHtml .= '<button type="button" class="calcbutton" onclick="Edit(7);">7</button>';
+		$fluxposLineEditPadHtml .= '<button type="button" class="calcbutton" onclick="Edit(8);">8</button>';
+		$fluxposLineEditPadHtml .= '<button type="button" class="calcbutton" onclick="Edit(9);">9</button>';
+		$fluxposLineEditPadHtml .= '<button type="button" class="calcbutton" onclick="Edit(4);">4</button>';
+		$fluxposLineEditPadHtml .= '<button type="button" class="calcbutton" onclick="Edit(5);">5</button>';
+		$fluxposLineEditPadHtml .= '<button type="button" class="calcbutton" onclick="Edit(6);">6</button>';
+		$fluxposLineEditPadHtml .= '<button type="button" class="calcbutton" onclick="Edit(1);">1</button>';
+		$fluxposLineEditPadHtml .= '<button type="button" class="calcbutton" onclick="Edit(2);">2</button>';
+		$fluxposLineEditPadHtml .= '<button type="button" class="calcbutton" onclick="Edit(3);">3</button>';
+		$fluxposLineEditPadHtml .= '<button type="button" class="calcbutton" onclick="Edit(0);">0</button>';
+		$fluxposLineEditPadHtml .= '<button type="button" class="calcbutton" onclick="Edit(\'.\')">.</button>';
+		$fluxposLineEditPadHtml .= '<button type="button" class="calcbutton" onclick="FluxPosLineEditBackspace();"><span class="fa fa-backspace"></span></button>';
+		$fluxposLineEditPadHtml .= '<button type="button" class="calcbutton poscolorblue lineeditok" onclick="FluxPosApplyLineEdit();">OK</button>';
+
+		// Backwards compatibility: the modal keeps its own variable, so the always-docked
+		// pad ($fluxposNumpadHtml) and the simplified popup pad stay independent
+
 		// Quick buttons of the cart footer: the New/Place entry, the print receipt entry
 		// and (when enabled) the direct payment + free text product entries. They are
 		// removed from the overflow menu.
@@ -2331,8 +2391,8 @@ if ($reshook == 0) {  //add buttons
 			<h3><?php print $langs->trans("Modify"); ?></h3>
 		</div>
 		<div class="modal-body">
-			<div class="lineeditpad">
-			<?php print $fluxposNumpadHtml; ?>
+			<div class="lineeditpad lineeditpopup">
+			<?php print $fluxposLineEditPadHtml; ?>
 			</div>
 		</div>
 	</div>
@@ -2444,11 +2504,12 @@ if ($reshook == 0) {  //add buttons
 				</div>
 
 				<?php
-				// 1.3: the payment mode buttons can pay directly with their mode instead of
-				// opening the payment screen (FLUXPOS_PAYMENT_MODE_DIRECT<term>), and the whole
-				// footer can be rendered as ONE row in a per-terminal order
+				// 1.3/1.4: the payment mode buttons PAY DIRECTLY with their mode by default
+				// (full remaining amount, no popup). Set FLUXPOS_PAYMENT_MODE_DIRECT<term> to "no"
+				// to open the payment screen of pay.php from those buttons instead. The whole
+				// footer can also be rendered as ONE row in a per-terminal order
 				// (FLUXPOS_PAYMENT_BLOCK<term>: new, freezone, direct, paymodes, pay, print, actions).
-				$fluxposPaymentDirect = getDolGlobalString('FLUXPOS_PAYMENT_MODE_DIRECT'.$_SESSION["fluxposterminal"]);
+				$fluxposPaymentDirect = getDolGlobalString('FLUXPOS_PAYMENT_MODE_DIRECT'.$_SESSION["fluxposterminal"], '1') != '0';
 				$fluxposPaymentModesHtml = '';
 				if (!empty($paiementsModes)) {
 					foreach ($paiementsModes as $obj) {
