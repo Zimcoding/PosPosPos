@@ -1545,7 +1545,7 @@ if (defined('INCLUDE_PHONEPAGE_FROM_PUBLIC_PAGE')) {
 	<meta name="mobile-web-app-capable" content="yes">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>';
 	$arrayofcss = array(
-		dol_buildpath('/fluxpos/css/pos.css.php', 1),
+		dol_buildpath('/fluxpos/css/pos11.css.php', 1),
 	);
 	$arrayofjs = array(dol_buildpath('/fluxpos/js/jquery.colorbox-min.js', 1));
 	$disablejs = 0;

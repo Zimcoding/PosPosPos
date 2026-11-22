@@ -73,7 +73,7 @@ if (!$user->hasRight('fluxpos', 'run')) {
  * View
  */
 
-$arrayofcss = array(dol_buildpath('/fluxpos/css/pos.css.php', 1));
+$arrayofcss = array(dol_buildpath('/fluxpos/css/pos11.css.php', 1));
 $arrayofjs = array();
 
 $head = '';
@@ -81,8 +81,8 @@ $title = '';
 $disablejs = 0;
 $disablehead = 0;
 
-$fluxpos_css_mtime = (int) @filemtime(__DIR__.'/css/pos.css.php');
-$head = '<link rel="stylesheet" href="css/pos.css.php'.($fluxpos_css_mtime > 0 ? '?v='.$fluxpos_css_mtime : '').'">';
+$fluxpos_css_mtime = (int) @filemtime(__DIR__.'/css/pos11.css.php');
+$head = '<link rel="stylesheet" href="css/pos11.css.php'.($fluxpos_css_mtime > 0 ? '?v='.$fluxpos_css_mtime : '').'">';
 if (getDolGlobalInt('FLUXPOS_COLOR_THEME') == 1) {
 	$head .= '<link rel="stylesheet" href="css/colorful.css">';
 }

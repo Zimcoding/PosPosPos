@@ -68,7 +68,7 @@ if (!$res) {
  * htdocs/custom/fluxpos, ...) and whatever the Dolibarr version. Do not use
  * dol_buildpath('/fluxpos/', 1) for this: dol_buildpath() resolves the custom
  * path by testing the existence of files on disk, so the URL of a directory
- * (used by js/offline.js as the base URL of the module) is not resolved and
+ * (used by js/offline11.js as the base URL of the module) is not resolved and
  * falls back to the url of the core copy.
  *
  * Must be called after this file has been included (DOL_URL_ROOT is defined).

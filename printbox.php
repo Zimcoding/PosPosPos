@@ -74,7 +74,7 @@ if (!$user->hasRight('fluxpos', 'run')) {
  * View
  */
 
-$arrayofcss = array(dol_buildpath('/fluxpos/css/pos.css.php', 1));
+$arrayofcss = array(dol_buildpath('/fluxpos/css/pos11.css.php', 1));
 $arrayofjs = array(dol_buildpath('/fluxpos/js/jquery.colorbox-min.js', 1));
 
 $head = '';

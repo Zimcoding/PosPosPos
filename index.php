@@ -138,7 +138,7 @@ $disablehead = 0;
 // Without this, a terminal could keep running an old offline.js for a long time
 // (the service worker cache only renews when itself is renewed), and the old
 // engine then calls the server on an obsolete URL with an obsolete token.
-$fluxpos_javascripts = array('/fluxpos/js/jquery.colorbox-min.js', '/fluxpos/js/offline.js');
+$fluxpos_javascripts = array('/fluxpos/js/jquery.colorbox-min.js', '/fluxpos/js/offline11.js');
 $arrayofjs = array();
 foreach ($fluxpos_javascripts as $fluxpos_javascript) {
 	$fluxpos_javascript_mtime = (int) @filemtime(dol_buildpath($fluxpos_javascript, 0));
@@ -146,8 +146,8 @@ foreach ($fluxpos_javascripts as $fluxpos_javascript) {
 }
 // Same mtime-based cache busting as the JS files above; without this, browsers and proxies keep
 // an old pos.css.php for up to 3 hours (Cache-Control max-age inside the file) after an update.
-$fluxpos_css_mtime = (int) @filemtime(dol_buildpath('/fluxpos/css/pos.css.php', 0));
-$arrayofcss = array(dol_buildpath('/fluxpos/css/pos.css.php', 1).($fluxpos_css_mtime > 0 ? '?v='.$fluxpos_css_mtime : ''), dol_buildpath('/fluxpos/css/colorbox.css', 1));
+$fluxpos_css_mtime = (int) @filemtime(dol_buildpath('/fluxpos/css/pos11.css.php', 0));
+$arrayofcss = array(dol_buildpath('/fluxpos/css/pos11.css.php', 1).($fluxpos_css_mtime > 0 ? '?v='.$fluxpos_css_mtime : ''), dol_buildpath('/fluxpos/css/colorbox.css', 1));
 
 if (getDolGlobalInt('FLUXPOS_COLOR_THEME') == 1) {
 	$arrayofcss[] =  dol_buildpath('/fluxpos/css/colorful.css', 1);

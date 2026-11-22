@@ -206,7 +206,7 @@ function fluxposGetProductsOfCategory($object, $filter, $limit, $offset)
 
 /**
  * Return the products for sale of a category, trimmed to the fields used by the POS grid and search.
- * Used to build the catalog synchronized into IndexedDB by js/offline.js.
+ * Used to build the catalog synchronized into IndexedDB by js/offline11.js.
  *
  * @param  int $categid    ID of category
  * @param  int $pricelevel Price level to use for prices
@@ -1359,7 +1359,7 @@ if ($action == 'getProducts' && $user->hasRight('fluxpos', 'run')) {
 		$object->fetch($id);
 		// The lines are used by the snapshots of the offline engine: it caches the order
 		// while online so it can adopt it into the local cart when offline (see
-		// captureOnServerOrder() of js/offline.js)
+		// captureOnServerOrder() of js/offline11.js)
 		$object->fetch_lines();
 	}
 

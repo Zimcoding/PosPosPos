@@ -86,7 +86,7 @@ if ($invoiceid > 0) {
 }
 
 $head = '';
-$arrayofcss = array(dol_buildpath('/fluxpos/css/pos.css.php', 1));
+$arrayofcss = array(dol_buildpath('/fluxpos/css/pos11.css.php', 1));
 $arrayofjs  = array();
 
 top_htmlhead($head, '', 0, 0, $arrayofjs, $arrayofcss);
@@ -101,7 +101,7 @@ if (!isset($conf->global->FLUXPOS_NUMPAD_USE_PAYMENT_ICON) || getDolGlobalString
 	$htmlReductionAmount = $langs->trans('ReductionShort').'<br>'.$langs->trans('Amount');
 }
 ?>
-<link rel="stylesheet" href="css/pos.css.php?v=<?php echo (int) @filemtime(__DIR__.'/css/pos.css.php'); ?>">
+<link rel="stylesheet" href="css/pos11.css.php?v=<?php echo (int) @filemtime(__DIR__.'/css/pos11.css.php'); ?>">
 </head>
 
 <body>

@@ -25,7 +25,7 @@
  *				intercepted: the JS layers fall back on IndexedDB when offline.
  */
 
-var fluxposCacheName = 'fluxpos-offline-v12';
+var fluxposCacheName = 'fluxpos-offline-v13';
 
 // Directory of the module, derived from the scope of this service worker, so the module
 // works whether it is installed into htdocs/fluxpos or htdocs/custom/fluxpos (or any other
@@ -36,10 +36,10 @@ var fluxposModulePath = new URL(self.registration.scope).pathname.replace(/\/$/,
 self.addEventListener('install', function (event) {
 	// Relative URLs are resolved against the fluxpos module directory
 	var urlsToCache = [
-		'css/pos.css.php',
+		'css/pos11.css.php',
 		'css/colorbox.css',
 		'js/jquery.colorbox-min.js',
-		'js/offline.js',
+		'js/offline11.js',
 		'genimg/empty.png'
 	];
 	event.waitUntil(
