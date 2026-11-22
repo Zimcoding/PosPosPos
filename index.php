@@ -358,7 +358,7 @@ function FluxPosTileHtml(item, index) {
 			catlabel = FluxPosEscapeHtml(val.label) + ' - ' + FluxPosEscapeHtml(val.description);
 		<?php } ?>
 		return '<div class="wrapper2" id="prodiv'+index+'" data-rowid="'+val.rowid+'" data-iscat="1" onclick="ClickProduct('+index+')">'
-			+ '<img class="imgwrapper" id="proimg'+index+'" src="genimg/index.php?query=cat&id='+val.rowid+'" title="">'
+			+ '<img class="imgwrapper" id="proimg'+index+'" onerror="this.style.display=&#39;none&#39;;" src="genimg/index.php?query=cat&id='+val.rowid+'" title="">'
 			+ '<div class="description" id="prodivdesc'+index+'"><div class="description_content" id="prodesc'+index+'">'+catlabel+'</div></div>'
 			+ '</div>';
 	}
@@ -398,10 +398,10 @@ function FluxPosTileHtml(item, index) {
 		html += '<div class="hidden" id="proprice'+index+'"></div>';
 	<?php } ?>
 	<?php if (!getDolGlobalString('FLUXPOS_HIDE_PRODUCT_IMAGES')) { ?>
-		html += '<img class="imgwrapper" id="proimg'+index+'" src="'+imgsrc+'" title="'+FluxPosEscapeHtml(imgtitle)+'">';
+		html += '<img class="imgwrapper" id="proimg'+index+'" onerror="this.style.display=&#39;none&#39;;" src="'+imgsrc+'" title="'+FluxPosEscapeHtml(imgtitle)+'">';
 		html += '<div class="description" id="prodivdesc'+index+'"><div class="description_content" id="prodesc'+index+'">'+label+'</div></div>';
 	<?php } else { ?>
-		html += '<img class="imgwrapper hidden" id="proimg'+index+'" src="'+imgsrc+'" title="">';
+		html += '<img class="imgwrapper hidden" id="proimg'+index+'" onerror="this.style.display=&#39;none&#39;;" src="'+imgsrc+'" title="">';
 		html += '<button type="button" class="productbutton" id="probutton'+index+'">'+label+'</button>';
 	<?php } ?>
 	html += '</div>';
