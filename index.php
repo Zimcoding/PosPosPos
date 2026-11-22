@@ -880,6 +880,13 @@ function New() {
 
 	console.log("New with place = <?php echo $place; ?>, js place="+place+", invoiceid="+invoiceid);
 
+	// A cart that the terminal stored while offline must not come back once the cart
+	// of the server is removed: drop the local copy of the place too (the fragment that
+	// replaces #poslines stops the engine from rendering it again).
+	if ($('#offlinecart').val() == '1' && typeof FluxPosOffline != 'undefined' && typeof FluxPosOffline.clearCart == 'function') {
+		FluxPosOffline.clearCart();
+	}
+
 	if (invoiceid == '') {
 		$("#poslines").load("invoice.php?action=delete&token=<?php echo currentToken(); ?>&place=" + place, function () {
 			//$('#poslines').scrollTop($('#poslines')[0].scrollHeight);
@@ -905,6 +912,11 @@ function New() {
 			$("#poslines").load("invoice.php?action=delete&token=<?php echo currentToken(); ?>&place=" + place, function () {
 				//$('#poslines').scrollTop($('#poslines')[0].scrollHeight);
 				fluxposUpdateCartTotal('');
+				// The order of the place is gone on the server: drop the snapshot cached
+				// for an offline capture of it
+				if (typeof FluxPosOffline != 'undefined' && typeof FluxPosOffline.cacheServerOrder == 'function') {
+					FluxPosOffline.cacheServerOrder();
+				}
 			});
 
 			ClearSearch(false);

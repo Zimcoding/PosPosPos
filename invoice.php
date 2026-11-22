@@ -1141,34 +1141,22 @@ if (empty($reshook)) {
 			$result = $invoice->fetch($placeid);
 
 			if ($result > 0 && $invoice->status == Facture::STATUS_DRAFT) {
-				$db->begin();
+				// The cart must really disappear: the draft invoice of the place is deleted
+				// entirely. The inherited TakePOS behavior (lines emptied, fk_soc and datec reset,
+				// shell kept) left the cart visible into the strip of parallel sales with a new
+				// start time, so pressing New looked like it removed nothing. FluxPos recreates
+				// a draft for the place automatically at the next added line (the creation branch
+				// of action=addline runs when placeid == 0), so the shell is not needed anymore.
+				$resultdelete = $invoice->delete($user);
 
-				// We delete the lines
-				$resdeletelines = 1;
-				foreach ($invoice->lines as $line) {
-					// @phan-suppress-next-line PhanPluginSuspiciousParamPosition
-					$tmpres = $invoice->deleteLine($line->id);
-					if ($tmpres < 0) {
-						$resdeletelines = 0;
-						break;
-					}
-				}
-
-				$sql = "UPDATE ".MAIN_DB_PREFIX."facture";
-				$varforconst = 'FLUXPOS_ID_THIRDPARTY'.$_SESSION["fluxposterminal"];
-				$sql .= " SET fk_soc = ".((int) getDolGlobalString($varforconst)).", ";
-				$sql .= " datec = '".$db->idate(dol_now())."'";
-				$sql .= " WHERE entity IN (".getEntity('invoice').")";
-				$sql .= " AND ref = '(PROV-POS".$db->escape($_SESSION["fluxposterminal"]."-".$place).")'";
-				$resql1 = $db->query($sql);
-
-				if ($resdeletelines && $resql1) {
-					$db->commit();
+				if ($resultdelete < 0) {
+					dol_htmloutput_errors($invoice->error, $invoice->errors, 1);
 				} else {
-					$db->rollback();
+					// The place has no draft anymore: the current cart of the page becomes
+					// an empty new sale with the default thirdparty of the terminal.
+					$placeid = 0;
+					$invoice = new Facture($db);
 				}
-
-				$invoice->fetch($placeid);
 			}
 		}
 	}
