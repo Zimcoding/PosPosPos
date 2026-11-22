@@ -399,7 +399,9 @@ print '<span class="opacitymedium">'.dol_escape_htmltag($langs->trans('FluxPosPa
 print '</td></tr>';
 print '<tr class="oddeven"><td>'.$langs->trans('FluxPosPaymentModeDirect').'</td>';
 print '<td>';
-print $form->selectyesno('FLUXPOS_PAYMENT_MODE_DIRECT'.$terminaltouse, getDolGlobalInt('FLUXPOS_PAYMENT_MODE_DIRECT'.$terminaltouse), 1);
+// 1.4: direct payment is the default now (only an explicit saved "no" opens the popup)
+$fluxposPBDirectVal = (int) getDolGlobalString('FLUXPOS_PAYMENT_MODE_DIRECT'.$terminaltouse, '1');
+print $form->selectyesno('FLUXPOS_PAYMENT_MODE_DIRECT'.$terminaltouse, $fluxposPBDirectVal, 1);
 print '<span class="opacitymedium">'.dol_escape_htmltag($langs->trans('FluxPosPaymentModeDirectDesc')).'</span>';
 print '</td></tr>';
 

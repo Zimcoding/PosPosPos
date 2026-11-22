@@ -68,7 +68,7 @@ class modFluxPos extends DolibarrModules
 		$this->descriptionlong = "Point Of Sales (compliant with touch screen), offline capable";
 
 		// Possible values for version are: 'development', 'experimental', 'dolibarr', 'dolibarr_deprecated' or a version string like 'x.y.z'
-		$this->version = '1.3.0';
+		$this->version = '1.4.0';
 		// Key used in llx_const table to save module status enabled/disabled (where FLUXPOS is value of property name of module in uppercase)
 		$this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
 		// Name of image file used for this module.
