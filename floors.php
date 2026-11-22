@@ -148,7 +148,8 @@ $title = 'FluxPos - Dolibarr '.DOL_VERSION;
 if (getDolGlobalString('MAIN_APPLICATION_TITLE')) {
 	$title = 'FluxPos - ' . getDolGlobalString('MAIN_APPLICATION_TITLE');
 }
-$arrayofcss = array(dol_buildpath('/fluxpos/css/pos.css.php', 1).'?a=xxx');
+$fluxpos_css_mtime = (int) @filemtime(__DIR__.'/css/pos.css.php');
+$arrayofcss = array(dol_buildpath('/fluxpos/css/pos.css.php', 1).($fluxpos_css_mtime > 0 ? '?v='.$fluxpos_css_mtime : ''));
 
 top_htmlhead($head, $title, 0, 0, array(), $arrayofcss);
 

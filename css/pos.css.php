@@ -60,7 +60,13 @@ require_once DOL_DOCUMENT_ROOT.'/core/lib/functions2.lib.php';
 // Define css type
 top_httphead('text/css');
 // Important: Following code is to avoid page request by browser and PHP CPU at each Dolibarr page access.
-header('Cache-Control: max-age=10800, public, must-revalidate');
+// Allow bypassing the cache like stock TakePOS does: index.php also appends ?v=<filemtime> to
+// the stylesheet URL so an updated pos.css.php is picked up even while max-age is running.
+if (empty($dolibarr_nocache)) {
+	header('Cache-Control: max-age=10800, public, must-revalidate');
+} else {
+	header('Cache-Control: no-cache');
+}
 
 
 include DOL_DOCUMENT_ROOT.'/theme/'.$conf->theme.'/theme_vars.inc.php';
