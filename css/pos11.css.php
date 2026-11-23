@@ -745,14 +745,41 @@ div#moreinfo, div#infowarehouse {
 	position: absolute;
 	top: 5px;
 	right: 5px;
-	background: var(--colorbackhmenu1);
-	color: var(--colortextbackhmenu);
+	left: auto;
+	/* 1.6.1: the theme colors of the header are usually not defined on this page
+	 * (every rule of this file passes a fallback, the badge was the only one that
+	 * did not): without one the background became transparent and the price text
+	 * inherited the color of the tile — white text on the white tile, unreadable.
+	 * The badge now keeps the Dolibarr blue and white text when needed. */
+	background: var(--colorbackhmenu1, #0080c0);
+	color: var(--colortextbackhmenu, #fff);
 	font-size: 2em;
 	padding: 4px;
 	border-radius: 2px;
 	opacity: 0.9;
 	padding-left: 6px;
 	padding-right: 6px;
+}
+
+/* 1.6.1: the price of a tile may never overflow it to the side (the overflowing
+ * part was invisible over the tile border or beyond the pane): the badge is
+ * capped to the tile width and an overlong price is cut with an ellipsis.
+ * With the badge anchored on the right, an unbreakable price (the &nbsp; before
+ * the currency) used to extend the box to the LEFT, over the photo. */
+.productgrid .productprice {
+	max-width: calc(100% - 10px);
+	box-sizing: border-box;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* On the step-through screens (phones, small tablets) the tile is half as wide:
+ * a 2em badge would fill most of it, so the badge goes down a notch there */
+@media screen and (max-width: 1023px) {
+	.productprice {
+		font-size: 1.3em;
+	}
 }
 
 
@@ -1716,6 +1743,44 @@ td.linecoledit:hover {
 	flex: 1 1 auto;
 	min-width: 0;
 	width: auto;
+}
+
+/* 1.6.1: the cart column is 300-460px wide (the full narrow screen on the mobile
+ * steps) and its line table must never be wider, otherwise the total of the line —
+ * the last column — falls behind the right edge, clipped by the pane, invisible.
+ * The line columns are compacted INSIDE the cart column only, so the sum of the
+ * minimum column widths always fits even a 300px column or a 360px phone. */
+.cartcolumn img.cartthumb {
+	width: 28px;
+	height: 28px;
+	margin-right: 4px;
+}
+.cartcolumn button.fluxposqtybtn {
+	width: 22px;
+	height: 22px;
+	line-height: 20px;
+	margin: 0 2px;
+}
+.cartcolumn .fluxposqtyvalue {
+	min-width: 1.6em;
+}
+.cartcolumn table.postablelines tr td {
+	padding-left: 4px;
+	padding-right: 4px;
+}
+.cartcolumn .postablelines td.linecoldescription {
+	/* long names/refs wrap inside the column instead of widening the table */
+	overflow-wrap: anywhere;
+	word-break: break-word;
+}
+
+/* The wrapper of the line table is covered by Dolibarr's core stylesheet, which is
+ * not always loaded on this screen: define it here so an over-wide table shows a
+ * scrollbar instead of being silently clipped by the pane (that silent clipping is
+ * what made the prices fall off the right edge invisibly). */
+div.div-table-responsive-no-min {
+	overflow-x: auto;
+	min-height: 0.01%;
 }
 
 /* Preselected payment mode on pay.php (opened from the cart block) */
