@@ -1055,6 +1055,12 @@ var FluxPosOffline = {
 			html += '<tr class="liste_total"><td colspan="2" class="right">' + self.escapeHtml(self.t('TotalTTCShort', 'Total')) + '</td><td class="right">' + self.formatAmount(total) + '</td></tr>';
 			html += '</table>';
 
+			// Deposito (deposit on returnable packaging): the deposit charges and the
+			// returned-empty refunds are applied by the server when the sale is booked
+			if (window.fluxposDeposito && lines.length) {
+				html += '<div class="fluxposofflinenotice">' + self.escapeHtml(self.t('FluxPosOfflineDepositoNotice', 'Deposito: deposit charges and returned empties are applied by the server when this sale is booked, so the booked total can differ from the total shown here.')) + '</div>';
+			}
+
 			// Payments validated on the terminal
 			if (validated) {
 				var paid = 0;
