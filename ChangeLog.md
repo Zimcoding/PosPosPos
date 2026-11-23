@@ -1,5 +1,14 @@
 # CHANGELOG FLUXPOS FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.6.1
+
+- Fix (**price badge of the product tiles**: white text on a white background, unreadable): the badge is the only rule of the stylesheet that read the theme colors **without a fallback** (`var(--colorbackhmenu1)` / `var(--colortextbackhmenu)`). When the theme variables are not defined on the screen, the background became transparent and the text inherited the tile color - on the white tile that is invisible or unreadable (compare: the badge showed blue, then plain black price text, then white-on-white depending on the context). The badge now falls back to the Dolibarr blue with white text, like every other rule of this stylesheet.
+- Fix (**prices overflow to the side, clipped invisibly**): the total of a cart line fell behind the right edge of the cart column - the columns of the line table (product thumbnail, +/- steppers, quantities, total) are wider than a 300-460px cart column or a phone screen together, and the wrapper that should turn that into a scrollbar (`.div-table-responsive-no-min`, a Dolibarr core rule) is not always loaded on this screen, so the pane clipped it silently. Fix on three levels:
+  - the line columns inside the cart column are compacted (28px thumbnails, 22px steppers, tighter value and cell paddings, long names wrap instead of widening the table) so the natural table fits the column;
+  - the responsive wrapper is defined in this stylesheet too, so an over-wide table scrolls instead of being silently clipped;
+  - the price badge of a tile is capped to its tile (the unbreakable price string used to extend the invisible badge box past the tile edge) and goes down to 1.3em on the step-through screens where the tile is half as wide.
+- Module version 1.6.1.
+
 ## 1.6.0
 
 - New (**offline works like online, in one ticket**): the offline mode no longer forks into a second, "separate" order. Whatever is captured on the terminal while offline - on an empty place or on a place with an order registered on the server - stays one order and is synchronized in the background: as soon as the connection is back, an background sync replays the captured products into the draft invoice of the place on the server (quantities raised to the captured ones, the prices and discounts of the server lines are kept; add lines are added on top), exactly like a ticket built while online. The caller never has to press New or pay twice: captured products flow into the online ticket automatically.
