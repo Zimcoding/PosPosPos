@@ -1142,36 +1142,9 @@ div#moreinfo, div#infowarehouse {
 	cursor: pointer;
 }
 
-/* Local cart of a place, displayed while the terminal is offline, before the
- * background synchronization replays it to the server. */
-.fluxposofflinecart .fluxposofflineqtybtn {
-	width: 26px;
-	height: 26px;
-	margin: 0 4px;
-	padding: 0;
-	border: none;
-	border-radius: 4px;
-	background-color: #2f5f8f;
-	color: #fff;
-	font-weight: bold;
-	font-size: 15px;
-	cursor: pointer;
-}
-
-.fluxposofflinecart .fluxposofflineqtybtn:active {
-	background-color: #244a70;
-}
-
-.fluxposofflinecart .fluxposofflineqtyval {
-	display: inline-block;
-	min-width: 28px;
-	font-weight: bold;
-}
-
-.fluxposofflinecart .fluxposofflinelabel {
-	white-space: normal;
-}
-
+/* 1.6: the local offline cart renders the exact same markup as the online order
+ * (see js/offline11.js renderCart()): it shares the buttons and classes of the
+ * server cart lines, so it has no styles of its own anymore. */
 .fluxposofflinenotice {
 	margin: 4px 6px;
 	padding: 4px 8px;

@@ -1,5 +1,13 @@
 # CHANGELOG FLUXPOS FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.6.0
+
+- New (**offline works like online, in one ticket**): the offline mode no longer forks into a second, "separate" order. Whatever is captured on the terminal while offline - on an empty place or on a place with an order registered on the server - stays one order and is synchronized in the background: as soon as the connection is back, an background sync replays the captured products into the draft invoice of the place on the server (quantities raised to the captured ones, the prices and discounts of the server lines are kept; add lines are added on top), exactly like a ticket built while online. The caller never has to press New or pay twice: captured products flow into the online ticket automatically.
+  - The order shown on the screen is adopted into the local cart even when no snapshot of it was cached before the connection dropped: the lines displayed on the screen are read back (product ids, quantities, totals).
+  - "New" while offline only discards the order captured on this terminal (nothing unsent is synchronized); the order on the server stays intact and is shown again with its merged lines when the connection is back.
+- Fix (**offline cart layout**): the offline cart rendered a table of its own with foreign classes, so the layout of the cart changed as soon as the terminal went offline. It now renders the exact same markup as the online order of the server (same wrapper, same table id and classes, same header columns Disc. / Qty / Total, same line classes, same sticky total): offline and online look and behave the same.
+- New (**the line total is the tap target of the unit price**): 1.4.0 removed the Price key from the line-edit popup, which left the unit price of a line without any entry point. The total of each cart line is now tappable like the Qty and Disc. cells and opens the line-edit popup on the price mode (changes the unit price of the line; the discount of the line is already on the Disc. cell). Not shown when line editing is not allowed.
+
 ## 1.5.0
 
 - New (**compatible with Deposito, the deposit on returnable packaging module**): a sale that needs no code change was already covered - FluxPos creates its receipts through the standard invoice class, so the Deposito trigger adds the deposit line of every product that names a deposit product, follows the quantities and forces 0% VAT / no discount on deposit and leeggoed lines, and FluxPos receipts are recognised by Deposito from its 0.2.5. Two gaps are closed now:

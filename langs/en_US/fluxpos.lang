@@ -248,7 +248,8 @@ PaymentTypeShortCHQ=Check
 # Offline engine (messages shown by the POS screen while the terminal works offline)
 #
 FluxPosOfflineNoIndexedDB=IndexedDB is not supported by this browser
-FluxPosOfflineBlockedNotice=This place has an order registered on the server, which cannot be modified while the terminal is offline. Press New to start a new separate order on this terminal.
+FluxPosOfflineBlockedNotice=This place has an order registered on the server, which cannot be modified while the terminal is offline and could not be captured on this terminal. Its lines can be edited again as soon as the connection is back.
+FluxPosOfflineNewConfirm=The order of this place is registered on the server and cannot be emptied while the terminal is offline: it stays intact and the products captured while offline will be merged into it when the connection is back. Empty the order captured on this terminal instead?
 FluxPosOfflineSaleLocked=This sale has been validated on this terminal and is waiting for its synchronization to the server. It cannot be modified anymore.
 FluxPosOfflineNotInCachedCatalog=This product is not into the catalog cached on this terminal. It cannot be sold while the terminal is offline.
 FluxPosOfflineAdoptedLineRaiseOnly=A line of the order of this place on the server can only be raised while the terminal is offline. The quantity is changed on the server when the connection is back.
