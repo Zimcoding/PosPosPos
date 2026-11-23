@@ -277,23 +277,8 @@ var FluxPosOffline = {
 	requestTimeout: 15000,		// ms before a call to the server is considered lost
 	probeInterval: 15000,		// ms between two checks of the server while it is down
 	_lastSaleNotice: '',		// message shown after a sale was stored on the terminal
-	_separatePlace: null,		// place where a new order was started offline next to an order on the server
 	_lastTokenReload: 0,		// timestamp of the last automatic reload after a refused token
 	_lastBlockedNotice: 0,		// timestamp of the last "order locked on the server" notice
-
-	/**
-	 * Start a new order on this terminal while the place shows an order stored on the
-	 * server that cannot be changed offline. The new order is kept apart: it is never
-	 * merged into the order on the server, it can only be paid (then it is a sale).
-	 *
-	 * @returns {Promise<bool>} Promise of true when the empty order is shown
-	 */
-	startSeparateOrder: function () {
-		'use strict';
-
-		this._separatePlace = (typeof place != 'undefined') ? String(place) : null;
-		return this.renderCart(true);
-	},
 
 	/**
 	 * Is the terminal offline? True when the browser has no network, or when the server
@@ -430,7 +415,7 @@ var FluxPosOffline = {
 			return;
 		}
 		this._lastBlockedNotice = now;
-		window.alert(this.t('FluxPosOfflineBlockedNotice', 'This place has an order registered on the server, which cannot be modified while the terminal is offline. Press New to start a new separate order on this terminal.'));
+		window.alert(this.t('FluxPosOfflineBlockedNotice', 'This place has an order registered on the server, which cannot be modified while the terminal is offline and could not be captured on this terminal. Its lines can be edited again as soon as the connection is back.'));
 	},
 
 	/**
@@ -471,7 +456,6 @@ var FluxPosOffline = {
 		}
 		console.log('FluxPos offline: the server can be reached again');
 		this.serverDown = false;
-		this._separatePlace = null;
 		if (this._probeTimer) {
 			clearInterval(this._probeTimer);
 			this._probeTimer = null;
@@ -483,13 +467,15 @@ var FluxPosOffline = {
 				return;
 			}
 			self.getCart().then(function (cart) {
-				if (cart && cart.separate === true) {
-					// A separate local order is being captured on this place: keep it
-					// displayed until it is paid (the order on the server is untouched)
+				if (cart && cart.lines && cart.lines.length) {
+					// The order on the server does not include the captured products yet
+					// (their synchronization is still waiting or has failed): keep the
+					// local cart displayed until the synchronization succeeds
 					self.renderCart(true);
 					return;
 				}
 				if (typeof Refresh == 'function') {
+					// The captured products are on the server now: show its order again
 					Refresh();
 				}
 			});
@@ -712,7 +698,7 @@ var FluxPosOffline = {
 		this._lastSaleNotice = '';
 		return this.getCart().then(function (cart) {
 			if (cart == null) {
-				cart = { place: String(place), socid: socid, created: Math.floor(Date.now() / 1000), lines: [], separate: (self._separatePlace === String(place)) };
+				cart = { place: String(place), socid: socid, created: Math.floor(Date.now() / 1000), lines: [] };
 			}
 			if (cart.validated) {
 				window.alert(self.t('FluxPosOfflineSaleLocked', 'This sale has been validated on this terminal and is waiting for its synchronization to the server. It cannot be modified anymore.'));
@@ -817,7 +803,7 @@ var FluxPosOffline = {
 				}
 				return false;
 			}
-			if (cart.adopted === true && cart.separate !== true) {
+			if (cart.adopted === true) {
 				// The captured products are merged into the draft invoice which already
 				// exists on the server for this place: that order is paid on the server
 				// (only an order started offline can be paid whole from this terminal).
@@ -920,15 +906,117 @@ var FluxPosOffline = {
 	},
 
 	/**
+	 * Build the adopted local cart from a snapshot of the order of the place cached
+	 * while online (see cacheServerOrder()).
+	 *
+	 * @param  {Object} order Snapshot of the order of the place
+	 * @returns {Object} The adopted cart (with the lines of the order)
+	 */
+	adoptedCartFromOrder: function (order) {
+		'use strict';
+
+		var plc = (typeof place != 'undefined') ? place : 0;
+		var adopted = {
+			place: String(plc),
+			socid: parseInt(order.socid, 10) || 0,
+			created: Math.floor(Date.now() / 1000),
+			invoiceid: parseInt(order.invoiceid, 10) || 0,
+			adopted: true,
+			lines: []
+		};
+		for (var i = 0; i < order.lines.length; i++) {
+			adopted.lines.push({
+				rowid: order.lines[i].rowid,
+				ref: order.lines[i].ref,
+				label: order.lines[i].label,
+				price_ttc: parseFloat(order.lines[i].price_ttc) || 0,
+				qty: parseFloat(order.lines[i].qty) || 0,
+				lineid: parseInt(order.lines[i].lineid, 10) || 0,
+				adopted: true
+			});
+		}
+		return adopted;
+	},
+
+	/**
+	 * Build the adopted local cart from the lines of the order of the place currently
+	 * shown on the screen, when no snapshot of that order was cached while online
+	 * (the snapshot always misses when the order was never displayed on this screen
+	 * before the connection was lost). The product id, quantity and total of each line
+	 * are read from the same markup invoice.php prints for the online cart; the exact
+	 * prices and discounts then still live on the server: the background merge only
+	 * sends product ids and quantities, and the server recalculates its own lines.
+	 *
+	 * @returns {Promise<Object|null>} Promise of the adopted cart, null when the screen shows no parsable lines
+	 */
+	adoptFromScreen: function () {
+		'use strict';
+
+		var self = this;
+		var invoiceid = parseInt(jQuery('#invoiceid').val(), 10) || 0;
+		var socid = parseInt(jQuery('#thirdpartyid').val(), 10) || 0;
+		var adopted = {
+			place: (typeof place != 'undefined') ? String(place) : '0',
+			socid: socid,
+			created: Math.floor(Date.now() / 1000),
+			invoiceid: invoiceid,
+			adopted: true,
+			lines: []
+		};
+		// Note: the discount (dark product) lines printed by a special module cannot be
+		// told apart in the markup: like the server merge itself, only product lines are
+		// adopted (see the same rule in cacheServerOrder()).
+		jQuery('#poslines tr.posinvoiceline').each(function () {
+			var row = jQuery(this);
+			var src = row.find('img.cartthumb').attr('src') || '';
+			var match = src.match(/[?&]id=(\d+)/);
+			var rowid = match ? parseInt(match[1], 10) : 0;
+			var qty = parseFloat(row.find('.fluxposqtyvalue').first().text()) || 0;
+			if (rowid <= 0 || qty <= 0) {
+				return;			// No product thumbnail (free line, discount, ...): nothing to adopt
+			}
+			var price = 0;
+			// The total of the line is the last numeric cell of the row (never the stock span)
+			row.find('td.right').each(function () {
+				var text = jQuery(this).text().trim();
+				var num = text.replace(/[^0-9,.\-]/g, '');
+				if (num.indexOf(',') >= 0 && num.indexOf('.') >= 0) {
+					num = num.replace(/\./g, '').replace(',', '.');
+				} else if (num.indexOf(',') >= 0) {
+					num = num.replace(',', '.');
+				}
+				price = parseFloat(num) || 0;
+			});
+			adopted.lines.push({
+				rowid: rowid,
+				ref: '',
+				label: jQuery.trim(row.children('td.left').first().clone().children('img').remove().end().text()) || ('Product ' + rowid),
+				price_ttc: price,
+				qty: qty,
+				lineid: parseInt(row.attr('id'), 10) || 0,
+				adopted: true
+			});
+		});
+		if (!adopted.lines.length) {
+			return Promise.resolve(null);
+		}
+		return this.saveCart(adopted).then(function () {
+			return adopted;
+		}).catch(function (error) {
+			console.log('FluxPos offline: adoption of the order shown on the screen failed', error);
+			return null;
+		});
+	},
+
+	/**
 	 * Capture a product tap while offline on a place whose order exists on the server.
-	 * On the first tap, the order of the place is adopted into the local cart from the
-	 * last snapshot cached while online (see cacheServerOrder()): its lines are shown
+	 * On the first tap, the order of the place is adopted into the local cart (from the
+	 * last snapshot cached while online, see cacheServerOrder(), or, when none was
+	 * cached, from the lines currently displayed on the screen): its lines are shown
 	 * again and the new products can be added; the background synchronization merges
 	 * the cart into the draft invoice of the place (same endpoint and rules as for an
 	 * order started offline: quantities raised to the captured ones, never doubled).
-	 * When no snapshot is cached (the order has never been displayed on this screen),
-	 * the cashier is guided to "New" as before: only the lines can then be merged into
-	 * the order of the place, not the price of the lines already on it.
+	 * When nothing can be adopted, the capture is refused with a notice.
 	 *
 	 * @param  {number} idproduct ID of product
 	 * @param  {number} qty       Quantity to add
@@ -939,48 +1027,45 @@ var FluxPosOffline = {
 
 		var self = this;
 		return this.getCart().then(function (cart) {
+			var invoiceid = 0;
 			if (cart != null) {
-				if (cart.separate === true) {
-					// The cashier is capturing a separate order next to the order of the
-					// place: never merge both.
-					self.notifyBlockedCapture();
-					return false;
-				}
 				return self.addProduct(idproduct, qty);
+			}
+			if (typeof jQuery != 'undefined') {
+				invoiceid = parseInt(jQuery('#invoiceid').val(), 10) || 0;
 			}
 			var plc = (typeof place != 'undefined') ? place : 0;
 			return takePOSOfflineStoreGet('order:' + plc).then(function (order) {
-				if (!order || !order.invoiceid) {
+				if (order && order.invoiceid) {
+					return self.saveCart(self.adoptedCartFromOrder(order)).then(function () {
+						// Show the adopted order (its lines, then the added product) at once:
+						// the screen still displays the fragment of the server order, which must
+						// be replaced even though #invoiceid still holds its id
+						return self.renderCart(true);
+					}).then(function () {
+						return self.addProduct(idproduct, qty);
+					});
+				}
+				if (invoiceid > 0 && typeof jQuery != 'undefined' && jQuery('#poslines tr.posinvoiceline').length) {
+					// Adopt the lines currently displayed on the screen
+					return self.adoptFromScreen().then(function (adopted) {
+						if (!adopted) {
+							self.notifyBlockedCapture();
+							return false;
+						}
+						return self.renderCart(true).then(function () {
+							return self.addProduct(idproduct, qty);
+						});
+					});
+				}
+				if (invoiceid > 0) {
+					// An order is on the server but displayed nowhere and not cached: it
+					// cannot be captured safely while offline
 					self.notifyBlockedCapture();
 					return false;
 				}
-				var adopted = {
-					place: String(plc),
-					socid: parseInt(order.socid, 10) || 0,
-					created: Math.floor(Date.now() / 1000),
-					invoiceid: parseInt(order.invoiceid, 10) || 0,
-					adopted: true,
-					lines: []
-				};
-				for (var i = 0; i < order.lines.length; i++) {
-					adopted.lines.push({
-						rowid: order.lines[i].rowid,
-						ref: order.lines[i].ref,
-						label: order.lines[i].label,
-						price_ttc: parseFloat(order.lines[i].price_ttc) || 0,
-						qty: parseFloat(order.lines[i].qty) || 0,
-						lineid: parseInt(order.lines[i].lineid, 10) || 0,
-						adopted: true
-					});
-				}
-				return self.saveCart(adopted).then(function () {
-					// Show the adopted order (its lines, then the added product) at once:
-					// the screen still displays the fragment of the server order, which must
-					// be replaced even though #invoiceid still holds its id
-					return self.renderCart(true);
-				}).then(function () {
-					return self.addProduct(idproduct, qty);
-				});
+				// No order on the server for this place: the tap just starts a local order
+				return self.addProduct(idproduct, qty);
 			});
 		});
 	},
@@ -1021,39 +1106,54 @@ var FluxPosOffline = {
 				total += lines[i].price_ttc * lines[i].qty;
 			}
 
-			// Same hidden fields as the #poslines fragment of invoice.php
+			// Same markup as the #poslines fragment of invoice.php: same wrapper, same
+			// table id and classes, same hidden fields in the first header cell, same
+			// header columns (Disc / Qty / Total) and same line classes, so the offline
+			// cart looks and behaves exactly like the order of the server once displayed
+			// (1.6: this used to be a foreign table)
+			html += '<div class="div-table-responsive-no-min invoice">';
+			html += '<table id="tablelines" class="noborder noshadow postablelines centpercent">';
+			html += '<tr class="liste_titre nodrag nodrop">';
+			html += '<td class="linecoldescription">';
 			html += '<input type="hidden" name="invoiceid" id="invoiceid" value="">';
 			html += '<input type="hidden" name="thirdpartyid" id="thirdpartyid" value="' + ((cart && cart.socid) ? parseInt(cart.socid, 10) : 0) + '">';
 			html += '<input type="hidden" name="offlinecart" id="offlinecart" value="1">';
-			html += '<table class="fluxposofflinecart">';
-			html += '<tr class="liste_titre nodrag nodrop"><td class="linecoldescription"></td><td class="linecolqty right">' + self.escapeHtml(self.t('Qty', 'Qty')) + '</td><td class="linecolht right"><span class="opacitymedium small">' + self.escapeHtml(self.t('TotalTTCShort', 'Total')) + '</span></td></tr>';
+			html += '</td>';
+			html += '<td class="linecolqty right">' + self.escapeHtml(self.t('ReductionShort', 'Disc.')) + '</td>';
+			html += '<td class="linecolqty right">' + self.escapeHtml(self.t('Qty', 'Qty')) + '</td>';
+			html += '<td class="linecolht right nowraponall"><span class="opacitymedium small">' + self.escapeHtml(self.t('TotalTTCShort', 'Total')) + '</span><br><span id="linecolht-span-total" style="font-size:1.3em; font-weight: bold;">' + self.formatAmount(total) + '</span></td>';
+			html += '</tr>';
 			if (!lines.length) {
 				html += '<tr class="drag drop oddeven"><td class="left"><span class="opacitymedium">' + self.escapeHtml(self.t('Empty', 'Empty')) + '</span></td><td></td><td></td></tr>';
 			}
 			for (i = lines.length - 1; i >= 0; i--) {
 				line = lines[i];
-				html += '<tr class="drag drop oddeven posinvoiceline fluxposofflinecartline">';
+				// Like on the server: the row id is the invoice line id when the line was
+				// adopted from the order of the place, a pseudo id otherwise
+				html += '<tr class="drag drop oddeven posinvoiceline" id="' + (line.lineid > 0 ? parseInt(line.lineid, 10) : 'offline' + parseInt(line.rowid, 10)) + '">';
 				html += '<td class="left">';
 				// Same thumbnail as the server cart lines (line.rowid holds the product id,
 				// also for the lines adopted from the order of the place on the server)
 				if (line.rowid > 0 && !window.fluxposhideproductimages) {
 					html += '<img class="cartthumb" loading="lazy" alt="" onerror="this.style.display=\'none\';" src="' + self.fluxposbaseurl + 'genimg/index.php?query=pro&id=' + parseInt(line.rowid, 10) + '">';
 				}
-				html += '<span class="fluxposofflinelabel">' + self.escapeHtml(line.label) + '</span></td>';
-				html += '<td class="right nowraponall fluxposofflineqty">';
+				html += self.escapeHtml(line.label) + '</td>';
+				// The offline cart has no per-line discount (it lives on the lines of the
+				// server): the Disc column is only there for the identical column layout
+				html += '<td class="right"></td>';
+				html += '<td class="right nowraponall">';
 				if (!validated) {
-					html += '<button type="button" class="fluxposofflineqtybtn" onclick="FluxPosOffline.changeQty(' + line.rowid + ', -1);">-</button>';
+					html += '<button type="button" class="fluxposqtybtn" onclick="event.stopPropagation(); FluxPosOffline.changeQty(' + line.rowid + ', -1);">-</button>';
 				}
-				html += '<span class="fluxposofflineqtyval">' + self.escapeHtml(line.qty) + '</span>';
+				html += '<span class="fluxposqtyvalue">' + self.escapeHtml(line.qty) + '</span>';
 				if (!validated) {
-					html += '<button type="button" class="fluxposofflineqtybtn" onclick="FluxPosOffline.changeQty(' + line.rowid + ', 1);">+</button>';
+					html += '<button type="button" class="fluxposqtybtn" onclick="event.stopPropagation(); FluxPosOffline.changeQty(' + line.rowid + ', 1);">+</button>';
 				}
 				html += '</td>';
-				html += '<td class="right fluxposofflinetotal">' + self.formatAmount(line.price_ttc * line.qty) + '</td>';
+				html += '<td class="right classfortooltip">' + self.formatAmount(line.price_ttc * line.qty) + '</td>';
 				html += '</tr>';
 			}
-			html += '<tr class="liste_total"><td colspan="2" class="right">' + self.escapeHtml(self.t('TotalTTCShort', 'Total')) + '</td><td class="right">' + self.formatAmount(total) + '</td></tr>';
-			html += '</table>';
+			html += '</table></div>';
 
 			// Deposito (deposit on returnable packaging): the deposit charges and the
 			// returned-empty refunds are applied by the server when the sale is booked
@@ -1079,7 +1179,7 @@ var FluxPosOffline = {
 			if (validated) {
 				html += '<div class="fluxposofflinenotice">' + self.escapeHtml(self.t('FluxPosOfflineSaleStoredNotice', 'This sale is validated. It has been safely stored with its payments: its invoice number and its receipt will be issued by the server as soon as the synchronization can be done.')) + '</div>';
 			} else if (lines.length) {
-				if (cart && cart.adopted === true && cart.separate !== true) {
+				if (cart && cart.adopted === true) {
 					html += '<div class="fluxposofflinenotice">' + self.escapeHtml(self.t('FluxPosOfflineAdoptedNotice', 'This order is captured on this terminal, its lines included. It is merged into the order of this place on the server as soon as the connection is back (only the quantities of its own lines can be raised while offline).')) + '</div>';
 				} else {
 					html += '<div class="fluxposofflinenotice">' + self.escapeHtml(!self.isOffline() ? self.t('FluxPosOfflineOrderSynced', 'This order is synchronized to the server in background.') : self.t('FluxPosOfflineOrderStoredOffline', 'This order is stored on this terminal and will be synchronized to the server when the connection is back.')) + '</div>';
@@ -1480,12 +1580,6 @@ var FluxPosOffline = {
 							return takePOSOfflineStoreDelete(key).then(function () {
 								return true;
 							});
-						}
-						if (cart.separate === true) {
-							// New order started offline while the place had an order on the server:
-							// sending it would merge it into that other order. It stays on the
-							// terminal until it is paid (then it is a sale) or discarded.
-							return true;
 						}
 						var lines = [];
 						for (var i = 0; i < cart.lines.length; i++) {

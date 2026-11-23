@@ -257,6 +257,7 @@ var fluxposlang = {
 	PaymentTypeShortCHQ: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("PaymentTypeShortCHQ")); ?>',
 	FluxPosOfflineNoIndexedDB: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineNoIndexedDB")); ?>',
 	FluxPosOfflineBlockedNotice: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineBlockedNotice")); ?>',
+	FluxPosOfflineNewConfirm: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineNewConfirm")); ?>',
 	FluxPosOfflineSaleLocked: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineSaleLocked")); ?>',
 	FluxPosOfflineNotInCachedCatalog: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineNotInCachedCatalog")); ?>',
 	FluxPosOfflineAdoptedLineRaiseOnly: '<?php echo dol_escape_js($langs->transnoentitiesnoconv("FluxPosOfflineAdoptedLineRaiseOnly")); ?>',
@@ -1202,13 +1203,15 @@ function New() {
 	invoiceid = $("#invoiceid").val();		// This is a hidden field added by invoice.php
 
 	if (typeof FluxPosOffline != 'undefined' && FluxPosOffline.isOffline()) {
-		if ($('#offlinecart').val() == '1' && ($('#invoiceid').val() || '') == '') {
-			// Discard the local cart of the place (nothing was sent to the server yet)
+		// 1.6: offline and online work the same: there is no second, separate order
+		// while offline anymore. "New" discards only the local cart of the place
+		// (nothing was sent to the server yet); the order registered on the server
+		// stays intact and is merged with the captured products in the background
+		// when the connection is back (see js/offline11.js).
+		if ($('#offlinecart').val() == '1' || ($('#invoiceid').val() || '') == '') {
 			FluxPosOffline.clearCart();
-		} else if (confirm('This place has an order registered on the server, which cannot be modified while the terminal is offline. Start a new separate order on this terminal? It can only be paid whole while it is offline.')) {
-			// The order of the place stays apart on the server and is shown again when the
-			// connection is back. The new order is stored on the terminal and can be paid whole.
-			FluxPosOffline.startSeparateOrder();
+		} else if (confirm((window.fluxposlang && window.fluxposlang.FluxPosOfflineNewConfirm) || 'The order of this place is registered on the server and cannot be emptied while the terminal is offline: it stays intact and the products captured while offline will be merged into it when the connection is back. Empty the order captured on this terminal instead?')) {
+			FluxPosOffline.clearCart();
 		}
 		ClearSearch(false);
 		return;

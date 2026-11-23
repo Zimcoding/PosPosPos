@@ -2453,7 +2453,14 @@ if ($placeid > 0) {
 					}
 					$htmlforlines .= '</td>';
 				}
-				$htmlforlines .= '<td class="right classfortooltip" title="'.$moreinfo.'">';
+				// 1.6: the total of the line is the tap target of its unit price: when the
+				// line can be edited, the line-edit popup opens on the price mode (like the
+				// old #price key of the numberpad, which is not in the popup anymore)
+				if ($fluxposLineEditable) {
+					$htmlforlines .= '<td class="right classfortooltip cursorpointer" title="'.dol_escape_htmltag($langs->trans("Modify").' - '.$langs->trans("Price")).'" onclick="event.stopPropagation(); FluxPosTapLine(this, \'p\');">';
+				} else {
+					$htmlforlines .= '<td class="right classfortooltip" title="'.$moreinfo.'">';
+				}
 				$htmlforlines .= price($line->total_ttc, 1, '', 1, -1, -1, $conf->currency);
 				if (isModEnabled('multicurrency') && !empty($_SESSION["fluxposcustomercurrency"]) && $conf->currency != $_SESSION["fluxposcustomercurrency"]) {
 					//Only show customer currency if multicurrency module is enabled, if currency selected and if this currency selected is not the same as main currency
