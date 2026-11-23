@@ -682,14 +682,44 @@ var FluxPosOffline = {
 	},
 
 	/**
+	 * Parse a formatted amount as displayed on a screen (e.g. "1 234,56 €" or
+	 * "$1,234.56") into a number. Tolerant of both decimal separators, of the
+	 * thousands separators and of any currency text around the amount. When both
+	 * separators appear, the last one is the decimal separator and the other
+	 * (repeated) one is thousands, so the European and the US formatting both parse.
+	 * The same helper is used by the adopted-line parser of adoptFromScreen().
+	 *
+	 * @param  {string} text Formatted amount as displayed
+	 * @returns {number} The amount (0 when nothing can be parsed)
+	 */
+	parseAmountText: function (text) {
+		'use strict';
+
+		var num = String(text == null ? '' : text).replace(/[^0-9,.\-]/g, '');
+		if (num.indexOf(',') >= 0 && num.indexOf('.') >= 0) {
+			if (num.lastIndexOf(',') > num.lastIndexOf('.')) {
+				num = num.replace(/\./g, '').replace(/,/g, '.');
+			} else {
+				num = num.replace(/,/g, '');
+			}
+		} else if (num.indexOf(',') >= 0) {
+			num = num.replace(/,/g, '.');
+		}
+		return parseFloat(num) || 0;
+	},
+
+	/**
 	 * Add a product into the local cart of the current place.
-	 * The product data (label, price) come from the catalog cached while online.
+	 * The product data (label, price) come first from the catalog cached while
+	 * online, then from the tapped tile itself (info): a tap is never lost, even
+	 * when the catalog was never synchronized on this terminal.
 	 *
 	 * @param  {number} idproduct ID of product
 	 * @param  {number} qty       Quantity to add
-	 * @returns {Promise<bool>} Promise resolved to false when the product is not into the cached catalog
+	 * @param  {Object} [info]    Data read from the tapped tile: {label: string, price_ttc: number} (optional fallback when the product is not into the cached catalog)
+	 * @returns {Promise<bool>} Promise resolved to false when the product could not be identified at all
 	 */
-	addProduct: function (idproduct, qty) {
+	addProduct: function (idproduct, qty, info) {
 		'use strict';
 
 		var self = this;
@@ -720,6 +750,11 @@ var FluxPosOffline = {
 					}
 				}
 				if (!found) {
+					if (product == null && info && info.label) {
+						// 1.6.2: the tapped tile carries its own label and price: never refuse
+						// a tap only because the catalog was never cached on this terminal
+						product = { rowid: parseInt(idproduct, 10) || 0, ref: (info.ref ? String(info.ref) : ''), label: String(info.label), price_ttc: parseFloat(info.price_ttc) || 0 };
+					}
 					if (product == null) {
 						window.alert(self.t('FluxPosOfflineNotInCachedCatalog', 'This product is not into the catalog cached on this terminal. It cannot be sold while the terminal is offline.'));
 						return false;
@@ -978,14 +1013,7 @@ var FluxPosOffline = {
 			var price = 0;
 			// The total of the line is the last numeric cell of the row (never the stock span)
 			row.find('td.right').each(function () {
-				var text = jQuery(this).text().trim();
-				var num = text.replace(/[^0-9,.\-]/g, '');
-				if (num.indexOf(',') >= 0 && num.indexOf('.') >= 0) {
-					num = num.replace(/\./g, '').replace(',', '.');
-				} else if (num.indexOf(',') >= 0) {
-					num = num.replace(',', '.');
-				}
-				price = parseFloat(num) || 0;
+				price = self.parseAmountText(jQuery(this).text());
 			});
 			adopted.lines.push({
 				rowid: rowid,
@@ -1020,16 +1048,17 @@ var FluxPosOffline = {
 	 *
 	 * @param  {number} idproduct ID of product
 	 * @param  {number} qty       Quantity to add
+	 * @param  {Object} [info]    Data read from the tapped tile (see addProduct())
 	 * @returns {Promise<bool>} Promise of true when the product is added to the cart
 	 */
-	captureOnServerOrder: function (idproduct, qty) {
+	captureOnServerOrder: function (idproduct, qty, info) {
 		'use strict';
 
 		var self = this;
 		return this.getCart().then(function (cart) {
 			var invoiceid = 0;
 			if (cart != null) {
-				return self.addProduct(idproduct, qty);
+				return self.addProduct(idproduct, qty, info);
 			}
 			if (typeof jQuery != 'undefined') {
 				invoiceid = parseInt(jQuery('#invoiceid').val(), 10) || 0;
@@ -1043,7 +1072,7 @@ var FluxPosOffline = {
 						// be replaced even though #invoiceid still holds its id
 						return self.renderCart(true);
 					}).then(function () {
-						return self.addProduct(idproduct, qty);
+						return self.addProduct(idproduct, qty, info);
 					});
 				}
 				if (invoiceid > 0 && typeof jQuery != 'undefined' && jQuery('#poslines tr.posinvoiceline').length) {
@@ -1054,7 +1083,7 @@ var FluxPosOffline = {
 							return false;
 						}
 						return self.renderCart(true).then(function () {
-							return self.addProduct(idproduct, qty);
+							return self.addProduct(idproduct, qty, info);
 						});
 					});
 				}
@@ -1065,7 +1094,7 @@ var FluxPosOffline = {
 					return false;
 				}
 				// No order on the server for this place: the tap just starts a local order
-				return self.addProduct(idproduct, qty);
+				return self.addProduct(idproduct, qty, info);
 			});
 		});
 	},

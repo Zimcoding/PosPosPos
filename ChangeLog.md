@@ -1,5 +1,10 @@
 # CHANGELOG FLUXPOS FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.6.2
+
+- Fix (**a product tapped while offline was refused, still adding nothing**): a tap could only become a line of the local cart when the product was found in the catalog that the terminal cached while online. When that cache was missing, incomplete or stored under another third party of the screen, every tap hit the only remaining hard dependency of the offline flow and was refused with the "not in the catalog cached" alert. A tap now never depends on that cache: the label and the price are read **from the product tile that was tapped** (the same tile the user sees, formatted amount parsed by a tolerant separator parser that understands both the European and the US formatting). The cached catalog stays the primary source (it holds the better reference and label data), the tile is the fallback - the tap is captured in every case, since the background merge only sends the product id and the quantity anyway (the server recalcutes its own lines and prices). The refusal alert now only happens when truly nothing about the product can be read at all. The amount parser is extracted as the shared helper `FluxPosOffline.parseAmountText()` (also used by the adopted-from-screen parser).
+- Module version 1.6.2.
+
 ## 1.6.1
 
 - Fix (**price badge of the product tiles**: white text on a white background, unreadable): the badge is the only rule of the stylesheet that read the theme colors **without a fallback** (`var(--colorbackhmenu1)` / `var(--colortextbackhmenu)`). When the theme variables are not defined on the screen, the background became transparent and the text inherited the tile color - on the white tile that is invisible or unreadable (compare: the badge showed blue, then plain black price text, then white-on-white depending on the context). The badge now falls back to the Dolibarr blue with white text, like every other rule of this stylesheet.
