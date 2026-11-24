@@ -391,6 +391,127 @@ function fluxposReconcileLines($invoice, $customer, $lines)
 }
 
 /**
+ * Make the draft invoice exactly match the captured lines (set semantics, used by the
+ * unified flow of the terminal where its local cart is always the full ticket). A
+ * product line already on the draft is updated to the captured quantity (lowered too,
+ * unlike fluxposReconcileLines) or removed when the capture no longer contains it; a
+ * product line is added when missing. Manual lines, free lines, supplement lines and
+ * deposito lines are never touched. Replay-safe: the same capture applied twice leaves
+ * the same draft. The caller owns the database transaction.
+ *
+ * @param  Facture $invoice  Draft invoice (with its lines loaded)
+ * @param  Societe $customer Customer of the invoice
+ * @param  array   $lines    Captured lines: array('id' => product id, 'qty' => qty)
+ * @return int               0 if OK, -1 if error (message in $invoice->error)
+ */
+function fluxposReconcileLinesSet($invoice, $customer, $lines)
+{
+	global $db, $mysoc;
+
+	// Sum the captured quantity per product (the capture may repeat a product)
+	$wanted = array();
+	foreach ($lines as $linetarget) {
+		$idproduct = (int) $linetarget['id'];
+		$qty = (float) $linetarget['qty'];
+		if ($idproduct <= 0 || $qty <= 0) {
+			continue;
+		}
+		$wanted[$idproduct] = (isset($wanted[$idproduct]) ? $wanted[$idproduct] : 0) + $qty;
+	}
+
+	// Remove the product lines that the capture no longer contains. Manual lines,
+	// free lines, supplement lines and deposito lines are never touched.
+	$linestodelete = array();
+	foreach ($invoice->lines as $line) {
+		if ($line->fk_product > 0 && $line->fk_parent_line <= 0 && $line->special_code != 4 && empty($wanted[(int) $line->fk_product])) {
+			$linestodelete[] = $line->id;
+		}
+	}
+	foreach ($linestodelete as $idlinedelete) {
+		$result = $invoice->deleteline($idlinedelete);
+		if ($result < 0) {
+			return -1;
+		}
+	}
+	if (!empty($linestodelete)) {
+		// Reload the invoice so its lines match the database again
+		if ($invoice->fetch($invoice->id) <= 0) {
+			return -1;
+		}
+	}
+
+	foreach ($wanted as $idproduct => $qty) {
+		$prod = new Product($db);
+		if ($prod->fetch($idproduct) <= 0) {
+			// Product does not exist anymore: ignore it instead of failing the whole sync
+			continue;
+		}
+
+		$datapriceofproduct = $prod->getSellPrice($mysoc, $customer, 0);
+		$price = $datapriceofproduct['pu_ht'];
+		$price_ttc = $datapriceofproduct['pu_ttc'];
+		$price_base_type = empty($datapriceofproduct['price_base_type']) ? 'HT' : $datapriceofproduct['price_base_type'];
+		$tva_tx = $datapriceofproduct['tva_tx'];
+		$tva_npr = (int) $datapriceofproduct['tva_npr'];
+		$localtax1_tx = get_localtax($tva_tx, 1, $customer, $mysoc, $tva_npr);
+		$localtax2_tx = get_localtax($tva_tx, 2, $customer, $mysoc, $tva_npr);
+
+		// Search an existing line for the same product, to update it instead of adding a duplicate
+		$existingline = null;
+		foreach ($invoice->lines as $line) {
+			if ($line->fk_product == $idproduct && $line->fk_parent_line <= 0 && $line->special_code != 4) {
+				$existingline = $line;
+				break;
+			}
+		}
+
+		if ($existingline !== null) {
+			if (abs($qty - $existingline->qty) > 0.0001) {
+				$vatratecode = $existingline->tva_tx;
+				if ($existingline->vat_src_code) {
+					$vatratecode .= ' ('.$existingline->vat_src_code.')';
+				}
+				$result = $invoice->updateline($existingline->id, $existingline->desc, $existingline->subprice, $qty, $existingline->remise_percent, $existingline->date_start, $existingline->date_end, $vatratecode, $existingline->localtax1_tx, $existingline->localtax2_tx, 'HT', $existingline->info_bits, $existingline->product_type, $existingline->fk_parent_line, 0, $existingline->fk_fournprice, $existingline->pa_ht, $existingline->label, $existingline->special_code, $existingline->array_options, $existingline->situation_percent, $existingline->fk_unit);
+				if ($result < 0) {
+					return -1;
+				}
+			}
+		} else {
+			$line = array('description' => $prod->description, 'price' => $price, 'tva_tx' => $tva_tx, 'localtax1_tx' => $localtax1_tx, 'localtax2_tx' => $localtax2_tx, 'remise_percent' => $customer->remise_percent, 'price_ttc' => $price_ttc, 'array_options' => array());
+
+			/* setup of margin calculation */
+			if (getDolGlobalString('MARGIN_TYPE')) {
+				if (getDolGlobalString('MARGIN_TYPE') == 'pmp' && !empty($prod->pmp)) {
+					$line['fk_fournprice'] = null;
+					$line['pa_ht'] = $prod->pmp;
+				} elseif (getDolGlobalString('MARGIN_TYPE') == 'costprice' && !empty($prod->cost_price)) {
+					$line['fk_fournprice'] = null;
+					$line['pa_ht'] = $prod->cost_price;
+				} else {
+					// default is fournprice
+					require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.product.class.php';
+					$pf = new ProductFournisseur($db);
+					if ($pf->find_min_price_product_fournisseur($idproduct, $qty) > 0) {
+						$line['fk_fournprice'] = $pf->product_fourn_price_id;
+						$line['pa_ht'] = $pf->fourn_unitprice_with_discount;
+						if (getDolGlobalString('PRODUCT_CHARGES') && $pf->fourn_charges > 0) {
+							$line['pa_ht'] += (float) $pf->fourn_charges / $pf->fourn_qty;
+						}
+					}
+				}
+			}
+
+			$idoflineadded = $invoice->addline($line['description'], $line['price'], $qty, $line['tva_tx'], $line['localtax1_tx'], $line['localtax2_tx'], $idproduct, (float) $line['remise_percent'], '', 0, 0, 0, 0, $price_base_type, $line['price_ttc'], $prod->type, -1, 0, '', 0, '', (empty($line['fk_fournprice']) ? 0 : $line['fk_fournprice']), (empty($line['pa_ht']) ? '' : $line['pa_ht']), '', $line['array_options'], 100, 0, $prod->fk_unit, 0);
+			if ($idoflineadded < 0) {
+				return -1;
+			}
+		}
+	}
+
+	return 0;
+}
+
+/**
  * Validate a draft invoice and record the payments captured on the terminal, exactly like
  * invoice.php action=valid does (validation with or without stock move, cash fence check,
  * payment recorded into the bank account of the terminal for its payment mode, credit
@@ -613,9 +734,10 @@ function fluxposValidateAndPay($invoice, $payments, $fluxposterminal, &$validate
  * @param  int    $socid    Thirdparty id to use if the invoice must be created
  * @param  array  $payments Payments captured on the terminal (only with $valid)
  * @param  bool   $valid    Validate the sale and record the payments (older terminals only)
- * @return array            Result info: array('placeid', 'socid', 'total_ttc', 'ref', 'paid') or array('error' => ...)
+ * @param  bool   $setmode  Set semantics: the draft must exactly match $lines (its product lines are also lowered or removed). Without set mode the captured quantities are only added or raised.
+ * @return array            Result info: array('placeid', 'socid', 'total_ttc', 'ref', 'paid', 'lines') or array('error' => ...). 'lines' lists the product lines of the draft: array('id', 'lineid', 'qty', 'total_ttc', 'remise_percent'), so the terminal can mirror the exact line ids and prices of the server order.
  */
-function fluxposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $valid = false)
+function fluxposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $valid = false, $setmode = false)
 {
 	global $conf, $db, $langs, $user;
 
@@ -685,7 +807,8 @@ function fluxposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $v
 
 	$db->begin();
 
-	if (fluxposReconcileLines($invoice, $customer, $lines) < 0) {
+	$reconcileresult = $setmode ? fluxposReconcileLinesSet($invoice, $customer, $lines) : fluxposReconcileLines($invoice, $customer, $lines);
+	if ($reconcileresult < 0) {
 		$errmsg = ($invoice->error ? $invoice->error : $db->lasterror());
 		$db->rollback();
 		return array('error' => $errmsg);
@@ -714,7 +837,16 @@ function fluxposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $v
 		fluxposPrintInvoiceTicket($invoice->id, $fluxposterminal, $user);
 	}
 
-	return array('placeid' => $invoice->id, 'place' => $place, 'socid' => $invoice->socid, 'total_ttc' => $invoice->total_ttc, 'ref' => $invoice->ref, 'paid' => (int) $invoice->paye);
+	// Product lines of the draft, so the terminal can mirror the exact line ids
+	// and prices of the server order into its local cart
+	$outlines = array();
+	foreach ($invoice->lines as $line) {
+		if ($line->fk_product > 0 && $line->fk_parent_line <= 0 && $line->special_code != 4) {
+			$outlines[] = array('id' => (int) $line->fk_product, 'lineid' => (int) $line->id, 'qty' => (float) $line->qty, 'total_ttc' => (float) $line->total_ttc, 'remise_percent' => (float) $line->remise_percent);
+		}
+	}
+
+	return array('placeid' => $invoice->id, 'place' => $place, 'socid' => $invoice->socid, 'total_ttc' => $invoice->total_ttc, 'ref' => $invoice->ref, 'paid' => (int) $invoice->paye, 'lines' => $outlines);
 }
 
 /**
@@ -1301,7 +1433,7 @@ if ($action == 'getProducts' && $user->hasRight('fluxpos', 'run')) {
 		exit;
 	}
 
-	$result = fluxposSyncOfflineOrder((string) $input['place'], (array) $input['lines'], (!empty($input['thirdpartyid']) ? (int) $input['thirdpartyid'] : 0), (isset($input['payments']) && is_array($input['payments']) ? $input['payments'] : array()), (!empty($input['valid'])));
+	$result = fluxposSyncOfflineOrder((string) $input['place'], (array) $input['lines'], (!empty($input['thirdpartyid']) ? (int) $input['thirdpartyid'] : 0), (isset($input['payments']) && is_array($input['payments']) ? $input['payments'] : array()), (!empty($input['valid'])), (!empty($input['set'])));
 	echo json_encode($result);
 } elseif ($action == 'syncOfflineSale' && $user->hasRight('fluxpos', 'run')) {
 	top_httphead('application/json');
