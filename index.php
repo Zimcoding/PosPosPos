@@ -741,6 +741,17 @@ function ClickProduct(position, qty = 1, qty_std = 0) {
 			return;
 		}
 
+		// 1.6.2: the tapped tile carries its own label and price, so an offline tap
+		// never depends on the catalog cached on the terminal. The label is the text
+		// displayed on the tile (reference included when the options ask for it), the
+		// price is parsed from the formatted amount shown on the tile itself.
+		var offlineinfo = null;
+		if (typeof FluxPosOffline != 'undefined' && typeof FluxPosOffline.parseAmountText == 'function') {
+			var offlinelabel = jQuery.trim($('#prodesc'+position).text() || ($('#probutton'+position).text() || ''));
+			offlineinfo = { label: offlinelabel, price_ttc: FluxPosOffline.parseAmountText($('#proprice'+position).text()) };
+			console.log("ClickProduct offline tap info: label="+offlineinfo.label+" price="+offlineinfo.price_ttc);
+		}
+
 		// Offline order entry: queue the product into the local cart of the place (it
 		// will be synchronized to the server in background). An order not yet created on
 		// the server becomes a local order; an order already registered on the server is
@@ -751,14 +762,14 @@ function ClickProduct(position, qty = 1, qty_std = 0) {
 		if (typeof FluxPosOffline != 'undefined' && typeof FluxPosOffline.isOffline == 'function' && FluxPosOffline.isOffline()) {
 			if (($('#invoiceid').val() || '') == '') {
 				if (typeof FluxPosOffline.addProduct == 'function') {
-					FluxPosOffline.addProduct(idproduct, qty);
+					FluxPosOffline.addProduct(idproduct, qty, offlineinfo);
 				} else {
 					console.log('FluxPos offline: this screen runs an older version of the offline engine, reload the POS screen to work offline');
 				}
 			} else if (typeof FluxPosOffline.captureOnServerOrder == 'function') {
 				// The order of the place is on the server: adopt it into the local cart so
 				// the tap is captured and merged into that order later
-				FluxPosOffline.captureOnServerOrder(idproduct, qty);
+				FluxPosOffline.captureOnServerOrder(idproduct, qty, offlineinfo);
 			} else if (typeof FluxPosOffline.notifyBlockedCapture == 'function') {
 				FluxPosOffline.notifyBlockedCapture();
 			}
@@ -786,12 +797,12 @@ function ClickProduct(position, qty = 1, qty_std = 0) {
 					if (typeof FluxPosOffline != 'undefined' && typeof FluxPosOffline.handleFailure == 'function' && FluxPosOffline.handleFailure(xhr, status)) {
 						if (($('#invoiceid').val() || '') == '') {
 							if (typeof FluxPosOffline.addProduct == 'function') {
-								FluxPosOffline.addProduct(idproducttotap, qty);
+								FluxPosOffline.addProduct(idproducttotap, qty, offlineinfo);
 							}
 						} else if (typeof FluxPosOffline.captureOnServerOrder == 'function') {
 							// The order of the place is on the server: adopt it into the local
 							// cart so the tap is captured and merged into that order later
-							FluxPosOffline.captureOnServerOrder(idproducttotap, qty);
+							FluxPosOffline.captureOnServerOrder(idproducttotap, qty, offlineinfo);
 						} else if (typeof FluxPosOffline.notifyBlockedCapture == 'function') {
 							FluxPosOffline.notifyBlockedCapture();
 						}
