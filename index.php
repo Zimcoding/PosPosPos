@@ -752,26 +752,21 @@ function ClickProduct(position, qty = 1, qty_std = 0) {
 			console.log("ClickProduct offline tap info: label="+offlineinfo.label+" price="+offlineinfo.price_ttc);
 		}
 
-		// Offline order entry: queue the product into the local cart of the place (it
-		// will be synchronized to the server in background). An order not yet created on
-		// the server becomes a local order; an order already registered on the server is
-		// adopted into the local cart, so the new products are merged into it when the
-		// connection is back.
+		// 1.7 unified flow: the tap ALWAYS goes into the local cart of the place, online
+		// and offline alike. Online it is synchronized to the draft invoice of the place
+		// at once (debounced instant sync, the answer mirrors the lines of the server);
+		// offline the background synchronization sends it when the connection is back.
+		// No mode switching, no second cart, no add-into-server-order surprises anymore.
 		// The service worker of a terminal can still serve the offline.js of the previous
 		// deployment for a moment, so every function of the engine is checked before use.
-		if (typeof FluxPosOffline != 'undefined' && typeof FluxPosOffline.isOffline == 'function' && FluxPosOffline.isOffline()) {
-			if (($('#invoiceid').val() || '') == '') {
-				if (typeof FluxPosOffline.addProduct == 'function') {
-					FluxPosOffline.addProduct(idproduct, qty, offlineinfo);
-				} else {
-					console.log('FluxPos offline: this screen runs an older version of the offline engine, reload the POS screen to work offline');
-				}
-			} else if (typeof FluxPosOffline.captureOnServerOrder == 'function') {
-				// The order of the place is on the server: adopt it into the local cart so
-				// the tap is captured and merged into that order later
+		if (typeof FluxPosOffline != 'undefined' && typeof FluxPosOffline.addProduct == 'function') {
+			if (($('#invoiceid').val() || '') == '' || typeof FluxPosOffline.captureOnServerOrder != 'function') {
+				FluxPosOffline.addProduct(idproduct, qty, offlineinfo);
+			} else {
+				// The place has an order on the server that the local cart does not
+				// mirror yet (opened after a reload of the screen): adopt its lines
+				// first, so the set-mode synchronization cannot remove them
 				FluxPosOffline.captureOnServerOrder(idproduct, qty, offlineinfo);
-			} else if (typeof FluxPosOffline.notifyBlockedCapture == 'function') {
-				FluxPosOffline.notifyBlockedCapture();
 			}
 			ClearSearch(false);
 			return;
@@ -788,6 +783,7 @@ function ClickProduct(position, qty = 1, qty_std = 0) {
 				}?>
 				if (status != 'error') {
 					fluxposUpdateCartTotal();	// Keep the sticky total of the cart footer in sync
+					FluxPosCartFromScreen();	// 1.7: refresh the local cart mirror of the order
 				}
 				if (status == 'error') {
 					// The server could not be reached (or refused the call): never lose the
@@ -1148,7 +1144,9 @@ function CloseBill(paycode) {
 	// block of the cart footer opens the same screen of pay.php with its pad, cash fence
 	// and bank-account overrides untouched)
 	var paycodeparam = (typeof paycode != 'undefined' && paycode) ? '&paycode='+encodeURIComponent(paycode) : '';
-	$.colorbox({href:"<?php echo $payurl; ?>?place="+place+"&invoiceid="+invoiceid+closeBillParams+paycodeparam, width:"80%", height:"90%", transition:"none", iframe:"true", title:""});
+	FluxPosPayAfterSync(function () {
+		$.colorbox({href:"<?php echo $payurl; ?>?place="+place+"&invoiceid="+invoiceid+closeBillParams+paycodeparam, width:"80%", height:"90%", transition:"none", iframe:"true", title:""});
+	});
 }
 
 function Split() {
@@ -1562,6 +1560,39 @@ function ModalBox(ModalID)
 	modal.style.display = "block";
 }
 
+/*
+ * Unified flow (1.7) helpers: the ticket of the place is the local cart of the
+ * terminal, online and offline alike, and the server draft is kept in sync with
+ * it (instantly while online). Every change the server applied by a fragment
+ * (edit of a line, payment, deletion...) is mirrored back into the cart.
+ */
+function FluxPosCartClearLocal() {
+	if (typeof FluxPosOffline != 'undefined' && typeof FluxPosOffline.clearCart == 'function') {
+		FluxPosOffline.clearCart();
+	}
+}
+
+function FluxPosCartFromScreen() {
+	if (typeof FluxPosOffline == 'undefined' || typeof FluxPosOffline.replaceCartFromScreen != 'function' || FluxPosOffline.isOffline()) {
+		return;
+	}
+	FluxPosOffline.replaceCartFromScreen();
+}
+
+function FluxPosPayAfterSync(payfn) {
+	if (typeof FluxPosOffline == 'undefined' || typeof FluxPosOffline.ensureSynced != 'function') {
+		payfn();
+		return;
+	}
+	FluxPosOffline.ensureSynced().then(function (synced) {
+		if (synced === true) {
+			payfn();
+		} else {
+			window.alert((window.fluxposlang && window.fluxposlang.FluxPosSyncBeforePay) || 'The sale on the screen could not be synchronized to the server. Check the connection of the terminal and try again.');
+		}
+	});
+}
+
 function DirectPayment(){
 	if (typeof FluxPosOffline != 'undefined' && FluxPosOffline.isOffline()) {
 		if ($('#offlinecart').val() == '1' && ($('#invoiceid').val() || '') == '') {
@@ -1574,9 +1605,12 @@ function DirectPayment(){
 		return;
 	}
 	console.log("DirectPayment");
-	$("#poslines").load("invoice.php?place="+place+"&action=valid&token=<?php echo currentToken(); ?>&pay=LIQ", function() {
-		$('#invoiceid').val("");
-		fluxposUpdateCartTotal('');
+	FluxPosPayAfterSync(function () {
+		$("#poslines").load("invoice.php?place="+place+"&action=valid&token=<?php echo currentToken(); ?>&pay=LIQ", function() {
+			$('#invoiceid').val("");
+			fluxposUpdateCartTotal('');
+			FluxPosCartClearLocal();	// The sale is paid: the local cart of the place is done
+		});
 	});
 }
 
@@ -1598,9 +1632,12 @@ function CloseBillDirect(paycode) {
 		return;
 	}
 	console.log("CloseBillDirect paycode="+paycode);
-	$("#poslines").load("invoice.php?place="+place+"&action=valid&token=<?php echo currentToken(); ?>&pay="+encodeURIComponent(paycode), function() {
-		$('#invoiceid').val("");
-		fluxposUpdateCartTotal('');
+	FluxPosPayAfterSync(function () {
+		$("#poslines").load("invoice.php?place="+place+"&action=valid&token=<?php echo currentToken(); ?>&pay="+encodeURIComponent(paycode), function() {
+			$('#invoiceid').val("");
+			fluxposUpdateCartTotal('');
+			FluxPosCartClearLocal();	// The sale is paid: the local cart of the place is done
+		});
 	});
 }
 
