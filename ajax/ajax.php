@@ -396,8 +396,8 @@ function fluxposReconcileLines($invoice, $customer, $lines)
  * product line already on the draft is updated to the captured quantity (lowered too,
  * unlike fluxposReconcileLines) or removed when the capture no longer contains it; a
  * product line is added when missing. Manual lines, free lines, supplement lines and
- * deposito lines are never touched. Replay-safe: the same capture applied twice leaves
- * the same draft. The caller owns the database transaction.
+ * the lines of the deposit module (Deposito) are never touched. Replay-safe: the same
+ * capture applied twice leaves the same draft. The caller owns the database transaction.
  *
  * @param  Facture $invoice  Draft invoice (with its lines loaded)
  * @param  Societe $customer Customer of the invoice
@@ -420,12 +420,24 @@ function fluxposReconcileLinesSet($invoice, $customer, $lines)
 	}
 
 	// Remove the product lines that the capture no longer contains. Manual lines,
-	// free lines, supplement lines and deposito lines are never touched.
+	// free lines and supplement lines are never touched. The deposit lines of the
+	// Deposito module (added on the draft by the triggers of that module) must
+	// follow the drink lines there and are never deleted here either.
+	$depositoprotected = false;
+	if (isModEnabled('deposito')) {
+		require_once dol_buildpath('/deposito/lib/deposito.lib.php', 0);
+		$depositoprotected = true;
+	}
 	$linestodelete = array();
 	foreach ($invoice->lines as $line) {
-		if ($line->fk_product > 0 && $line->fk_parent_line <= 0 && $line->special_code != 4 && empty($wanted[(int) $line->fk_product])) {
-			$linestodelete[] = $line->id;
+		if ($line->fk_product <= 0 || $line->fk_parent_line > 0 || $line->special_code == 4 || !empty($wanted[(int) $line->fk_product])) {
+			continue;
 		}
+		if ($depositoprotected && depositoIsDepositLineProduct($db, (int) $line->fk_product)) {
+			// A deposit or leeggoed line maintained by the Deposito triggers
+			continue;
+		}
+		$linestodelete[] = $line->id;
 	}
 	foreach ($linestodelete as $idlinedelete) {
 		$result = $invoice->deleteline($idlinedelete);
@@ -735,7 +747,7 @@ function fluxposValidateAndPay($invoice, $payments, $fluxposterminal, &$validate
  * @param  array  $payments Payments captured on the terminal (only with $valid)
  * @param  bool   $valid    Validate the sale and record the payments (older terminals only)
  * @param  bool   $setmode  Set semantics: the draft must exactly match $lines (its product lines are also lowered or removed). Without set mode the captured quantities are only added or raised.
- * @return array            Result info: array('placeid', 'socid', 'total_ttc', 'ref', 'paid', 'lines') or array('error' => ...). 'lines' lists the product lines of the draft: array('id', 'lineid', 'qty', 'total_ttc', 'remise_percent'), so the terminal can mirror the exact line ids and prices of the server order.
+ * @return array            Result info: array('placeid', 'socid', 'total_ttc', 'ref', 'paid', 'lines') or array('error' => ...). 'lines' lists the product lines of the draft: array('id', 'lineid', 'qty', 'total_ttc', 'remise_percent', 'label'), so the terminal can mirror the exact line ids and prices of the server order (including the lines the server added by itself, like the deposit lines of Deposito).
  */
 function fluxposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $valid = false, $setmode = false)
 {
@@ -843,6 +855,27 @@ function fluxposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $v
 	foreach ($invoice->lines as $line) {
 		if ($line->fk_product > 0 && $line->fk_parent_line <= 0 && $line->special_code != 4) {
 			$outlines[] = array('id' => (int) $line->fk_product, 'lineid' => (int) $line->id, 'qty' => (float) $line->qty, 'total_ttc' => (float) $line->total_ttc, 'remise_percent' => (float) $line->remise_percent);
+		}
+	}
+	if (!empty($outlines)) {
+		// Labels of the lines, so the terminal can display the lines it did not capture
+		// itself (the deposit lines added by the triggers of the Deposito module)
+		$labels = array();
+		$idsproduct = array();
+		foreach ($outlines as $outline) {
+			$idsproduct[(int) $outline['id']] = 1;
+		}
+		$sql = "SELECT rowid, ref, label FROM ".MAIN_DB_PREFIX."product";
+		$sql .= " WHERE rowid IN (".implode(',', array_keys($idsproduct)).")";
+		$resql = $db->query($sql);
+		if ($resql) {
+			while ($obj = $db->fetch_object($resql)) {
+				$labels[(int) $obj->rowid] = ($obj->label != '' ? $obj->label : $obj->ref);
+			}
+			$db->free($resql);
+		}
+		foreach ($outlines as $keyoutline => $outline) {
+			$outlines[$keyoutline]['label'] = ($labels[(int) $outline['id']] != '' ? $labels[(int) $outline['id']] : 'Product '.$outline['id']);
 		}
 	}
 

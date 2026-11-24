@@ -462,24 +462,59 @@ var FluxPosOffline = {
 		}
 		this.updateOfflineStatus();
 		this.syncCatalog();
-		this.syncOutbox().then(function () {
-			if (jQuery('#offlinecart').val() != '1') {
-				return;
+		this.afterSyncDisplay();
+	},
+
+	/**
+	 * What the screen shows after a background synchronization (server up again,
+	 * 'online' event, periodic retry): as long as the local cart of the current place
+	 * still holds lines, the ticket stays rendered on the screen (its synchronization
+	 * may still be waiting or have failed: the local capture is never dropped before
+	 * the server has verifiably taken it). Only an empty cart gives the display back
+	 * to the order fragment of the server.
+	 *
+	 * @returns {Promise} Promise of the display refresh
+	 */
+	afterSyncDisplay: function () {
+		'use strict';
+
+		var self = this;
+		return this.syncOutbox().then(function () {
+			var empty = true;
+			if (!window.indexedDB) {
+				return self.refreshAfterSync(empty);
 			}
-			self.getCart().then(function (cart) {
+			return self.getCart().then(function (cart) {
 				if (cart && cart.lines && cart.lines.length) {
-					// The order on the server does not include the captured products yet
-					// (their synchronization is still waiting or has failed): keep the
-					// local cart displayed until the synchronization succeeds
-					self.renderCart(true);
-					return;
+					empty = false;
 				}
-				if (typeof Refresh == 'function') {
-					// The captured products are on the server now: show its order again
-					Refresh();
-				}
+				return self.refreshAfterSync(empty);
 			});
 		});
+	},
+
+	/**
+	 * Refresh the display after a synchronization: render the local ticket again
+	 * (with its current state, including the lines mirrored from the server answer)
+	 * or reload the fragment of the server when nothing is captured locally.
+	 *
+	 * @param  {boolean} empty True when the local cart holds no captured lines
+	 * @returns {Promise} Promise of the refresh
+	 */
+	refreshAfterSync: function (empty) {
+		'use strict';
+
+		if (!empty) {
+			return this.renderCart(true);
+		}
+		if (typeof jQuery == 'undefined' || jQuery('#offlinecart').val() != '1') {
+			return Promise.resolve();
+		}
+		if (typeof Refresh == 'function') {
+			// The captured products are on the server now: show its order again
+			Refresh();
+		}
+		return Promise.resolve();
 	},
 
 	/**
@@ -979,10 +1014,16 @@ var FluxPosOffline = {
 			// managed by the normal screens, never reopened from here
 			return Promise.resolve(true);
 		}
-		var setmode = (cart.adopted === true) || (cart.synced === true);
+		// Set mode (the draft of the place must exactly match the capture) only once
+		// the server answered the content of the cart: a cart adopted from a screen
+		// or from a snapshot of the order first merges additive, so it can never
+		// erase lines it has not seen
+		var setmode = cart.synced === true;
 		var lines = [];
 		for (var i = 0; i < cart.lines.length; i++) {
-			if (cart.lines[i].qty > 0) {
+			// The lines the server added itself (the deposit lines of Deposito) are
+			// mirrored in the view only: the triggers of the server own their quantity
+			if (cart.lines[i].qty > 0 && cart.lines[i].mirror !== true) {
 				lines.push({ id: cart.lines[i].rowid, qty: cart.lines[i].qty });
 			}
 		}
@@ -1033,6 +1074,11 @@ var FluxPosOffline = {
 	 * local cart: the line ids and the exact prices of the server, so the display
 	 * and the payment screens act on the same lines. The cart is then flagged as
 	 * synchronized: the next synchronizations send the quantities in set mode.
+	 * The server lines the capture does not hold itself (the deposit lines of the
+	 * Deposito module, added by the triggers of that module) are mirrored as extra
+	 * rows marked mirror: true: they are displayed in the ticket but never sent
+	 * back (their quantity is owned by the server). Mirror rows that the server
+	 * no longer returns are dropped.
 	 *
 	 * @param  {Object} cart Local cart of the place
 	 * @param  {Object} data Answer of the server (placeid, socid, lines)
@@ -1060,6 +1106,55 @@ var FluxPosOffline = {
 				// After the mirror, the quantities can be lowered and lines removed:
 				// the raise-only rule of a line not yet mirrored is obsolete
 				delete cart.lines[i].adopted;
+			}
+		}
+		// Mirrored server lines: drop the ones the server does not hold anymore,
+		// then add (or refresh) one mirror row for every server line the capture
+		// does not hold itself. A server line with a non-positive quantity (a
+		// returned empty booked as a refund) is not displayed, like before.
+		for (i = 0; i < cart.lines.length; i++) {
+			if (cart.lines[i].mirror === true && !byproduct[cart.lines[i].rowid]) {
+				cart.lines.splice(i, 1);
+				i--;
+			}
+		}
+		for (i = 0; i < serverlines.length; i++) {
+			serverline = serverlines[i];
+			var ownlineidx = -1;
+			var mirroridx = -1;
+			for (var j = 0; j < cart.lines.length; j++) {
+				if (cart.lines[j].rowid != serverline.id) {
+					continue;
+				}
+				if (cart.lines[j].mirror === true) {
+					mirroridx = j;
+				} else {
+					ownlineidx = j;
+					break;
+				}
+			}
+			if (ownlineidx >= 0 || (parseFloat(serverline.qty) || 0) <= 0) {
+				// The capture holds this product itself (its line follows the capture)
+				// or the server line is not displayable: drop a stale mirror row
+				if (mirroridx >= 0) {
+					cart.lines.splice(mirroridx, 1);
+				}
+				continue;
+			}
+			var mirrorqty = parseFloat(serverline.qty) || 0;
+			var mirrorrow = {
+				rowid: serverline.id,
+				ref: '',
+				label: (serverline.label != null && String(serverline.label) != '') ? serverline.label : ('Product ' + serverline.id),
+				price_ttc: (mirrorqty > 0 && typeof serverline.total_ttc != 'undefined') ? Math.round((parseFloat(serverline.total_ttc) / mirrorqty) * 1000000) / 1000000 : 0,
+				qty: mirrorqty,
+				lineid: parseInt(serverline.lineid, 10) || 0,
+				mirror: true	// Never sent back to the server (its triggers own it)
+			};
+			if (mirroridx >= 0) {
+				cart.lines[mirroridx] = mirrorrow;
+			} else {
+				cart.lines.push(mirrorrow);
 			}
 		}
 		cart.invoiceid = parseInt(data.placeid, 10) || cart.invoiceid || 0;
@@ -1383,6 +1478,22 @@ var FluxPosOffline = {
 				invoiceid = parseInt(jQuery('#invoiceid').val(), 10) || 0;
 			}
 			var plc = (typeof place != 'undefined') ? place : 0;
+			if (invoiceid > 0 && typeof jQuery != 'undefined' && jQuery('#poslines tr.posinvoiceline').length) {
+				// Adopt the lines currently displayed on the screen first: the screen is the
+				// freshest image of the order (a cached snapshot can be stale). A cart adopted
+				// here first merges additive too (set mode only comes after the server has
+				// confirmed its content), so a stale image can never erase the real lines of
+				// the order on the server
+				return self.adoptFromScreen().then(function (adopted) {
+					if (!adopted) {
+						self.notifyBlockedCapture();
+						return false;
+					}
+					return self.renderCart(true).then(function () {
+						return self.addProduct(idproduct, qty, info);
+					});
+				});
+			}
 			return takePOSOfflineStoreGet('order:' + plc).then(function (order) {
 				if (order && order.invoiceid) {
 					return self.saveCart(self.adoptedCartFromOrder(order)).then(function () {
@@ -1392,18 +1503,6 @@ var FluxPosOffline = {
 						return self.renderCart(true);
 					}).then(function () {
 						return self.addProduct(idproduct, qty, info);
-					});
-				}
-				if (invoiceid > 0 && typeof jQuery != 'undefined' && jQuery('#poslines tr.posinvoiceline').length) {
-					// Adopt the lines currently displayed on the screen
-					return self.adoptFromScreen().then(function (adopted) {
-						if (!adopted) {
-							self.notifyBlockedCapture();
-							return false;
-						}
-						return self.renderCart(true).then(function () {
-							return self.addProduct(idproduct, qty, info);
-						});
 					});
 				}
 				if (invoiceid > 0) {
@@ -1491,11 +1590,11 @@ var FluxPosOffline = {
 				// server): the Disc column is only there for the identical column layout
 				html += '<td class="right"></td>';
 				html += '<td class="right nowraponall">';
-				if (!validated) {
+				if (!validated && line.mirror !== true) {
 					html += '<button type="button" class="fluxposqtybtn" onclick="event.stopPropagation(); FluxPosOffline.changeQty(' + line.rowid + ', -1);">-</button>';
 				}
 				html += '<span class="fluxposqtyvalue">' + self.escapeHtml(line.qty) + '</span>';
-				if (!validated) {
+				if (!validated && line.mirror !== true) {
 					html += '<button type="button" class="fluxposqtybtn" onclick="event.stopPropagation(); FluxPosOffline.changeQty(' + line.rowid + ', 1);">+</button>';
 				}
 				html += '</td>';
@@ -1503,12 +1602,6 @@ var FluxPosOffline = {
 				html += '</tr>';
 			}
 			html += '</table></div>';
-
-			// Deposito (deposit on returnable packaging): the deposit charges and the
-			// returned-empty refunds are applied by the server when the sale is booked
-			if (window.fluxposDeposito && lines.length) {
-				html += '<div class="fluxposofflinenotice">' + self.escapeHtml(self.t('FluxPosOfflineDepositoNotice', 'Deposito: deposit charges and returned empties are applied by the server when this sale is booked, so the booked total can differ from the total shown here.')) + '</div>';
-			}
 
 			// Payments validated on the terminal
 			if (validated) {
@@ -1525,18 +1618,10 @@ var FluxPosOffline = {
 				}
 			}
 
-			if (validated) {
+			// 1.7.1: the cart shows only the ticket itself, no per-state notices: the
+			// synchronization status is visible in the status pill of the top bar
+			if (validated && self.isOffline()) {
 				html += '<div class="fluxposofflinenotice">' + self.escapeHtml(self.t('FluxPosOfflineSaleStoredNotice', 'This sale is validated. It has been safely stored with its payments: its invoice number and its receipt will be issued by the server as soon as the synchronization can be done.')) + '</div>';
-			} else if (lines.length) {
-				if (cart && cart.adopted === true) {
-					html += '<div class="fluxposofflinenotice">' + self.escapeHtml(self.t('FluxPosOfflineAdoptedNotice', 'This order is captured on this terminal, its lines included. It is merged into the order of this place on the server as soon as the connection is back (only the quantities of its own lines can be raised while offline).')) + '</div>';
-				} else {
-					html += '<div class="fluxposofflinenotice">' + self.escapeHtml(!self.isOffline() ? self.t('FluxPosOfflineOrderSynced', 'This order is synchronized to the server in background.') : self.t('FluxPosOfflineOrderStoredOffline', 'This order is stored on this terminal and will be synchronized to the server when the connection is back.')) + '</div>';
-				}
-			} else if (self._lastSaleNotice) {
-				html += '<div class="fluxposofflinenotice">' + self.escapeHtml(self._lastSaleNotice) + '</div>';
-			} else {
-				html += '<div class="fluxposofflinenotice opacitymedium">' + self.escapeHtml(self.t('FluxPosOfflineEmptyCartNotice', 'Offline mode: a new order can be captured, it will be synchronized to the server when the connection is back. An order already registered on the server is shown again when the connection is back.')) + '</div>';
 			}
 			jQuery('#poslines').html(html);
 			// The sticky total of the cart footer of the 1.1 layout follows the local cart
@@ -1760,12 +1845,10 @@ var FluxPosOffline = {
 		window.addEventListener('online', function () {
 			self.updateOfflineStatus();
 			self.syncCatalog();
-			// Replay the orders captured while offline, then give back the display to the server
-			self.syncOutbox().then(function () {
-				if (jQuery('#offlinecart').val() == '1' && typeof Refresh == 'function') {
-					Refresh();
-				}
-			});
+			// Replay the orders captured while offline. The ticket stays displayed until
+			// the server has verifiably taken it (an unconditional reload of the server
+			// fragment here used to make lines captured offline disappear from the view)
+			self.afterSyncDisplay();
 		});
 		window.addEventListener('offline', function () {
 			self.updateOfflineStatus();
@@ -1932,7 +2015,8 @@ var FluxPosOffline = {
 						}
 						var lines = [];
 						for (var i = 0; i < cart.lines.length; i++) {
-							if (cart.lines[i].qty > 0) {
+							// Mirrored server lines (deposit lines) are never sent back
+							if (cart.lines[i].qty > 0 && cart.lines[i].mirror !== true) {
 								lines.push({ id: cart.lines[i].rowid, qty: cart.lines[i].qty });
 							}
 						}
@@ -1944,11 +2028,10 @@ var FluxPosOffline = {
 								place: cart.place,
 								thirdpartyid: cart.socid,
 								lines: lines,
-								// 1.7 unified flow: a cart that mirrors the order of the place
-								// is synchronized in set mode (removed products are removed
-								// from the draft too), a capture of new products only stays
-								// merged the additive way
-								set: ((cart.adopted === true) || (cart.synced === true)) ? 1 : 0
+								// Set mode (removed products are removed on the draft too)
+								// only for a cart whose content the server already confirmed
+								// by a previous answer; anything else merges additive
+								set: (cart.synced === true) ? 1 : 0
 							}),
 							dataType: 'json',
 							timeout: 0,		// No timeout: giving up while the server still adds the lines would leave them on the server AND on the terminal
@@ -1959,7 +2042,7 @@ var FluxPosOffline = {
 								console.log('FluxPos offline: synchronization of the order of place ' + cart.place + ' failed: ' + data.error);
 								return false;
 							}
-							if ((cart.adopted === true) || (cart.synced === true)) {
+							if (cart.synced === true) {
 								// 1.7 unified flow: the cart is the ticket of the place, not a
 								// one-shot outbox entry: keep it and mirror the exact state of
 								// the server draft into it instead of deleting it
