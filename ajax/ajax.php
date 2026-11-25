@@ -224,11 +224,36 @@ function getFluxPosProductsForCategory($categid, $pricelevel)
 
 	$prods = fluxposGetProductsOfCategory($object, '(o.tosell:=:1)', 0, 0);
 
+	$withdeposits = isModEnabled('deposito');
+	if ($withdeposits) {
+		require_once dol_buildpath('/deposito/lib/deposito.lib.php', 0);
+		$withdeposits = function_exists('depositoProductInfo');
+	}
+	static $depositproducts = array();
+
 	$res = array();
 	if (is_array($prods) && count($prods) > 0) {
 		foreach ($prods as $prod) {
 			'@phan-var-force Product $prod';
-			$res[] = array(
+			// Deposit data of Deposito (only when that module is on): the terminal shows
+			// the deposit line of a drink before the server has booked it
+			$depositdata = array();
+			if ($withdeposits) {
+				$info = depositoProductInfo($db, (int) $prod->id);
+				if (!empty($info['return'])) {
+					$depositdata['ret'] = 1;
+				} elseif ((int) $info['deposit'] > 0) {
+					$depid = (int) $info['deposit'];
+					if (!isset($depositproducts[$depid])) {
+						$dep = new Product($db);
+						$depositproducts[$depid] = ($dep->fetch($depid) > 0) ? array('label' => $dep->label, 'price_ttc' => (float) $dep->price_ttc) : null;
+					}
+					if ($depositproducts[$depid] !== null) {
+						$depositdata = array('deposit' => $depid, 'deposit_qty' => (float) $info['qty'], 'deposit_label' => $depositproducts[$depid]['label'], 'deposit_price_ttc' => $depositproducts[$depid]['price_ttc']);
+					}
+				}
+			}
+			$res[] = $depositdata + array(
 				'id' => $prod->id,
 				'rowid' => $prod->id,
 				'ref' => $prod->ref,
@@ -313,7 +338,7 @@ function fluxposPrintInvoiceTicket($id, $term, $user)
  */
 function fluxposReconcileLines($invoice, $customer, $lines)
 {
-	global $db, $mysoc;
+	global $db;
 
 	foreach ($lines as $linetarget) {
 		$idproduct = (int) $linetarget['id'];
@@ -328,62 +353,13 @@ function fluxposReconcileLines($invoice, $customer, $lines)
 			continue;
 		}
 
-		$datapriceofproduct = $prod->getSellPrice($mysoc, $customer, 0);
-		$price = $datapriceofproduct['pu_ht'];
-		$price_ttc = $datapriceofproduct['pu_ttc'];
-		$price_base_type = empty($datapriceofproduct['price_base_type']) ? 'HT' : $datapriceofproduct['price_base_type'];
-		$tva_tx = $datapriceofproduct['tva_tx'];
-		$tva_npr = (int) $datapriceofproduct['tva_npr'];
-		$localtax1_tx = get_localtax($tva_tx, 1, $customer, $mysoc, $tva_npr);
-		$localtax2_tx = get_localtax($tva_tx, 2, $customer, $mysoc, $tva_npr);
-
-		// Search an existing line for the same product, to update it instead of adding a duplicate
-		$existingline = null;
-		foreach ($invoice->lines as $line) {
-			if ($line->fk_product == $idproduct && $line->fk_parent_line <= 0 && $line->special_code != 4) {
-				$existingline = $line;
-				break;
-			}
-		}
-
-		if ($existingline !== null && $qty > $existingline->qty + 0.0001) {
-			$vatratecode = $existingline->tva_tx;
-			if ($existingline->vat_src_code) {
-				$vatratecode .= ' ('.$existingline->vat_src_code.')';
-			}
-			$result = $invoice->updateline($existingline->id, $existingline->desc, $existingline->subprice, $qty, $existingline->remise_percent, $existingline->date_start, $existingline->date_end, $vatratecode, $existingline->localtax1_tx, $existingline->localtax2_tx, 'HT', $existingline->info_bits, $existingline->product_type, $existingline->fk_parent_line, 0, $existingline->fk_fournprice, $existingline->pa_ht, $existingline->label, $existingline->special_code, $existingline->array_options, $existingline->situation_percent, $existingline->fk_unit);
-			if ($result < 0) {
+		$existingline = fluxposFindProductLine($invoice, 0, $idproduct);
+		if ($existingline !== null) {
+			if ($qty > abs((float) $existingline->qty) + 0.0001 && fluxposSetLineCount($invoice, $existingline, $qty) < 0) {
 				return -1;
 			}
-		} elseif ($existingline === null) {
-			$line = array('description' => $prod->description, 'price' => $price, 'tva_tx' => $tva_tx, 'localtax1_tx' => $localtax1_tx, 'localtax2_tx' => $localtax2_tx, 'remise_percent' => $customer->remise_percent, 'price_ttc' => $price_ttc, 'array_options' => array());
-
-			/* setup of margin calculation */
-			if (getDolGlobalString('MARGIN_TYPE')) {
-				if (getDolGlobalString('MARGIN_TYPE') == 'pmp' && !empty($prod->pmp)) {
-					$line['fk_fournprice'] = null;
-					$line['pa_ht'] = $prod->pmp;
-				} elseif (getDolGlobalString('MARGIN_TYPE') == 'costprice' && !empty($prod->cost_price)) {
-					$line['fk_fournprice'] = null;
-					$line['pa_ht'] = $prod->cost_price;
-				} else {
-					// default is fournprice
-					require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.product.class.php';
-					$pf = new ProductFournisseur($db);
-					if ($pf->find_min_price_product_fournisseur($idproduct, $qty) > 0) {
-						$line['fk_fournprice'] = $pf->product_fourn_price_id;
-						$line['pa_ht'] = $pf->fourn_unitprice_with_discount;
-						if (getDolGlobalString('PRODUCT_CHARGES') && $pf->fourn_charges > 0) {
-							$line['pa_ht'] += (float) $pf->fourn_charges / $pf->fourn_qty;
-						}
-					}
-				}
-			}
-
-			$idoflineadded = $invoice->addline($line['description'], $line['price'], $qty, $line['tva_tx'], $line['localtax1_tx'], $line['localtax2_tx'], $idproduct, (float) $line['remise_percent'], '', 0, 0, 0, 0, $price_base_type, $line['price_ttc'], $prod->type, -1, 0, '', 0, '', (empty($line['fk_fournprice']) ? 0 : $line['fk_fournprice']), (empty($line['pa_ht']) ? '' : $line['pa_ht']), '', $line['array_options'], 100, 0, $prod->fk_unit, 0);
-			if ($idoflineadded < 0) {
-				return -1;
-			}
+		} elseif (fluxposAddProductLine($invoice, $customer, $prod, $qty) < 0) {
+			return -1;
 		}
 	}
 
@@ -391,136 +367,525 @@ function fluxposReconcileLines($invoice, $customer, $lines)
 }
 
 /**
- * Make the draft invoice exactly match the captured lines (set semantics, used by the
- * unified flow of the terminal where its local cart is always the full ticket). A
- * product line already on the draft is updated to the captured quantity (lowered too,
- * unlike fluxposReconcileLines) or removed when the capture no longer contains it; a
- * product line is added when missing. Manual lines, free lines, supplement lines and
- * the lines of the deposit module (Deposito) are never touched. Replay-safe: the same
- * capture applied twice leaves the same draft. The caller owns the database transaction.
+ * Add one product line to a draft invoice, with the price of the customer and the
+ * margin settings (same rules as invoice.php action=addline). The caller owns the
+ * database transaction.
  *
- * @param  Facture $invoice  Draft invoice (with its lines loaded)
+ * @param  Facture $invoice  Draft invoice
  * @param  Societe $customer Customer of the invoice
- * @param  array   $lines    Captured lines: array('id' => product id, 'qty' => qty)
- * @return int               0 if OK, -1 if error (message in $invoice->error)
+ * @param  Product $prod     Fetched product
+ * @param  float   $qty      Quantity (> 0)
+ * @return int               Id of the new line, < 0 if error (message in $invoice->error)
  */
-function fluxposReconcileLinesSet($invoice, $customer, $lines)
+function fluxposAddProductLine($invoice, $customer, $prod, $qty)
 {
 	global $db, $mysoc;
 
-	// Sum the captured quantity per product (the capture may repeat a product)
-	$wanted = array();
-	foreach ($lines as $linetarget) {
-		$idproduct = (int) $linetarget['id'];
-		$qty = (float) $linetarget['qty'];
-		if ($idproduct <= 0 || $qty <= 0) {
-			continue;
+	$datapriceofproduct = $prod->getSellPrice($mysoc, $customer, 0);
+	$price = $datapriceofproduct['pu_ht'];
+	$price_ttc = $datapriceofproduct['pu_ttc'];
+	$price_base_type = empty($datapriceofproduct['price_base_type']) ? 'HT' : $datapriceofproduct['price_base_type'];
+	$tva_tx = $datapriceofproduct['tva_tx'];
+	$tva_npr = (int) $datapriceofproduct['tva_npr'];
+	$localtax1_tx = get_localtax($tva_tx, 1, $customer, $mysoc, $tva_npr);
+	$localtax2_tx = get_localtax($tva_tx, 2, $customer, $mysoc, $tva_npr);
+
+	$fk_fournprice = 0;
+	$pa_ht = '';
+	if (getDolGlobalString('MARGIN_TYPE')) {
+		if (getDolGlobalString('MARGIN_TYPE') == 'pmp' && !empty($prod->pmp)) {
+			$pa_ht = $prod->pmp;
+		} elseif (getDolGlobalString('MARGIN_TYPE') == 'costprice' && !empty($prod->cost_price)) {
+			$pa_ht = $prod->cost_price;
+		} else {
+			// default is fournprice
+			require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.product.class.php';
+			$pf = new ProductFournisseur($db);
+			if ($pf->find_min_price_product_fournisseur($prod->id, $qty) > 0) {
+				$fk_fournprice = $pf->product_fourn_price_id;
+				$pa_ht = $pf->fourn_unitprice_with_discount;
+				if (getDolGlobalString('PRODUCT_CHARGES') && $pf->fourn_charges > 0) {
+					$pa_ht += (float) $pf->fourn_charges / $pf->fourn_qty;
+				}
+			}
 		}
-		$wanted[$idproduct] = (isset($wanted[$idproduct]) ? $wanted[$idproduct] : 0) + $qty;
 	}
 
-	// Remove the product lines that the capture no longer contains. Manual lines,
-	// free lines and supplement lines are never touched. The deposit lines of the
-	// Deposito module (added on the draft by the triggers of that module) must
-	// follow the drink lines there and are never deleted here either.
-	$depositoprotected = false;
+	return $invoice->addline($prod->description, $price, $qty, $tva_tx, $localtax1_tx, $localtax2_tx, $prod->id, (float) $customer->remise_percent, '', 0, 0, 0, 0, $price_base_type, $price_ttc, $prod->type, -1, 0, '', 0, '', $fk_fournprice, $pa_ht, '', array(), 100, 0, $prod->fk_unit, 0);
+}
+
+/**
+ * Clean a place (table) id received from a terminal: only letters, digits, _ and -
+ * (the place ends up in the reference of the draft invoice and in SQL).
+ *
+ * @param  mixed  $place Place as received
+ * @return string        Clean place ('0' stays '0')
+ */
+function fluxposCleanPlace($place)
+{
+	return preg_replace('/[^a-zA-Z0-9_\-]/', '', (string) $place);
+}
+
+/**
+ * Open ticket of a place: the draft invoice "(PROV-POS<terminal>-<place>)". Devices
+ * that share the tickets of their places must use the same terminal number.
+ *
+ * @param  string               $place  Clean place
+ * @param  int                  $socid  Customer for a new ticket (0 = default customer of the terminal)
+ * @param  bool                 $create Create the ticket when it does not exist
+ * @return Facture|null|string          The ticket, null when there is none, or an error message
+ */
+function fluxposPlaceTicket($place, $socid, $create)
+{
+	global $conf, $db, $langs, $user;
+
+	require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
+
+	$fluxposterminal = empty($_SESSION['fluxposterminal']) ? 1 : $_SESSION['fluxposterminal'];
+	$ref = '(PROV-POS'.$fluxposterminal.'-'.$place.')';
+
+	$invoice = new Facture($db);
+	if ($invoice->fetch(0, $ref) > 0) {
+		return ($invoice->status == Facture::STATUS_DRAFT) ? $invoice : null;
+	}
+	if (!$create) {
+		return null;
+	}
+
+	$invoice = new Facture($db);
+	$invoice->socid = ($socid > 0) ? $socid : getDolGlobalInt('FLUXPOS_ID_THIRDPARTY'.$fluxposterminal);
+	if ($invoice->socid <= 0) {
+		return $langs->trans("ErrorModuleSetupNotComplete", "FluxPos");
+	}
+	$dolnowtzuserrel = dol_now('tzuserrel');	// If user is 02 january 22:00, we want to store '02 january'
+	$invoice->date = dol_mktime(0, 0, 0, (int) dol_print_date($dolnowtzuserrel, '%m', 'gmt'), (int) dol_print_date($dolnowtzuserrel, '%d', 'gmt'), (int) dol_print_date($dolnowtzuserrel, '%Y', 'gmt'), 'tzserver');
+	$invoice->module_source = 'fluxpos';
+	$invoice->pos_source = $fluxposterminal;
+	$invoice->entity = !empty($_SESSION["fluxposinvoiceentity"]) ? $_SESSION["fluxposinvoiceentity"] : $conf->entity;
+
+	$db->begin();
+	$placeid = $invoice->create($user);
+	if ($placeid < 0) {
+		$errmsg = ($invoice->error ? $invoice->error : $db->lasterror());
+		$db->rollback();
+		return $errmsg;
+	}
+	if (!$db->query("UPDATE ".MAIN_DB_PREFIX."facture SET ref = '".$db->escape($ref)."' WHERE rowid = ".((int) $placeid))) {
+		$errmsg = $db->lasterror();
+		$db->rollback();
+		return $errmsg;
+	}
+	$db->commit();
+
+	$invoice->fetch($placeid);
+	return $invoice;
+}
+
+/**
+ * Role of a ticket line:
+ * - 'product': a product line the terminals change (taps, +/-, quantity pad); 'sent' is
+ *   true when it was already sent to the kitchen or bar printer (special_code 4): it is
+ *   still charged, but a new tap of that product starts a new line (a new order);
+ * - 'deposit': an automatic deposit line of the Deposito module (deposito_auto > 0):
+ *   written by its triggers, it follows the drink lines and is never changed by the
+ *   terminals. A deposit product sold by hand is an ordinary product line;
+ * - 'other': free lines, sub-lines, discount lines.
+ * 'ret' is true for a returned-empties (leeggoed) product of Deposito: Deposito stores it
+ * as a negative quantity, the terminals count it as a positive number of empties.
+ *
+ * @param  FactureLigne $line Invoice line
+ * @return array{kind:string,ret:bool,sent:bool}
+ */
+function fluxposLineKind($line)
+{
+	global $db;
+
+	$res = array('kind' => 'other', 'ret' => false, 'sent' => false);
+	if ((int) $line->fk_product <= 0 || $line->fk_parent_line > 0) {
+		return $res;
+	}
+	$res['kind'] = 'product';
+	$res['sent'] = ($line->special_code == 4);
 	if (isModEnabled('deposito')) {
+		if (!isset($line->array_options['options_deposito_auto']) && method_exists($line, 'fetch_optionals') && $line->id > 0) {
+			$line->fetch_optionals();
+		}
+		if (isset($line->array_options['options_deposito_auto']) && (int) $line->array_options['options_deposito_auto'] > 0) {
+			$res['kind'] = 'deposit';
+			return $res;
+		}
 		require_once dol_buildpath('/deposito/lib/deposito.lib.php', 0);
-		$depositoprotected = true;
+		if (function_exists('depositoProductInfo')) {
+			$info = depositoProductInfo($db, (int) $line->fk_product);
+			$res['ret'] = !empty($info['return']);
+		}
 	}
-	$linestodelete = array();
+	return $res;
+}
+
+/**
+ * State of a ticket as the terminals show it: all its lines, its total and a version
+ * (a hash of the content: it changes with every change made from any device or screen).
+ *
+ * @param  Facture|null $invoice Ticket (with its lines), null when the place has none
+ * @return array                 array('placeid', 'socid', 'total_ttc', 'lines', 'version')
+ */
+function fluxposTicketState($invoice)
+{
+	if (!is_object($invoice) || $invoice->id <= 0) {
+		return array('placeid' => 0, 'socid' => 0, 'total_ttc' => 0, 'lines' => array(), 'version' => 'empty');
+	}
+	$lines = array();
 	foreach ($invoice->lines as $line) {
-		if ($line->fk_product <= 0 || $line->fk_parent_line > 0 || $line->special_code == 4 || !empty($wanted[(int) $line->fk_product])) {
-			continue;
+		$kind = fluxposLineKind($line);
+		$label = (string) (!empty($line->product_label) ? $line->product_label : $line->label);
+		if ($label === '') {
+			$label = dol_trunc(dol_string_nohtmltag((string) $line->desc), 60);
 		}
-		if ($depositoprotected && depositoIsDepositLineProduct($db, (int) $line->fk_product)) {
-			// A deposit or leeggoed line maintained by the Deposito triggers
-			continue;
-		}
-		$linestodelete[] = $line->id;
+		$lines[] = array(
+			'lineid' => (int) $line->id,
+			'product' => (int) $line->fk_product,
+			'label' => $label,
+			'qty' => (float) $line->qty,
+			'total_ttc' => (float) $line->total_ttc,
+			'remise_percent' => (float) $line->remise_percent,
+			'kind' => $kind['kind'],
+			'ret' => ($kind['ret'] ? 1 : 0),
+			'sent' => ($kind['sent'] ? 1 : 0),
+		);
 	}
-	foreach ($linestodelete as $idlinedelete) {
-		$result = $invoice->deleteline($idlinedelete);
-		if ($result < 0) {
-			return -1;
-		}
-	}
-	if (!empty($linestodelete)) {
-		// Reload the invoice so its lines match the database again
-		if ($invoice->fetch($invoice->id) <= 0) {
-			return -1;
-		}
-	}
+	$state = array('placeid' => (int) $invoice->id, 'socid' => (int) $invoice->socid, 'total_ttc' => (float) $invoice->total_ttc, 'lines' => $lines);
+	$state['version'] = md5(json_encode($state));
+	return $state;
+}
 
-	foreach ($wanted as $idproduct => $qty) {
-		$prod = new Product($db);
-		if ($prod->fetch($idproduct) <= 0) {
-			// Product does not exist anymore: ignore it instead of failing the whole sync
-			continue;
-		}
-
-		$datapriceofproduct = $prod->getSellPrice($mysoc, $customer, 0);
-		$price = $datapriceofproduct['pu_ht'];
-		$price_ttc = $datapriceofproduct['pu_ttc'];
-		$price_base_type = empty($datapriceofproduct['price_base_type']) ? 'HT' : $datapriceofproduct['price_base_type'];
-		$tva_tx = $datapriceofproduct['tva_tx'];
-		$tva_npr = (int) $datapriceofproduct['tva_npr'];
-		$localtax1_tx = get_localtax($tva_tx, 1, $customer, $mysoc, $tva_npr);
-		$localtax2_tx = get_localtax($tva_tx, 2, $customer, $mysoc, $tva_npr);
-
-		// Search an existing line for the same product, to update it instead of adding a duplicate
-		$existingline = null;
+/**
+ * Product line of a ticket that an operation targets: the line with that id, else the
+ * first product line of that product not sent to the kitchen yet. Deposit lines and
+ * other lines are never targeted.
+ *
+ * @param  Facture           $invoice Ticket with its lines
+ * @param  int               $lineid  Line id (0 when unknown)
+ * @param  int               $product Product id (0 when unknown)
+ * @return FactureLigne|null
+ */
+function fluxposFindProductLine($invoice, $lineid, $product)
+{
+	if ($lineid > 0) {
 		foreach ($invoice->lines as $line) {
-			if ($line->fk_product == $idproduct && $line->fk_parent_line <= 0 && $line->special_code != 4) {
-				$existingline = $line;
+			if ((int) $line->id == $lineid) {
+				return (fluxposLineKind($line)['kind'] == 'product') ? $line : null;
+			}
+		}
+	}
+	if ($product > 0) {
+		foreach ($invoice->lines as $line) {
+			$kind = fluxposLineKind($line);
+			if ((int) $line->fk_product == $product && $kind['kind'] == 'product' && !$kind['sent']) {
+				return $line;
+			}
+		}
+	}
+	return null;
+}
+
+/**
+ * Set the counted quantity of a product line (removed at 0). A returned-empties line of
+ * Deposito is stored negative: it gets the positive count and Deposito turns it negative
+ * again; another negative line keeps its sign. The caller owns the transaction.
+ *
+ * @param  Facture      $invoice Ticket
+ * @param  FactureLigne $line    Line to change
+ * @param  float        $count   New counted quantity (<= 0 removes the line)
+ * @return int                   0 if OK, < 0 if error (message in $invoice->error)
+ */
+function fluxposSetLineCount($invoice, $line, $count)
+{
+	global $user;
+
+	if ($count <= 0.0001) {
+		return ($invoice->deleteline($line->id) < 0) ? -1 : 0;
+	}
+	if (abs(abs((float) $line->qty) - $count) <= 0.0001) {
+		return 0;
+	}
+	$kind = fluxposLineKind($line);
+	$qty = ($kind['ret'] || (float) $line->qty >= 0) ? $count : -$count;
+	$vatratecode = $line->tva_tx;
+	if ($line->vat_src_code) {
+		$vatratecode .= ' ('.$line->vat_src_code.')';
+	}
+	$result = $invoice->updateline($line->id, $line->desc, $line->subprice, $qty, $line->remise_percent, $line->date_start, $line->date_end, $vatratecode, $line->localtax1_tx, $line->localtax2_tx, 'HT', $line->info_bits, $line->product_type, $line->fk_parent_line, 0, $line->fk_fournprice, $line->pa_ht, $line->label, $line->special_code, $line->array_options, $line->situation_percent, $line->fk_unit);
+	return ($result < 0) ? -1 : 0;
+}
+
+/**
+ * Apply one operation of a terminal to a ticket. Operations are changes, never copies
+ * of the cart, so changes of several devices on the same ticket add up:
+ * - add    {product, qty}:         qty more of the product (new line when absent)
+ * - delta  {lineid|product, qty}:  the counted quantity of the line changes by qty (+ or -)
+ * - set    {lineid|product, qty}:  the counted quantity of the line becomes qty
+ * - remove {lineid|product}:       the line is removed
+ * The caller owns the transaction.
+ *
+ * @param  Facture $invoice  Ticket with its lines
+ * @param  Societe $customer Customer of the ticket
+ * @param  array   $op       Operation
+ * @return string            '' if OK, else the error message
+ */
+function fluxposApplyOp($invoice, $customer, $op)
+{
+	global $db;
+
+	$type = isset($op['type']) ? (string) $op['type'] : '';
+	$qty = isset($op['qty']) ? (float) $op['qty'] : 0;
+	$product = isset($op['product']) ? (int) $op['product'] : 0;
+	$lineid = isset($op['lineid']) ? (int) $op['lineid'] : 0;
+	if (!in_array($type, array('add', 'delta', 'set', 'remove'))) {
+		return 'Unknown operation '.$type;
+	}
+
+	$line = fluxposFindProductLine($invoice, ($type == 'add' ? 0 : $lineid), ($type == 'add' || $lineid <= 0) ? $product : 0);
+	if ($line === null) {
+		// The line is not on the ticket: an 'add', or a change of a line the terminal had
+		// not seen on the server yet (no line id), adds the product. A change of a known
+		// line that is gone (removed or paid on another device) has nothing left to change:
+		// it never reopens a ticket closed elsewhere.
+		if (($type == 'add' || (($type == 'delta' || $type == 'set') && $lineid <= 0)) && $qty > 0 && $product > 0) {
+			$prod = new Product($db);
+			if ($prod->fetch($product) <= 0) {
+				return 'Product '.$product.' not found';
+			}
+			return (fluxposAddProductLine($invoice, $customer, $prod, $qty) < 0) ? ($invoice->error ? $invoice->error : $db->lasterror()) : '';
+		}
+		return '';
+	}
+
+	$count = abs((float) $line->qty);
+	if ($type == 'add' || $type == 'delta') {
+		$count += $qty;
+	} elseif ($type == 'set') {
+		$count = $qty;
+	} else {
+		$count = 0;
+	}
+	return (fluxposSetLineCount($invoice, $line, $count) < 0) ? ($invoice->error ? $invoice->error : $db->lasterror()) : '';
+}
+
+/**
+ * Apply the operations of a terminal to the ticket of a place, each exactly once: its
+ * unique id is stored in llx_fluxpos_op in the same transaction, so an operation sent
+ * again (lost answer, retry) is acknowledged without being applied twice. An operation
+ * the server refuses is answered as rejected (the terminal drops it) instead of
+ * blocking the ones after it.
+ *
+ * @param  string $place  Clean place
+ * @param  int    $socid  Customer for a new ticket
+ * @param  array  $ops    Operations: array('uid', 'type', 'product', 'lineid', 'qty')
+ * @return array          Ticket state + 'acked' (uids) + 'rejected' (uid, error), or array('error' => ...)
+ */
+function fluxposApplyOps($place, $socid, $ops)
+{
+	global $conf, $db, $user;
+
+	$clean = array();
+	$create = false;
+	foreach ($ops as $op) {
+		if (!is_array($op) || empty($op['uid']) || !preg_match('/^[a-zA-Z0-9\-]{8,64}$/', (string) $op['uid'])) {
+			continue;
+		}
+		$clean[] = $op;
+		// Only what can add a line opens a ticket (same rule as fluxposApplyOp)
+		$optype = isset($op['type']) ? (string) $op['type'] : '';
+		if (isset($op['qty']) && (float) $op['qty'] > 0 && ($optype == 'add' || (($optype == 'delta' || $optype == 'set') && empty($op['lineid'])))) {
+			$create = true;
+		}
+	}
+
+	$invoice = fluxposPlaceTicket($place, $socid, $create);
+	if (is_string($invoice)) {
+		return array('error' => $invoice);
+	}
+
+	$acked = array();
+	$rejected = array();
+	if ($invoice === null) {
+		// No ticket and nothing that creates one (only lowering or removing): nothing to do
+		foreach ($clean as $op) {
+			$acked[] = (string) $op['uid'];
+		}
+		$state = fluxposTicketState(null);
+		$state['acked'] = $acked;
+		$state['rejected'] = $rejected;
+		return $state;
+	}
+
+	$customer = new Societe($db);
+	$customer->fetch($invoice->socid);
+
+	foreach ($clean as $op) {
+		$uid = (string) $op['uid'];
+		$db->begin();
+		$sql = "INSERT INTO ".MAIN_DB_PREFIX."fluxpos_op (entity, op_uid, fk_facture, date_creation, fk_user_creat)";
+		$sql .= " VALUES (".((int) $conf->entity).", '".$db->escape($uid)."', ".((int) $invoice->id).", '".$db->idate(dol_now())."', ".((int) $user->id).")";
+		if (!$db->query($sql)) {
+			$errno = $db->lasterrno();
+			$errmsg = $db->lasterror();
+			$db->rollback();
+			if ($errno == 'DB_ERROR_RECORD_ALREADY_EXISTS') {
+				$acked[] = $uid;	// Applied before: the terminal did not get that answer
+				continue;
+			}
+			return array('error' => $errmsg);	// Table missing for example: the terminal keeps its operations
+		}
+		$err = fluxposApplyOp($invoice, $customer, $op);
+		if ($err !== '') {
+			$db->rollback();
+			$rejected[] = array('uid' => $uid, 'error' => $err);
+			dol_syslog('ajax.php applyOps: operation '.$uid.' refused: '.$err, LOG_WARNING);
+		} else {
+			$db->commit();
+			$acked[] = $uid;
+		}
+		$invoice->fetch($invoice->id);
+	}
+
+	// A ticket emptied by the operations is removed, so the place is free again
+	if (empty($invoice->lines)) {
+		$invoice->delete($user);
+		$state = fluxposTicketState(null);
+	} else {
+		$state = fluxposTicketState($invoice);
+	}
+	$state['acked'] = $acked;
+	$state['rejected'] = $rejected;
+	return $state;
+}
+
+/**
+ * Record that an operation of a terminal is applied to a ticket (unique key on its id).
+ * The caller owns the transaction.
+ *
+ * @param  string $uid      Unique id of the operation
+ * @param  int    $ticketid Id of the ticket
+ * @return int              1 when recorded now, 0 when it was applied before, -1 on error
+ */
+function fluxposClaimOp($uid, $ticketid)
+{
+	global $conf, $db, $user;
+
+	$sql = "INSERT INTO ".MAIN_DB_PREFIX."fluxpos_op (entity, op_uid, fk_facture, date_creation, fk_user_creat)";
+	$sql .= " VALUES (".((int) $conf->entity).", '".$db->escape($uid)."', ".((int) $ticketid).", '".$db->idate(dol_now())."', ".((int) $user->id).")";
+	if ($db->query($sql)) {
+		return 1;
+	}
+	return ($db->lasterrno() == 'DB_ERROR_RECORD_ALREADY_EXISTS') ? 0 : -1;
+}
+
+/**
+ * Take what a terminal sold offline off the open ticket it came from. First the
+ * operations of the terminal that the server had not applied yet are applied, once
+ * (their ids are recorded, so they can never be applied later either): the ticket then
+ * holds everything the customer saw. Then the sold quantities are taken off the product
+ * lines of the ticket, product by product, so whatever another device added meanwhile
+ * stays open. A ticket left empty is removed. The caller owns the transaction.
+ *
+ * @param  string $place     Place of the sale
+ * @param  array  $ticket    array('id' => ticket id known by the terminal (0 if none), 'ops' => operations not confirmed to the terminal)
+ * @param  array  $soldlines Sold lines: array('id' => product id, 'qty' => qty), one per product
+ * @return string            '' if OK, else a note for the sale to be checked
+ */
+function fluxposCloseTicketLines($place, $ticket, $soldlines)
+{
+	global $conf, $db, $user;
+
+	$ticketid = isset($ticket['id']) ? (int) $ticket['id'] : 0;
+	$ops = array();
+	if (isset($ticket['ops']) && is_array($ticket['ops'])) {
+		foreach ($ticket['ops'] as $op) {
+			if (is_array($op) && !empty($op['uid']) && preg_match('/^[a-zA-Z0-9\-]{8,64}$/', (string) $op['uid'])) {
+				$ops[] = $op;
+			}
+		}
+	}
+
+	if ($ticketid <= 0 && count($ops)) {
+		// The terminal never got the ticket from the server, but its operations may have
+		// opened it (the answer was lost): find it through the recorded operation ids
+		$uids = array();
+		foreach ($ops as $op) {
+			$uids[] = "'".$db->escape((string) $op['uid'])."'";
+		}
+		$sql = "SELECT fk_facture FROM ".MAIN_DB_PREFIX."fluxpos_op WHERE entity = ".((int) $conf->entity)." AND op_uid IN (".implode(',', $uids).")";
+		$resql = $db->query($sql);
+		if ($resql && ($obj = $db->fetch_object($resql))) {
+			$ticketid = (int) $obj->fk_facture;
+		}
+	}
+	if ($ticketid <= 0) {
+		return '';	// Nothing of this sale is on a ticket of the server
+	}
+
+	$invoice = new Facture($db);
+	if ($invoice->fetch($ticketid) <= 0 || $invoice->status != Facture::STATUS_DRAFT || $invoice->module_source != 'fluxpos') {
+		return 'The open ticket of this sale was already closed elsewhere: check that it was not paid twice';
+	}
+	$customer = new Societe($db);
+	$customer->fetch($invoice->socid);
+
+	$notes = array();
+	foreach ($ops as $op) {
+		$claim = fluxposClaimOp((string) $op['uid'], $invoice->id);
+		if ($claim < 0) {
+			$notes[] = 'operation '.$op['uid'].' could not be recorded: '.$db->lasterror();
+			continue;
+		}
+		if ($claim == 0) {
+			continue;	// Applied before: its effect is on the ticket already
+		}
+		$err = fluxposApplyOp($invoice, $customer, $op);
+		if ($err !== '') {
+			$notes[] = 'operation '.$op['uid'].': '.$err;
+		}
+		$invoice->fetch($invoice->id);
+	}
+
+	foreach ($soldlines as $sold) {
+		$product = isset($sold['id']) ? (int) $sold['id'] : 0;
+		$remaining = isset($sold['qty']) ? (float) $sold['qty'] : 0;
+		$lineids = array();
+		foreach ($invoice->lines as $line) {
+			if ((int) $line->fk_product == $product && fluxposLineKind($line)['kind'] == 'product') {
+				$lineids[] = (int) $line->id;
+			}
+		}
+		foreach ($lineids as $lineid) {
+			if ($remaining <= 0.0001) {
 				break;
 			}
+			$line = fluxposFindProductLine($invoice, $lineid, 0);
+			if ($line === null) {
+				continue;
+			}
+			$count = abs((float) $line->qty);
+			$take = min($count, $remaining);
+			if (fluxposSetLineCount($invoice, $line, $count - $take) < 0) {
+				$notes[] = 'product '.$product.' could not be taken off the ticket: '.$invoice->error;
+				break;
+			}
+			$remaining -= $take;
+			$invoice->fetch($invoice->id);
 		}
-
-		if ($existingline !== null) {
-			if (abs($qty - $existingline->qty) > 0.0001) {
-				$vatratecode = $existingline->tva_tx;
-				if ($existingline->vat_src_code) {
-					$vatratecode .= ' ('.$existingline->vat_src_code.')';
-				}
-				$result = $invoice->updateline($existingline->id, $existingline->desc, $existingline->subprice, $qty, $existingline->remise_percent, $existingline->date_start, $existingline->date_end, $vatratecode, $existingline->localtax1_tx, $existingline->localtax2_tx, 'HT', $existingline->info_bits, $existingline->product_type, $existingline->fk_parent_line, 0, $existingline->fk_fournprice, $existingline->pa_ht, $existingline->label, $existingline->special_code, $existingline->array_options, $existingline->situation_percent, $existingline->fk_unit);
-				if ($result < 0) {
-					return -1;
-				}
-			}
-		} else {
-			$line = array('description' => $prod->description, 'price' => $price, 'tva_tx' => $tva_tx, 'localtax1_tx' => $localtax1_tx, 'localtax2_tx' => $localtax2_tx, 'remise_percent' => $customer->remise_percent, 'price_ttc' => $price_ttc, 'array_options' => array());
-
-			/* setup of margin calculation */
-			if (getDolGlobalString('MARGIN_TYPE')) {
-				if (getDolGlobalString('MARGIN_TYPE') == 'pmp' && !empty($prod->pmp)) {
-					$line['fk_fournprice'] = null;
-					$line['pa_ht'] = $prod->pmp;
-				} elseif (getDolGlobalString('MARGIN_TYPE') == 'costprice' && !empty($prod->cost_price)) {
-					$line['fk_fournprice'] = null;
-					$line['pa_ht'] = $prod->cost_price;
-				} else {
-					// default is fournprice
-					require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.product.class.php';
-					$pf = new ProductFournisseur($db);
-					if ($pf->find_min_price_product_fournisseur($idproduct, $qty) > 0) {
-						$line['fk_fournprice'] = $pf->product_fourn_price_id;
-						$line['pa_ht'] = $pf->fourn_unitprice_with_discount;
-						if (getDolGlobalString('PRODUCT_CHARGES') && $pf->fourn_charges > 0) {
-							$line['pa_ht'] += (float) $pf->fourn_charges / $pf->fourn_qty;
-						}
-					}
-				}
-			}
-
-			$idoflineadded = $invoice->addline($line['description'], $line['price'], $qty, $line['tva_tx'], $line['localtax1_tx'], $line['localtax2_tx'], $idproduct, (float) $line['remise_percent'], '', 0, 0, 0, 0, $price_base_type, $line['price_ttc'], $prod->type, -1, 0, '', 0, '', (empty($line['fk_fournprice']) ? 0 : $line['fk_fournprice']), (empty($line['pa_ht']) ? '' : $line['pa_ht']), '', $line['array_options'], 100, 0, $prod->fk_unit, 0);
-			if ($idoflineadded < 0) {
-				return -1;
-			}
+		if ($remaining > 0.0001) {
+			$notes[] = 'product '.$product.': '.$remaining.' sold more than the ticket held';
 		}
 	}
 
-	return 0;
+	$invoice->fetch($invoice->id);
+	if (empty($invoice->lines)) {
+		$invoice->delete($user);
+	}
+	return implode('; ', $notes);
 }
 
 /**
@@ -731,40 +1096,27 @@ function fluxposValidateAndPay($invoice, $payments, $fluxposterminal, &$validate
 }
 
 /**
- * Synchronize an offline order (not paid yet) into the draft invoice of a place.
- * The draft invoice of the place is created if it does not exist yet (same rules as
- * invoice.php action=addline), then its product lines are reconciled with the line
- * list captured on the terminal (see fluxposReconcileLines()): nothing is ever deleted
- * or lowered, so the call can be replayed at any time without duplicating lines.
+ * Merge an order captured by a terminal into the ticket (draft invoice) of a place.
+ * Kept only for terminals still running the offline.js of 1.7 or older (their cached
+ * copy until the service worker updates): quantities are only added or raised, never
+ * lowered or removed. Terminals from 1.8 send operations to applyOps instead.
  *
- * Paid sales are not sent here but to fluxposSyncOfflineSale(), which books each sale
- * exactly once. The $valid mode is kept only for terminals still running an older
- * offline.js that locks the cart of the place instead of creating a sale.
- *
- * @param  string $place    Place (table) of the order
- * @param  array  $lines    Array of captured lines: array('id' => product id, 'qty' => qty)
- * @param  int    $socid    Thirdparty id to use if the invoice must be created
+ * @param  string $place    Clean place (table) of the order
+ * @param  array  $lines    Captured lines: array('id' => product id, 'qty' => qty)
+ * @param  int    $socid    Thirdparty id to use if the ticket must be created
  * @param  array  $payments Payments captured on the terminal (only with $valid)
- * @param  bool   $valid    Validate the sale and record the payments (older terminals only)
- * @param  bool   $setmode  Set semantics: the draft must exactly match $lines (its product lines are also lowered or removed). Without set mode the captured quantities are only added or raised.
- * @return array            Result info: array('placeid', 'socid', 'total_ttc', 'ref', 'paid', 'lines') or array('error' => ...). 'lines' lists the product lines of the draft: array('id', 'lineid', 'qty', 'total_ttc', 'remise_percent', 'label'), so the terminal can mirror the exact line ids and prices of the server order (including the lines the server added by itself, like the deposit lines of Deposito).
+ * @param  bool   $valid    Validate the sale and record the payments (terminals older than 1.0.1)
+ * @return array            Result info: array('placeid', 'socid', 'total_ttc', 'ref', 'paid', 'lines') or array('error' => ...)
  */
-function fluxposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $valid = false, $setmode = false)
+function fluxposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $valid = false)
 {
-	global $conf, $db, $langs, $user;
+	global $db, $langs, $user;
 
-	require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
 	require_once DOL_DOCUMENT_ROOT.'/core/lib/functions2.lib.php';
-
 	$langs->loadLangs(array("bills", "errors", "admin", "fluxpos@fluxpos"));
 
 	$fluxposterminal = empty($_SESSION['fluxposterminal']) ? 1 : $_SESSION['fluxposterminal'];
-	$constforcompanyid = 'FLUXPOS_ID_THIRDPARTY'.$fluxposterminal;
 
-	$invoice = new Facture($db);
-
-	// Resolve the draft invoice of the place. An empty capture (order cleared while
-	// offline) must never create an empty draft invoice.
 	$haslines = false;
 	foreach ($lines as $linetarget) {
 		if ((int) $linetarget['id'] > 0 && (float) $linetarget['qty'] > 0) {
@@ -772,113 +1124,45 @@ function fluxposSyncOfflineOrder($place, $lines, $socid, $payments = array(), $v
 			break;
 		}
 	}
-	$ret = $invoice->fetch(0, '(PROV-POS'.$fluxposterminal.'-'.$place.')');
-	if ($ret <= 0) {
-		if (!$haslines) {
-			return array('place' => $place, 'socid' => 0, 'total_ttc' => 0, 'created' => 0);
-		}
-		$invoice->socid = ($socid > 0) ? $socid : getDolGlobalInt($constforcompanyid);
-		if ($invoice->socid <= 0) {
-			return array('error' => $langs->trans("ErrorModuleSetupNotComplete", "FluxPos"));
-		}
-
-		$dolnowtzuserrel = dol_now('tzuserrel');	// If user is 02 january 22:00, we want to store '02 january'
-		$monthuser = dol_print_date($dolnowtzuserrel, '%m', 'gmt');
-		$dayuser = dol_print_date($dolnowtzuserrel, '%d', 'gmt');
-		$yearuser = dol_print_date($dolnowtzuserrel, '%Y', 'gmt');
-		$invoice->date = dol_mktime(0, 0, 0, (int) $monthuser, (int) $dayuser, (int) $yearuser, 'tzserver');
-
-		$invoice->module_source = 'fluxpos';
-		$invoice->pos_source = $fluxposterminal;
-		$invoice->entity = !empty($_SESSION["fluxposinvoiceentity"]) ? $_SESSION["fluxposinvoiceentity"] : $conf->entity;
-
-		$db->begin();
-		$placeid = $invoice->create($user);
-		if ($placeid < 0) {
-			$db->rollback();
-			return array('error' => $invoice->error);
-		}
-		$sql = "UPDATE ".MAIN_DB_PREFIX."facture";
-		$sql .= " SET ref='(PROV-POS".$fluxposterminal."-".$place.")'";
-		$sql .= " WHERE rowid = ".((int) $placeid);
-		if (!$db->query($sql)) {
-			$db->rollback();
-			return array('error' => $db->lasterror());
-		}
-		$db->commit();
-
-		$invoice->fetch($placeid);
+	$invoice = fluxposPlaceTicket($place, $socid, $haslines);
+	if (is_string($invoice)) {
+		return array('error' => $invoice);
 	}
-
-	if ($invoice->status != $invoice::STATUS_DRAFT) {
-		return array('error' => 'Invoice of place '.$place.' is not a draft anymore');
+	if ($invoice === null) {
+		return array('place' => $place, 'socid' => 0, 'total_ttc' => 0, 'created' => 0);
 	}
 
 	$customer = new Societe($db);
 	$customer->fetch($invoice->socid);
 
 	$db->begin();
-
-	$reconcileresult = $setmode ? fluxposReconcileLinesSet($invoice, $customer, $lines) : fluxposReconcileLines($invoice, $customer, $lines);
-	if ($reconcileresult < 0) {
+	if (fluxposReconcileLines($invoice, $customer, $lines) < 0) {
 		$errmsg = ($invoice->error ? $invoice->error : $db->lasterror());
 		$db->rollback();
 		return array('error' => $errmsg);
 	}
-
 	$validatedhere = false;
 	if ($valid) {
-		if (!$haslines) {
-			$db->rollback();
-			return array('error' => $langs->trans("NoLinesToBill", "FluxPos"));
-		}
 		$errmsg = fluxposValidateAndPay($invoice, $payments, $fluxposterminal, $validatedhere);
 		if ($errmsg !== '') {
 			$db->rollback();
 			return array('error' => $errmsg);
 		}
 	}
-
 	$db->commit();
 
 	$invoice->fetch($invoice->id);
-
-	// The receipt of a sale validated by this synchronization is printed on the receipt
-	// printer of the terminal when there is one configured
 	if ($validatedhere) {
 		fluxposPrintInvoiceTicket($invoice->id, $fluxposterminal, $user);
 	}
 
-	// Product lines of the draft, so the terminal can mirror the exact line ids
-	// and prices of the server order into its local cart
+	$state = fluxposTicketState($invoice);
 	$outlines = array();
-	foreach ($invoice->lines as $line) {
-		if ($line->fk_product > 0 && $line->fk_parent_line <= 0 && $line->special_code != 4) {
-			$outlines[] = array('id' => (int) $line->fk_product, 'lineid' => (int) $line->id, 'qty' => (float) $line->qty, 'total_ttc' => (float) $line->total_ttc, 'remise_percent' => (float) $line->remise_percent);
+	foreach ($state['lines'] as $line) {
+		if ($line['kind'] != 'other') {
+			$outlines[] = array('id' => $line['product'], 'lineid' => $line['lineid'], 'qty' => $line['qty'], 'total_ttc' => $line['total_ttc'], 'remise_percent' => $line['remise_percent'], 'label' => $line['label']);
 		}
 	}
-	if (!empty($outlines)) {
-		// Labels of the lines, so the terminal can display the lines it did not capture
-		// itself (the deposit lines added by the triggers of the Deposito module)
-		$labels = array();
-		$idsproduct = array();
-		foreach ($outlines as $outline) {
-			$idsproduct[(int) $outline['id']] = 1;
-		}
-		$sql = "SELECT rowid, ref, label FROM ".MAIN_DB_PREFIX."product";
-		$sql .= " WHERE rowid IN (".implode(',', array_keys($idsproduct)).")";
-		$resql = $db->query($sql);
-		if ($resql) {
-			while ($obj = $db->fetch_object($resql)) {
-				$labels[(int) $obj->rowid] = ($obj->label != '' ? $obj->label : $obj->ref);
-			}
-			$db->free($resql);
-		}
-		foreach ($outlines as $keyoutline => $outline) {
-			$outlines[$keyoutline]['label'] = ($labels[(int) $outline['id']] != '' ? $labels[(int) $outline['id']] : 'Product '.$outline['id']);
-		}
-	}
-
 	return array('placeid' => $invoice->id, 'place' => $place, 'socid' => $invoice->socid, 'total_ttc' => $invoice->total_ttc, 'ref' => $invoice->ref, 'paid' => (int) $invoice->paye, 'lines' => $outlines);
 }
 
@@ -923,9 +1207,11 @@ function fluxposFindBookedSale($saleuid)
  * @param  int    $socid    Thirdparty id (0 = default customer of the terminal)
  * @param  array  $payments Payments: array('pay', 'amount', 'excess', 'accountid')
  * @param  int    $datesale Time of the sale on the terminal (timestamp, 0 if unknown)
- * @return array            Result info: array('uid', 'placeid', 'ref', 'total_ttc', 'paid', 'duplicate') or array('error' => ...)
+ * @param  array  $ticket   Open ticket the sale came from: array('id' => draft invoice id known by the terminal (0 if none), 'ops' => its operations not confirmed yet), empty when the sale was not on a ticket (see fluxposCloseTicketLines())
+ * @param  float  $total    Total the terminal showed and charged (null when unknown)
+ * @return array            Result info: array('uid', 'placeid', 'ref', 'total_ttc', 'paid', 'duplicate', 'check') or array('error' => ...)
  */
-function fluxposSyncOfflineSale($saleuid, $place, $lines, $socid, $payments, $datesale)
+function fluxposSyncOfflineSale($saleuid, $place, $lines, $socid, $payments, $datesale, $ticket = array(), $total = null)
 {
 	global $conf, $db, $langs, $user;
 
@@ -944,14 +1230,20 @@ function fluxposSyncOfflineSale($saleuid, $place, $lines, $socid, $payments, $da
 		return $booked;
 	}
 
-	$haslines = false;
+	// One line per product: a ticket can hold a product on two lines, the sale books the sum
+	$summed = array();
 	foreach ($lines as $linetarget) {
-		if ((int) $linetarget['id'] > 0 && (float) $linetarget['qty'] > 0) {
-			$haslines = true;
-			break;
+		$idsum = isset($linetarget['id']) ? (int) $linetarget['id'] : 0;
+		$qtysum = isset($linetarget['qty']) ? (float) $linetarget['qty'] : 0;
+		if ($idsum > 0 && $qtysum > 0) {
+			$summed[$idsum] = (isset($summed[$idsum]) ? $summed[$idsum] : 0) + $qtysum;
 		}
 	}
-	if (!$haslines) {
+	$lines = array();
+	foreach ($summed as $idsum => $qtysum) {
+		$lines[] = array('id' => $idsum, 'qty' => $qtysum);
+	}
+	if (!count($lines)) {
 		return array('error' => $langs->trans("NoLinesToBill", "FluxPos"));
 	}
 
@@ -1027,7 +1319,24 @@ function fluxposSyncOfflineSale($saleuid, $place, $lines, $socid, $payments, $da
 		return array('error' => $errmsg);
 	}
 
-	$sql = "UPDATE ".MAIN_DB_PREFIX."fluxpos_sale SET fk_facture = ".((int) $invoice->id)." WHERE rowid = ".((int) $saleid);
+	// The sale came from an open ticket: take the sold lines off it (what another device
+	// added meanwhile stays open). Anything unexpected is noted on the sale to be checked,
+	// never refused: the money was taken.
+	$checknotes = array();
+	if (!empty($ticket['id']) || !empty($ticket['ops'])) {
+		$note = fluxposCloseTicketLines($place, $ticket, $lines);
+		if ($note !== '') {
+			$checknotes[] = $note;
+		}
+	}
+	$invoice->fetch($invoice->id);
+	if ($total !== null && abs((float) $total - (float) $invoice->total_ttc) > 0.005) {
+		$checknotes[] = 'The terminal charged '.price((float) $total, 0, $langs, 1, -1, 2, $conf->currency).' but the sale is booked at '.price((float) $invoice->total_ttc, 0, $langs, 1, -1, 2, $conf->currency);
+	}
+
+	$sql = "UPDATE ".MAIN_DB_PREFIX."fluxpos_sale SET fk_facture = ".((int) $invoice->id);
+	$sql .= ", status = ".(count($checknotes) ? 1 : 0).", note = ".(count($checknotes) ? "'".$db->escape(dol_trunc(implode('; ', $checknotes), 250, 'right', 'UTF-8', 1))."'" : "NULL");
+	$sql .= " WHERE rowid = ".((int) $saleid);
 	if (!$db->query($sql)) {
 		$errmsg = $db->lasterror();
 		$db->rollback();
@@ -1043,7 +1352,7 @@ function fluxposSyncOfflineSale($saleuid, $place, $lines, $socid, $payments, $da
 		fluxposPrintInvoiceTicket($invoice->id, $fluxposterminal, $user);
 	}
 
-	return array('uid' => $saleuid, 'placeid' => $invoice->id, 'ref' => $invoice->ref, 'total_ttc' => $invoice->total_ttc, 'paid' => (int) $invoice->paye, 'duplicate' => 0);
+	return array('uid' => $saleuid, 'placeid' => $invoice->id, 'ref' => $invoice->ref, 'total_ttc' => $invoice->total_ttc, 'paid' => (int) $invoice->paye, 'duplicate' => 0, 'check' => count($checknotes));
 }
 
 
@@ -1461,13 +1770,50 @@ if ($action == 'getProducts' && $user->hasRight('fluxpos', 'run')) {
 	}
 
 	$input = json_decode(file_get_contents('php://input'), true);
-	if (!is_array($input) || empty($input['place']) || !isset($input['lines']) || !is_array($input['lines'])) {
+	// The place "0" (terminal without tables) is a valid place: never test it with empty()
+	$placeinput = (is_array($input) && isset($input['place'])) ? fluxposCleanPlace($input['place']) : '';
+	if (!is_array($input) || $placeinput === '' || !isset($input['lines']) || !is_array($input['lines'])) {
 		echo json_encode(array('error' => 'Bad request: place and lines are required'));
 		exit;
 	}
 
-	$result = fluxposSyncOfflineOrder((string) $input['place'], (array) $input['lines'], (!empty($input['thirdpartyid']) ? (int) $input['thirdpartyid'] : 0), (isset($input['payments']) && is_array($input['payments']) ? $input['payments'] : array()), (!empty($input['valid'])), (!empty($input['set'])));
+	$result = fluxposSyncOfflineOrder($placeinput, (array) $input['lines'], (!empty($input['thirdpartyid']) ? (int) $input['thirdpartyid'] : 0), (isset($input['payments']) && is_array($input['payments']) ? $input['payments'] : array()), (!empty($input['valid'])));
 	echo json_encode($result);
+} elseif ($action == 'applyOps' && $user->hasRight('fluxpos', 'run')) {
+	// 1.8: the changes of a terminal to the open ticket of a place, as operations
+	top_httphead('application/json');
+
+	if ($_SERVER['REQUEST_METHOD'] != 'POST') {
+		http_response_code(405);
+		echo json_encode(array('error' => 'POST required'));
+		exit;
+	}
+
+	$input = json_decode(file_get_contents('php://input'), true);
+	$placeinput = (is_array($input) && isset($input['place'])) ? fluxposCleanPlace($input['place']) : '';
+	if (!is_array($input) || $placeinput === '' || !isset($input['ops']) || !is_array($input['ops'])) {
+		echo json_encode(array('error' => 'Bad request: place and ops are required'));
+		exit;
+	}
+
+	echo json_encode(fluxposApplyOps($placeinput, (!empty($input['thirdpartyid']) ? (int) $input['thirdpartyid'] : 0), $input['ops']));
+} elseif ($action == 'getTicket' && $user->hasRight('fluxpos', 'run')) {
+	// 1.8: current state of the open ticket of a place ({unchanged: 1} when the terminal
+	// already has this version), read by the terminals every few seconds
+	top_httphead('application/json');
+
+	$placeinput = fluxposCleanPlace(GETPOST('place', 'alphanohtml'));
+	if ($placeinput === '') {
+		echo json_encode(array('error' => 'Bad request: place is required'));
+		exit;
+	}
+	$ticketinput = fluxposPlaceTicket($placeinput, 0, false);
+	$state = fluxposTicketState(is_object($ticketinput) ? $ticketinput : null);
+	if (GETPOST('version', 'alphanohtml') !== '' && GETPOST('version', 'alphanohtml') === $state['version']) {
+		echo json_encode(array('unchanged' => 1, 'version' => $state['version']));
+	} else {
+		echo json_encode($state);
+	}
 } elseif ($action == 'syncOfflineSale' && $user->hasRight('fluxpos', 'run')) {
 	top_httphead('application/json');
 
@@ -1484,7 +1830,7 @@ if ($action == 'getProducts' && $user->hasRight('fluxpos', 'run')) {
 		exit;
 	}
 
-	$result = fluxposSyncOfflineSale((string) $input['uid'], (isset($input['place']) ? (string) $input['place'] : ''), (array) $input['lines'], (!empty($input['thirdpartyid']) ? (int) $input['thirdpartyid'] : 0), (isset($input['payments']) && is_array($input['payments']) ? $input['payments'] : array()), (!empty($input['created']) ? (int) $input['created'] : 0));
+	$result = fluxposSyncOfflineSale((string) $input['uid'], (isset($input['place']) ? fluxposCleanPlace($input['place']) : ''), (array) $input['lines'], (!empty($input['thirdpartyid']) ? (int) $input['thirdpartyid'] : 0), (isset($input['payments']) && is_array($input['payments']) ? $input['payments'] : array()), (!empty($input['created']) ? (int) $input['created'] : 0), ((isset($input['ticket']) && is_array($input['ticket'])) ? $input['ticket'] : array()), (isset($input['total']) && is_numeric($input['total']) ? (float) $input['total'] : null));
 	echo json_encode($result);
 } elseif ($action == 'ping' && $user->hasRight('fluxpos', 'run')) {
 	// Light call used by the terminal to know when the server can be reached again

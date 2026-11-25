@@ -17,27 +17,25 @@
 
 /**
  *	\file       htdocs/fluxpos/js/offline11.js
- *	\brief      Offline support for FluxPos: catalog cache into IndexedDB, online/offline
- *				status and offline order entry with background synchronization.
+ *	\brief      Ticket engine of FluxPos: catalog cache into IndexedDB, shared open
+ *				tickets synchronized both ways by operations, offline sales.
  *
- *				Phase 1 (read only): the product catalog (categories, products, prices)
- *				is synchronized in background when online and read from IndexedDB when
- *				the terminal loses connectivity. Order entry still requires the server.
+ *				Catalog: categories, products, prices and the deposit data of Deposito
+ *				are cached in IndexedDB while online and used when offline.
  *
- *				Phase 2 (offline order entry): a new order (with no invoice created yet on
- *				the server) can be captured while offline into a local cart stored into
- *				IndexedDB and displayed instead of the #poslines fragment of invoice.php.
- *				The local carts are replayed in background to the syncOfflineOrder endpoint
- *				of ajax/ajax.php when the connection is back, without interrupting the
- *				capture of new orders.
+ *				Open tickets (1.8): the ticket of a place lives on the server (its draft
+ *				invoice) and can be handled from several devices. Every change made on a
+ *				terminal is an operation with a unique id (add, delta, set, remove), kept
+ *				in the outbox of the ticket ('ticket:<place>') and applied once by the
+ *				applyOps endpoint, which answers the full ticket. The screen shows the last
+ *				state of the server with the operations not confirmed yet on top of it.
+ *				Other devices read the ticket every few seconds (getTicket, cheap while
+ *				nothing changed). Offline, the operations wait in the outbox.
  *
- *				Phase 3 (offline payment and validation): the cashier can pay and validate
- *				an order captured while offline (cash, credit card or cheque, with change
- *				given for cash). The paid order becomes a SALE with its own unique id
- *				(stored as 'sale:<uid>'), and the cart of the place is emptied at once so
- *				the next customer can be served. Each sale is sent to the syncOfflineSale
- *				endpoint, which books it exactly once (invoice number, payments) even when
- *				it is sent again; the receipt is printed by the server receipt printer.
+ *				Offline payment: the ticket becomes a SALE with its own unique id (stored as
+ *				'sale:<uid>'), booked exactly once by the syncOfflineSale endpoint, which also
+ *				takes the sold lines off the ticket on the server (what another device added
+ *				meanwhile stays open). The ticket is emptied at once on the terminal.
  *
  *				Offline detection: the terminal is offline when the browser has no network
  *				(navigator.onLine false) OR when a call to the server fails for a network
@@ -206,6 +204,49 @@ function takePOSOfflineStorePutAndDelete(putkey, value, deletekey) {
 			transaction.oncomplete = function () {
 				db.close();
 				resolve(true);
+			};
+			transaction.onerror = function () {
+				reject(transaction.error);
+			};
+		});
+	});
+}
+
+/**
+ * Read, change and write back one entry in ONE read-write transaction: a change made
+ * meanwhile by another call can never be overwritten (IndexedDB runs the read-write
+ * transactions of a store one after the other).
+ *
+ * @param  {string}   key Key of the entry
+ * @param  {Function} fn  Synchronous function(value) returning the new value (null or undefined removes the entry)
+ * @returns {Promise<*>} Promise of the new value
+ */
+function takePOSOfflineStoreUpdate(key, fn) {
+	'use strict';
+
+	return openFluxPosOfflineDB().then(function (db) {
+		return new Promise(function (resolve, reject) {
+			var transaction = db.transaction('catalog', 'readwrite');
+			var store = transaction.objectStore('catalog');
+			var result;
+			var request = store.get(key);
+			request.onsuccess = function () {
+				try {
+					result = fn(request.result);
+				} catch (error) {
+					transaction.abort();
+					reject(error);
+					return;
+				}
+				if (result === null || typeof result == 'undefined') {
+					store['delete'](key);
+				} else {
+					store.put(result, key);
+				}
+			};
+			transaction.oncomplete = function () {
+				db.close();
+				resolve(result);
 			};
 			transaction.onerror = function () {
 				reject(transaction.error);
@@ -444,8 +485,9 @@ var FluxPosOffline = {
 	},
 
 	/**
-	 * The server answered again: leave offline mode, send the waiting sales and orders,
-	 * then give the display back to the server.
+	 * The server answered again: leave offline mode, send what waits (sales and the
+	 * operations of the open tickets), then show the ticket of the place as the server
+	 * holds it.
 	 */
 	markServerUp: function () {
 		'use strict';
@@ -462,59 +504,9 @@ var FluxPosOffline = {
 		}
 		this.updateOfflineStatus();
 		this.syncCatalog();
-		this.afterSyncDisplay();
-	},
-
-	/**
-	 * What the screen shows after a background synchronization (server up again,
-	 * 'online' event, periodic retry): as long as the local cart of the current place
-	 * still holds lines, the ticket stays rendered on the screen (its synchronization
-	 * may still be waiting or have failed: the local capture is never dropped before
-	 * the server has verifiably taken it). Only an empty cart gives the display back
-	 * to the order fragment of the server.
-	 *
-	 * @returns {Promise} Promise of the display refresh
-	 */
-	afterSyncDisplay: function () {
-		'use strict';
-
-		var self = this;
-		return this.syncOutbox().then(function () {
-			var empty = true;
-			if (!window.indexedDB) {
-				return self.refreshAfterSync(empty);
-			}
-			return self.getCart().then(function (cart) {
-				if (cart && cart.lines && cart.lines.length) {
-					empty = false;
-				}
-				return self.refreshAfterSync(empty);
-			});
+		this.syncOutbox().then(function () {
+			return self.refreshTicket(true);
 		});
-	},
-
-	/**
-	 * Refresh the display after a synchronization: render the local ticket again
-	 * (with its current state, including the lines mirrored from the server answer)
-	 * or reload the fragment of the server when nothing is captured locally.
-	 *
-	 * @param  {boolean} empty True when the local cart holds no captured lines
-	 * @returns {Promise} Promise of the refresh
-	 */
-	refreshAfterSync: function (empty) {
-		'use strict';
-
-		if (!empty) {
-			return this.renderCart(true);
-		}
-		if (typeof jQuery == 'undefined' || jQuery('#offlinecart').val() != '1') {
-			return Promise.resolve();
-		}
-		if (typeof Refresh == 'function') {
-			// The captured products are on the server now: show its order again
-			Refresh();
-		}
-		return Promise.resolve();
 	},
 
 	/**
@@ -546,7 +538,7 @@ var FluxPosOffline = {
 	},
 
 	/**
-	 * Make a unique id for a sale. The server books a sale only once per id.
+	 * Make a unique id (for a sale or an operation). The server applies each id only once.
 	 *
 	 * @returns {string} Unique id
 	 */
@@ -572,66 +564,6 @@ var FluxPosOffline = {
 			}
 		}
 		return hex;
-	},
-
-	/**
-	 * Turn the carts locked as "validated" by an older version of this file into sales,
-	 * so they are booked through the exactly-once endpoint and their place is free again.
-	 *
-	 * @returns {Promise<bool>} Promise resolved when done
-	 */
-	migrateLegacyCarts: function () {
-		'use strict';
-
-		var self = this;
-		return takePOSOfflineStoreKeys('cart:').then(function (keys) {
-			var promise = Promise.resolve(true);
-			jQuery.each(keys, function (index, key) {
-				promise = promise.then(function () {
-					return takePOSOfflineStoreGet(key).then(function (cart) {
-						if (!cart || cart.validated !== true) {
-							return true;
-						}
-						return self.storeSale(cart, cart.payments || [], key);
-					});
-				});
-			});
-			return promise;
-		}).catch(function (error) {
-			console.log('FluxPos offline: migration of the validated carts failed', error);
-			return false;
-		});
-	},
-
-	/**
-	 * Store a paid cart as a sale waiting to be booked on the server, and remove the cart
-	 * in the same transaction (a sale must never also stay as an open order).
-	 *
-	 * @param  {Object} cart     Cart (place, socid, lines)
-	 * @param  {Array}  payments Payments captured: [{pay, amount, excess}]
-	 * @param  {string} cartkey  Key of the cart to remove
-	 * @returns {Promise<Object>} Promise of the stored sale
-	 */
-	storeSale: function (cart, payments, cartkey) {
-		'use strict';
-
-		var total = 0;
-		for (var i = 0; i < cart.lines.length; i++) {
-			total += cart.lines[i].price_ttc * cart.lines[i].qty;
-		}
-		var sale = {
-			uid: this.newSaleUid(),
-			place: String(cart.place),
-			socid: cart.socid || 0,
-			lines: cart.lines,
-			payments: payments || [],
-			total_ttc: Math.round(total * 100) / 100,
-			created: Math.floor(Date.now() / 1000),
-			error: ''
-		};
-		return takePOSOfflineStorePutAndDelete('sale:' + sale.uid, sale, cartkey).then(function () {
-			return sale;
-		});
 	},
 
 	/**
@@ -676,55 +608,9 @@ var FluxPosOffline = {
 	},
 
 	/**
-	 * Read the local cart of a place (an order captured on the terminal and not yet
-	 * synchronized to the server).
-	 *
-	 * @param  {number|string} plc Place to read (current place when not provided)
-	 * @returns {Promise<Object|null>} Promise of the cart, or null when there is no cart
-	 */
-	getCart: function (plc) {
-		'use strict';
-
-		if (typeof plc == 'undefined') {
-			plc = (typeof place != 'undefined') ? place : 0;
-		}
-		return takePOSOfflineStoreGet('cart:' + plc).then(function (cart) {
-			return (typeof cart == 'undefined') ? null : cart;
-		}).catch(function () {
-			return null;
-		});
-	},
-
-	/**
-	 * Save the local cart of a place. An empty cart is removed from the database.
-	 * The pending orders indicator is updated. Online, the ticket is pushed by the
-	 * instant synchronization on every change (requestSync); while offline, the
-	 * background pass sends it when the connection is back (markServerUp or a
-	 * click on the status pill), so saving never schedules a send on its own:
-	 * the local cart stays the ticket, online and offline alike.
-	 *
-	 * @param  {Object} cart Cart to save (with 'place' and 'lines' properties)
-	 * @returns {Promise<bool>} Promise resolved when the cart has been saved
-	 */
-	saveCart: function (cart) {
-		'use strict';
-
-		var self = this;
-		cart.updated = Math.floor(Date.now() / 1000);
-		var promise = cart.lines.length ? takePOSOfflineStorePut('cart:' + cart.place, cart) : takePOSOfflineStoreDelete('cart:' + cart.place);
-		return promise.then(function () {
-			self.updateOfflineStatus();
-			return true;
-		});
-	},
-
-	/**
 	 * Parse a formatted amount as displayed on a screen (e.g. "1 234,56 €" or
-	 * "$1,234.56") into a number. Tolerant of both decimal separators, of the
-	 * thousands separators and of any currency text around the amount. When both
-	 * separators appear, the last one is the decimal separator and the other
-	 * (repeated) one is thousands, so the European and the US formatting both parse.
-	 * The same helper is used by the adopted-line parser of adoptFromScreen().
+	 * "$1,234.56") into a number. When both separators appear, the last one is the
+	 * decimal separator, so the European and the US formatting both parse.
 	 *
 	 * @param  {string} text Formatted amount as displayed
 	 * @returns {number} The amount (0 when nothing can be parsed)
@@ -745,440 +631,691 @@ var FluxPosOffline = {
 		return parseFloat(num) || 0;
 	},
 
+	/*
+	 * ---------------------------------------------------------------------------------
+	 * Open tickets (1.8): two-way synchronization by operations
+	 *
+	 * The open ticket of a place lives on the server (the draft invoice of the place) and
+	 * can be handled from any device using the same terminal number. A terminal keeps,
+	 * per place, in IndexedDB under 'ticket:<place>':
+	 *   { place, socid, server: <last state answered by the server>, seq, ops: [...] }
+	 * Every change made on the terminal is an OPERATION with its own unique id:
+	 *   add {product, qty} - delta {lineid|product, qty} - set {lineid|product, qty} - remove {lineid|product}
+	 * Operations are changes, never copies of the cart, so the changes of several devices
+	 * on one ticket add up. The server applies each operation once (unique id) and answers
+	 * the full ticket. What the screen shows is always:
+	 *   last server state + the operations not confirmed yet, applied on top of it.
+	 * A tap made while a request is on its way is still in the outbox and is applied
+	 * again on top of the answer: nothing is overwritten, nothing is lost. The deposit
+	 * lines of Deposito are written by the server; the terminal only predicts them for
+	 * the operations not confirmed yet (deposit data of the catalog).
+	 * ---------------------------------------------------------------------------------
+	 */
+
 	/**
-	 * Add a product into the local cart of the current place.
-	 * The product data (label, price) come first from the catalog cached while
-	 * online, then from the tapped tile itself (info): a tap is never lost, even
-	 * when the catalog was never synchronized on this terminal.
+	 * Current place of the screen.
+	 *
+	 * @returns {string} Place
+	 */
+	currentPlace: function () {
+		'use strict';
+
+		return (typeof place != 'undefined' && place !== null) ? String(place) : '0';
+	},
+
+	/**
+	 * Read the ticket of a place stored on this terminal.
+	 *
+	 * @param  {string} plc Place (current place when not provided)
+	 * @returns {Promise<Object>} Promise of the ticket (an empty ticket when none is stored)
+	 */
+	getTicket: function (plc) {
+		'use strict';
+
+		var self = this;
+		plc = (typeof plc == 'undefined') ? this.currentPlace() : String(plc);
+		return takePOSOfflineStoreGet('ticket:' + plc).then(function (ticket) {
+			return ticket || self.emptyTicket(plc);
+		}).catch(function () {
+			return self.emptyTicket(plc);
+		});
+	},
+
+	/**
+	 * An empty ticket of a place.
+	 *
+	 * @param  {string} plc Place
+	 * @returns {Object} Empty ticket
+	 */
+	emptyTicket: function (plc) {
+		'use strict';
+
+		return { place: String(plc), socid: 0, server: null, seq: 0, ops: [] };
+	},
+
+	/**
+	 * Change the stored ticket of a place in ONE read-write transaction (no change made
+	 * in between can be overwritten). A ticket without server state and without
+	 * operations is removed.
+	 *
+	 * @param  {string}   plc Place
+	 * @param  {Function} fn  Synchronous function(ticket) changing the ticket in place
+	 * @returns {Promise<Object>} Promise of the stored ticket
+	 */
+	updateTicket: function (plc, fn) {
+		'use strict';
+
+		var self = this;
+		plc = String(plc);
+		return takePOSOfflineStoreUpdate('ticket:' + plc, function (stored) {
+			var ticket = stored || self.emptyTicket(plc);
+			fn(ticket, !!stored);
+			var serverempty = !ticket.server || !ticket.server.placeid;
+			return (serverempty && !ticket.ops.length) ? null : ticket;
+		}).then(function (ticket) {
+			self.updateOfflineStatus();
+			return ticket || self.emptyTicket(plc);
+		});
+	},
+
+	/**
+	 * Catalog data of a product (label, price, deposit data), from the catalog cached on
+	 * this terminal, else from the tapped tile.
+	 *
+	 * @param  {number} idproduct Product id
+	 * @param  {Object} [info]    Data of the tapped tile {label, price_ttc}
+	 * @returns {Promise<Object|null>} Promise of {label, unit, ret, dep} or null when unknown
+	 */
+	productData: function (idproduct, info) {
+		'use strict';
+
+		var socid = parseInt(jQuery('#thirdpartyid').val(), 10) || 0;
+		return takePOSOfflineStoreGet('products:' + socid + ':__all__').then(function (all) {
+			var product = (all && all[idproduct]) ? all[idproduct] : null;
+			if (!product && socid) {
+				return takePOSOfflineStoreGet('products:0:__all__').then(function (all0) {
+					return (all0 && all0[idproduct]) ? all0[idproduct] : null;
+				});
+			}
+			return product;
+		}).catch(function () {
+			return null;
+		}).then(function (product) {
+			if (!product && info && info.label) {
+				product = { label: String(info.label), price_ttc: parseFloat(info.price_ttc) || 0 };
+			}
+			if (!product) {
+				return null;
+			}
+			var data = { label: product.label || ('Product ' + idproduct), unit: parseFloat(product.price_ttc) || 0, ret: !!product.ret, dep: null };
+			if (product.deposit) {
+				data.dep = { id: parseInt(product.deposit, 10), qty: parseFloat(product.deposit_qty) || 1, label: product.deposit_label || '', unit: parseFloat(product.deposit_price_ttc) || 0 };
+			}
+			return data;
+		});
+	},
+
+	/**
+	 * Compute what the screen shows for a ticket: the lines of the last server state,
+	 * with the operations not confirmed yet applied on top, and the deposit lines those
+	 * operations will bring (predicted from the catalog until the server answers).
+	 *
+	 * @param  {Object} ticket Stored ticket
+	 * @returns {Object} {lines: [{key, lineid, product, label, count, unit, kind, ret, remise, pending}], total, placeid, socid}
+	 */
+	computeView: function (ticket) {
+		'use strict';
+
+		var lines = [];
+		var server = ticket && ticket.server ? ticket.server : null;
+		var i, line, op;
+		if (server && server.lines) {
+			for (i = 0; i < server.lines.length; i++) {
+				var sl = server.lines[i];
+				var count = Math.abs(parseFloat(sl.qty) || 0);
+				lines.push({
+					key: 'l' + sl.lineid,
+					lineid: parseInt(sl.lineid, 10) || 0,
+					product: parseInt(sl.product, 10) || 0,
+					label: sl.label,
+					count: count,
+					unit: count > 0 ? (parseFloat(sl.total_ttc) || 0) / count : (parseFloat(sl.total_ttc) || 0),
+					kind: sl.kind || 'other',
+					ret: !!parseInt(sl.ret, 10),
+					sent: !!parseInt(sl.sent, 10),
+					remise: parseFloat(sl.remise_percent) || 0,
+					pending: false
+				});
+			}
+		}
+		var findLine = function (o) {
+			var j;
+			if (o.type != 'add' && o.lineid > 0) {
+				for (j = 0; j < lines.length; j++) {
+					if (lines[j].lineid == o.lineid && lines[j].kind == 'product') {
+						return lines[j];
+					}
+				}
+			}
+			// Same rule as the server: a tap never adds to a line already sent to the kitchen
+			for (j = 0; j < lines.length; j++) {
+				if (lines[j].product == o.product && o.product > 0 && lines[j].kind == 'product' && !lines[j].sent) {
+					return lines[j];
+				}
+			}
+			return null;
+		};
+		var deposits = {};
+		var ops = (ticket && ticket.ops) ? ticket.ops : [];
+		for (i = 0; i < ops.length; i++) {
+			op = ops[i];
+			var qty = parseFloat(op.qty) || 0;
+			line = findLine(op);
+			var before = line ? line.count : 0;
+			var after = (op.type == 'add' || op.type == 'delta') ? before + qty : (op.type == 'set' ? qty : 0);
+			if (!line) {
+				if (op.type == 'remove' || after <= 0 || !(op.product > 0)) {
+					continue;
+				}
+				line = { key: 'p' + op.product, lineid: 0, product: op.product, label: op.label || ('Product ' + op.product), count: 0, unit: op.ret ? -Math.abs(op.unit || 0) : (op.unit || 0), kind: 'product', ret: !!op.ret, remise: 0, pending: true };
+				lines.push(line);
+			}
+			after = Math.max(0, after);
+			if (op.dep && op.dep.id) {
+				var d = deposits[op.dep.id] || (deposits[op.dep.id] = { qty: 0, label: op.dep.label, unit: op.dep.unit });
+				d.qty += (after - line.count) * (op.dep.qty || 1);
+			}
+			line.count = after;
+			line.pending = true;
+		}
+		for (var depid in deposits) {
+			if (!deposits.hasOwnProperty(depid)) {
+				continue;
+			}
+			var dl = null;
+			for (i = 0; i < lines.length; i++) {
+				if (lines[i].kind == 'deposit' && lines[i].product == depid) {
+					dl = lines[i];
+					break;
+				}
+			}
+			if (dl) {
+				dl.count = Math.max(0, dl.count + deposits[depid].qty);
+				dl.pending = true;
+			} else if (deposits[depid].qty > 0) {
+				lines.push({ key: 'd' + depid, lineid: 0, product: parseInt(depid, 10), label: deposits[depid].label || ('Product ' + depid), count: deposits[depid].qty, unit: deposits[depid].unit, kind: 'deposit', ret: false, remise: 0, pending: true });
+			}
+		}
+		// total: the whole ticket; chargeable: what an offline sale books (products, and the
+		// deposits Deposito adds to them) - free lines and discount lines stay on the ticket
+		var view = { lines: [], total: 0, chargeable: 0, placeid: server ? (parseInt(server.placeid, 10) || 0) : 0, socid: (server && server.socid) ? server.socid : ((ticket && ticket.socid) || 0) };
+		for (i = 0; i < lines.length; i++) {
+			if (lines[i].kind != 'other' && lines[i].count <= 0.0001) {
+				continue;
+			}
+			view.lines.push(lines[i]);
+			view.total += lines[i].unit * lines[i].count;
+			if (lines[i].kind != 'other') {
+				view.chargeable += lines[i].unit * lines[i].count;
+			}
+		}
+		view.total = Math.round(view.total * 100) / 100;
+		view.chargeable = Math.round(view.chargeable * 100) / 100;
+		return view;
+	},
+
+	/**
+	 * Read the ticket of the current place as a cart for the offline payment dialogs:
+	 * only the lines an offline sale books (products and their deposits), so the amount
+	 * asked is the amount booked.
+	 *
+	 * @param  {string} [plc] Place (current place when not provided)
+	 * @returns {Promise<Object|null>} Promise of {place, socid, total, lines: [{rowid, label, price_ttc, qty}]}, null when empty
+	 */
+	getCart: function (plc) {
+		'use strict';
+
+		var self = this;
+		return this.getTicket(plc).then(function (ticket) {
+			var view = self.computeView(ticket);
+			var cart = { place: ticket.place, socid: view.socid, total: view.chargeable, lines: [] };
+			for (var i = 0; i < view.lines.length; i++) {
+				if (view.lines[i].kind != 'other') {
+					cart.lines.push({ rowid: view.lines[i].product, label: view.lines[i].label, price_ttc: view.lines[i].unit, qty: view.lines[i].count });
+				}
+			}
+			return cart.lines.length ? cart : null;
+		});
+	},
+
+	/**
+	 * Add an operation to the ticket of a place, show it at once and send it.
+	 *
+	 * @param  {string} plc Place
+	 * @param  {Object} op  Operation without uid
+	 * @returns {Promise<bool>} Promise of true when stored
+	 */
+	pushOp: function (plc, op) {
+		'use strict';
+
+		var self = this;
+		op.uid = this.newSaleUid();
+		op.created = Date.now();
+		return this.updateTicket(plc, function (ticket) {
+			ticket.ops.push(op);
+		}).then(function () {
+			self._lastSaleNotice = '';
+			return self.renderCart();
+		}).then(function () {
+			self.requestFlush();
+			return true;
+		});
+	},
+
+	/**
+	 * A product tile was tapped: qty more of the product on the ticket of the place.
 	 *
 	 * @param  {number} idproduct ID of product
 	 * @param  {number} qty       Quantity to add
-	 * @param  {Object} [info]    Data read from the tapped tile: {label: string, price_ttc: number} (optional fallback when the product is not into the cached catalog)
-	 * @returns {Promise<bool>} Promise resolved to false when the product could not be identified at all
+	 * @param  {Object} [info]    Data read from the tapped tile: {label, price_ttc}
+	 * @returns {Promise<bool>} Promise of false when the product could not be identified at all
 	 */
 	addProduct: function (idproduct, qty, info) {
 		'use strict';
 
 		var self = this;
+		var plc = this.currentPlace();
+		idproduct = parseInt(idproduct, 10) || 0;
 		qty = (parseFloat(qty) > 0) ? parseFloat(qty) : 1;
-		var socid = parseInt(jQuery('#thirdpartyid').val(), 10) || 0;
-		this._lastSaleNotice = '';
-		return this.getCart().then(function (cart) {
-			if (cart == null) {
-				cart = { place: String(place), socid: socid, created: Math.floor(Date.now() / 1000), lines: [] };
-			}
-			if (cart.validated) {
-				window.alert(self.t('FluxPosOfflineSaleLocked', 'This sale has been validated on this terminal and is waiting for its synchronization to the server. It cannot be modified anymore.'));
+		return this.productData(idproduct, info).then(function (data) {
+			if (!data) {
+				window.alert(self.t('FluxPosOfflineNotInCachedCatalog', 'This product is not into the catalog cached on this terminal. It cannot be sold while the terminal is offline.'));
 				return false;
 			}
-			return takePOSOfflineStoreGet('products:' + socid + ':__all__').then(function (allproducts) {
-				var product = (allproducts && allproducts[idproduct]) ? allproducts[idproduct] : null;
+			return self.pushOp(plc, { type: 'add', product: idproduct, lineid: 0, qty: qty, label: data.label, unit: data.unit, ret: data.ret, dep: data.dep });
+		});
+	},
 
-				// The product may already be a line of the cart, including a line adopted
-				// from the order of the place on the server (see captureOnServerOrder()):
-				// only the quantity is raised then, even when the product is not in the
-				// cached catalog (its price is on the line).
-				var found = false;
-				for (var i = 0; i < cart.lines.length; i++) {
-					if (String(cart.lines[i].rowid) == String(idproduct)) {
-						cart.lines[i].qty = Math.round((cart.lines[i].qty + qty) * 1000) / 1000;
-						found = true;
-						break;
-					}
+	/**
+	 * Kept for index.php: a tap on a place with an order on the server is an ordinary
+	 * tap now (the ticket is shared, nothing has to be adopted first).
+	 *
+	 * @param  {number} idproduct ID of product
+	 * @param  {number} qty       Quantity to add
+	 * @param  {Object} [info]    Data read from the tapped tile
+	 * @returns {Promise<bool>} See addProduct()
+	 */
+	captureOnServerOrder: function (idproduct, qty, info) {
+		'use strict';
+
+		return this.addProduct(idproduct, qty, info);
+	},
+
+	/**
+	 * Line of the current view by its key, or by the id of the row on the screen (the
+	 * invoice line id, or 'pending<product>' for a line not confirmed yet).
+	 *
+	 * @param  {string} key Key of the line, or id of its row
+	 * @returns {Promise<Object|null>} Promise of the view line
+	 */
+	findViewLine: function (key) {
+		'use strict';
+
+		var self = this;
+		key = String(key);
+		return this.getTicket().then(function (ticket) {
+			var view = self.computeView(ticket);
+			for (var i = 0; i < view.lines.length; i++) {
+				var line = view.lines[i];
+				if (line.key == key || (line.lineid > 0 && String(line.lineid) == key) || ('pending' + line.product) == key) {
+					return line;
 				}
-				if (!found) {
-					if (product == null && info && info.label) {
-						// 1.6.2: the tapped tile carries its own label and price: never refuse
-						// a tap only because the catalog was never cached on this terminal
-						product = { rowid: parseInt(idproduct, 10) || 0, ref: (info.ref ? String(info.ref) : ''), label: String(info.label), price_ttc: parseFloat(info.price_ttc) || 0 };
-					}
-					if (product == null) {
-						window.alert(self.t('FluxPosOfflineNotInCachedCatalog', 'This product is not into the catalog cached on this terminal. It cannot be sold while the terminal is offline.'));
-						return false;
-					}
-					cart.lines.push({ rowid: product.rowid, ref: product.ref, label: product.label, price_ttc: parseFloat(product.price_ttc) || 0, qty: qty });
-				}
-				return self.saveCart(cart).then(function () {
-					return self.renderCart();
-				}).then(function () {
-					// 1.7 unified flow: online the change goes to the draft of the place
-					// on the server at once; offline the request is ignored and the
-					// background synchronization sends the cart when the connection is back
-					self.requestSync('product added');
-					return true;
+			}
+			return null;
+		});
+	},
+
+	/**
+	 * Change the counted quantity of a line by delta (the +/- steppers).
+	 *
+	 * @param  {string} key   Key of the line (or id of its row)
+	 * @param  {number} delta Quantity to add (can be negative)
+	 * @returns {Promise<bool>} Promise resolved when done
+	 */
+	changeQty: function (key, delta) {
+		'use strict';
+
+		return this.lineOp(key, 'delta', parseFloat(delta) || 0);
+	},
+
+	/**
+	 * Set the counted quantity of a line (quantity pad).
+	 *
+	 * @param  {string} key Key of the line (or id of its row)
+	 * @param  {number} qty New quantity (0 removes the line)
+	 * @returns {Promise<bool>} Promise resolved when done
+	 */
+	setQty: function (key, qty) {
+		'use strict';
+
+		qty = parseFloat(qty);
+		if (isNaN(qty) || qty < 0) {
+			return Promise.resolve(false);
+		}
+		return this.lineOp(key, qty > 0 ? 'set' : 'remove', qty);
+	},
+
+	/**
+	 * Store an operation on a product line of the current view.
+	 *
+	 * @param  {string} key  Key of the line (or id of its row)
+	 * @param  {string} type 'delta', 'set' or 'remove'
+	 * @param  {number} qty  Quantity of the operation
+	 * @returns {Promise<bool>} Promise of true when stored
+	 */
+	lineOp: function (key, type, qty) {
+		'use strict';
+
+		var self = this;
+		var plc = this.currentPlace();
+		return this.findViewLine(key).then(function (line) {
+			if (!line || line.kind != 'product') {
+				return false;	// Deposit and other lines follow the server, never the terminal
+			}
+			return self.productData(line.product, { label: line.label, price_ttc: Math.abs(line.unit) }).then(function (data) {
+				return self.pushOp(plc, {
+					type: type,
+					product: line.product,
+					lineid: line.lineid,
+					qty: qty,
+					label: line.label,
+					unit: Math.abs(line.unit),
+					ret: line.ret,
+					dep: data ? data.dep : null
 				});
 			});
 		});
 	},
 
 	/**
-	 * Change the quantity of a line of the local cart of the current place.
-	 * The line is removed when its quantity reaches zero.
+	 * Drop the operations of the current place not sent yet (New while offline): the
+	 * ticket on the server stays as it is.
 	 *
-	 * @param  {number} idproduct ID of product of the line
-	 * @param  {number} delta     Quantity to add (can be negative)
+	 * @param  {string} [plc] Place (current place when not provided)
 	 * @returns {Promise<bool>} Promise resolved when done
 	 */
-	changeQty: function (idproduct, delta) {
+	clearCart: function (plc) {
 		'use strict';
 
 		var self = this;
-		return this.getCart().then(function (cart) {
-			if (cart == null) {
-				return false;
-			}
-			if (cart.validated) {
-				window.alert(self.t('FluxPosOfflineSaleLocked', 'This sale has been validated on this terminal and is waiting for its synchronization to the server. It cannot be modified anymore.'));
-				return false;
-			}
-			for (var i = 0; i < cart.lines.length; i++) {
-				if (String(cart.lines[i].rowid) == String(idproduct)) {
-					// 1.7 unified flow: a quantity can also be lowered (and a line removed),
-					// online and offline alike: the synchronization needs the cart to mirror
-					// the draft of the place (it sends the quantities in set mode), which
-					// is guaranteed by adoption at the first tap (captureOnServerOrder())
-					cart.lines[i].qty = Math.round((cart.lines[i].qty + parseFloat(delta)) * 1000) / 1000;
-					if (cart.lines[i].qty <= 0) {
-						cart.lines.splice(i, 1);
-					}
-					return self.saveCart(cart).then(function () {
-						return self.renderCart();
-					}).then(function () {
-						self.requestSync('quantity changed');
-						return true;
-					});
-				}
-			}
+		plc = (typeof plc == 'undefined') ? this.currentPlace() : String(plc);
+		return this.updateTicket(plc, function (ticket) {
+			ticket.ops = [];
+		}).then(function () {
+			return self.renderCart(true);
+		});
+	},
+
+	/**
+	 * Forget the ticket of the current place on this terminal (after New or a payment
+	 * online): waits for a sending in progress first, so no operation of the old ticket
+	 * can arrive after it and create it again.
+	 *
+	 * @returns {Promise<bool>} Promise resolved when done
+	 */
+	discardTicket: function () {
+		'use strict';
+
+		var plc = this.currentPlace();
+		return (this._flushing || Promise.resolve()).then(function () {
+			return takePOSOfflineStoreDelete('ticket:' + plc);
+		}).then(function () {
+			return true;
+		}, function () {
 			return false;
 		});
 	},
 
 	/**
-	 * Pay the local cart of the current place with the payments captured on the terminal
-	 * (same intent as invoice.php action=valid). An amount of 0 means "the remain to pay".
-	 * The cart becomes a sale with its own unique id, stored on the terminal until the
-	 * server has booked it (invoice number and payments, exactly once), and the cart of
-	 * the place is emptied at once so the next customer can be served.
+	 * Store the last state answered by the server for a place, unless a more recent
+	 * answer was stored already (seq = order in which the requests were started).
 	 *
-	 * @param  {Array} payments Payments captured: [{pay: 'LIQ'|'CB'|'CHQ'|..., amount, excess}]
-	 * @returns {Promise<bool>} Promise of true when the sale has been stored
+	 * @param  {string} plc   Place
+	 * @param  {Object} state Ticket state answered by the server
+	 * @param  {number} seq   Sequence number of the request
+	 * @param  {Object} [done] Uids of the operations the server applied or rejected
+	 * @param  {boolean} [onlyifstored] Do nothing when the ticket is not stored anymore
+	 * @returns {Promise<Object>} Promise of the stored ticket
 	 */
-	validateCart: function (payments) {
+	storeServerState: function (plc, state, seq, done, onlyifstored) {
 		'use strict';
 
-		var self = this;
-		// Wait for a synchronization in progress: if it sends this order to the server, the
-		// order must be paid there, not turned into a second, offline sale
-		return (this._syncPromise || Promise.resolve()).then(function () {
-			return self.getCart();
-		}).then(function (cart) {
-			if (cart == null || !cart.lines.length) {
-				if (!self.isOffline() && typeof Refresh == 'function') {
-					window.alert(self.t('FluxPosOfflineOrderJustSent', 'This order has just been sent to the server. Pay it again on the screen.'));
-					Refresh();
-				} else {
-					window.alert(self.t('FluxPosOfflineNoOrderCaptured', 'There is no order captured on this place.'));
+		var confirms = false;
+		if (done) {
+			for (var uid in done) {
+				if (done.hasOwnProperty(uid)) {
+					confirms = true;
+					break;
 				}
-				return false;
 			}
-			if (cart.adopted === true) {
-				// The captured products are merged into the draft invoice which already
-				// exists on the server for this place: that order is paid on the server
-				// (only an order started offline can be paid whole from this terminal).
-				window.alert(self.t('FluxPosOfflineAdoptedValidate', 'This place has an order registered on the server. The products captured while offline are synchronized to it as soon as the connection is back, then it is paid there.'));
-				return false;
+		}
+		return this.updateTicket(plc, function (ticket, existed) {
+			if (onlyifstored && !existed) {
+				// The ticket was paid offline or discarded while the answer was on its way:
+				// never bring it back on this terminal
+				ticket.server = null;
+				ticket.ops = [];
+				return;
 			}
-			return self.storeSale(cart, payments || [], 'cart:' + cart.place).then(function (sale) {
-				self._lastSaleNotice = self.t('FluxPosOfflineSaleStored', 'Sale of %s stored on this terminal. Its invoice number is given by the server when the connection is back.').replace('%s', self.formatAmount(sale.total_ttc));
-			}).then(function () {
-				self.updateOfflineStatus();
-				self.scheduleSync();
-				return self.renderCart();
-			});
+			if (done) {
+				ticket.ops = ticket.ops.filter(function (op) {
+					return !done[op.uid];
+				});
+			}
+			// An answer that confirms operations is always stored: it holds them, while a
+			// read started later could have been answered before they were applied
+			if (confirms || seq >= (ticket.seq || 0)) {
+				ticket.seq = Math.max(seq, ticket.seq || 0);
+				ticket.server = state;
+				if (state && state.socid) {
+					ticket.socid = state.socid;
+				}
+			}
 		});
 	},
 
 	/**
-	 * Discard the local cart of a place (nothing was sent to the server yet).
-	 *
-	 * @param  {number|string} plc Place to clear (current place when not provided)
-	 * @returns {Promise<bool>} Promise resolved when done
+	 * Ask for a sending of the operations soon (fast taps are sent together).
 	 */
-	/**
-	 * Drop the local cart of a place (and its display state when it is the current
-	 * place): used when the order of the place is gone on the server (paid or
-	 * deleted from somewhere else). The next capture of the place starts fresh.
-	 *
-	 * @param  {string} plc Place to forget
-	 * @returns {Promise<bool>} Promise of true when done
-	 */
-	forgetCart: function (plc) {
-		'use strict';
-
-		var self = this;
-		return takePOSOfflineStoreDelete('cart:' + plc).then(function () {
-			if (typeof place != 'undefined' && String(plc) === String(place) && typeof jQuery != 'undefined') {
-				jQuery('#invoiceid').val('');
-				jQuery('#offlinecart').val('');
-			}
-			self.updateOfflineStatus();
-			return true;
-		});
-	},
-
-	/**
-	 * Ask for an instant synchronization of the local cart of the current place to
-	 * the draft invoice of the place on the server (1.7 unified flow: the same cart
-	 * is the ticket online and offline, only the timing of the synchronization
-	 * differs). The request is debounced: fast taps send the merged result of the
-	 * taps, not one call per tap. When the connection is lost inbetween, the call
-	 * fails into handleFailure() and the ordinary background synchronization takes
-	 * the change over.
-	 *
-	 * @param  {string} reason Short tag for the console
-	 * @returns {void}
-	 */
-	requestSync: function (reason) {
+	requestFlush: function () {
 		'use strict';
 
 		var self = this;
 		if (this.isOffline() || !window.indexedDB) {
 			return;
 		}
-		if (this._cartSyncTimer) {
-			clearTimeout(this._cartSyncTimer);
+		if (this._flushTimer) {
+			clearTimeout(this._flushTimer);
 		}
-		this._cartSyncTimer = setTimeout(function () {
-			self._cartSyncTimer = null;
-			self.syncCartNow(reason);
-		}, 250);
+		this._flushTimer = setTimeout(function () {
+			self._flushTimer = null;
+			self.flush();
+		}, 150);
 	},
 
 	/**
-	 * Synchronize the local cart of the current place to the server draft at once.
-	 * Concurrent calls are chained: a change made during a running synchronization
-	 * schedules one more pass at its end (never two sends racing on the same cart).
+	 * Send the operations of every ticket stored on this terminal, one request per
+	 * place, one sender at a time. The answer of the server replaces the server state
+	 * of the ticket and removes the confirmed operations from the outbox; operations
+	 * stored meanwhile stay and are sent by the next pass.
 	 *
-	 * @param  {string} reason Short tag for the console
-	 * @returns {Promise<bool>} Promise of true when the server draft matches the cart
+	 * @returns {Promise<bool>} Promise of true when every outbox is empty
 	 */
-	syncCartNow: function (reason) {
+	flush: function () {
 		'use strict';
 
 		var self = this;
-		if (this.isOffline()) {
+		if (this._flushing) {
+			this._flushAgain = true;
+			return this._flushing;
+		}
+		if (this.isOffline() || !window.indexedDB) {
 			return Promise.resolve(false);
 		}
-		if (this._cartSyncPromise) {
-			// One pass is already running: ask for one more at its end
-			this._cartSyncAgain = true;
-			return this._cartSyncPromise;
-		}
-		var promise = this.getCart().then(function (cart) {
-			return self.pushCartToServer(cart, reason);
+		var url = this.fluxposbaseurl + 'ajax/ajax.php?action=applyOps&token=' + this.fluxposnewtoken;
+		this._flushing = takePOSOfflineStoreKeys('ticket:').then(function (keys) {
+			var promise = Promise.resolve(true);
+			jQuery.each(keys, function (index, key) {
+				promise = promise.then(function (ok) {
+					if (!ok) {
+						return false;
+					}
+					var plc = String(key.substring('ticket:'.length));
+					return takePOSOfflineStoreGet(key).then(function (ticket) {
+						if (!ticket || !ticket.ops || !ticket.ops.length) {
+							return true;
+						}
+						var ops = ticket.ops.slice(0, 50);
+						var seq = self.nextSeq();
+						return jQuery.ajax(url, {
+							method: 'POST',
+							contentType: 'application/json; charset=utf-8',
+							data: JSON.stringify({
+								place: plc,
+								thirdpartyid: ticket.socid || 0,
+								ops: ops.map(function (op) {
+									return { uid: op.uid, type: op.type, product: op.product, lineid: op.lineid, qty: op.qty };
+								})
+							}),
+							dataType: 'json',
+							timeout: self.requestTimeout,	// Safe to send again: the server applies each operation once
+							global: false
+						}).then(function (data) {
+							self.markServerUp();
+							if (!data || data.error) {
+								console.log('FluxPos offline: operations of place ' + plc + ' not applied: ' + (data ? data.error : 'no answer'));
+								return false;	// Kept: sent again by the next pass
+							}
+							var done = {};
+							(data.acked || []).forEach(function (uid) {
+								done[uid] = true;
+							});
+							(data.rejected || []).forEach(function (rej) {
+								done[rej.uid] = true;
+								self._rejectedOps = (self._rejectedOps || 0) + 1;
+								console.log('FluxPos offline: operation ' + rej.uid + ' refused by the server: ' + rej.error);
+							});
+							return self.storeServerState(plc, data, seq, done, true).then(function () {
+								if (plc === self.currentPlace()) {
+									return self.renderCart(true);
+								}
+							}).then(function () {
+								return true;
+							});
+						}, function (jqxhr, textStatus) {
+							self.handleFailure(jqxhr, textStatus);
+							return false;
+						});
+					});
+				});
+			});
+			return promise;
+		}).catch(function (error) {
+			console.log('FluxPos offline: sending of the operations failed', error);
+			return false;
 		}).then(function (result) {
-			self._cartSyncPromise = null;
-			if (self._cartSyncAgain) {
-				self._cartSyncAgain = false;
-				self.requestSync('changed during the synchronization');
+			self._flushing = null;
+			if (self._flushAgain) {
+				self._flushAgain = false;
+				return self.flush();
 			}
 			return result;
-		}, function (error) {
-			self._cartSyncPromise = null;
-			self._cartSyncAgain = false;
-			console.log('FluxPos offline: cart synchronization failed', error);
-			return false;
 		});
-		this._cartSyncPromise = promise;
-		return promise;
+		return this._flushing;
 	},
 
 	/**
-	 * Send one pass of the local cart of the current place to the draft invoice of
-	 * the place on the server (syncOfflineOrder endpoint). The server sets the
-	 * captured quantities exactly (mode set: a product removed from the cart is
-	 * removed from the draft too) once the cart mirrors the full order of the
-	 * place; a capture of new products only (a cart that never saw the whole
-	 * order of the server) is merged the additive way, like before.
+	 * Sequence number for the requests that answer a ticket state (the newest wins).
 	 *
-	 * @param  {Object|null} cart Local cart of the place (null: nothing to send)
-	 * @param  {string} reason    Short tag for the console
-	 * @returns {Promise<bool>} Promise of true when the server draft matches the cart
+	 * @returns {number} Next sequence number
 	 */
-	pushCartToServer: function (cart, reason) {
+	nextSeq: function () {
 		'use strict';
 
-		var self = this;
-		if (cart == null || !cart.lines || !cart.lines.length) {
-			// Nothing captured locally: the draft of a place without local cart is
-			// managed by the normal screens, never reopened from here
-			return Promise.resolve(true);
-		}
-		// Set mode (the draft of the place must exactly match the capture) only once
-		// the server answered the content of the cart: a cart adopted from a screen
-		// or from a snapshot of the order first merges additive, so it can never
-		// erase lines it has not seen
-		var setmode = cart.synced === true;
-		var lines = [];
-		for (var i = 0; i < cart.lines.length; i++) {
-			// The lines the server added itself (the deposit lines of Deposito) are
-			// mirrored in the view only: the triggers of the server own their quantity
-			if (cart.lines[i].qty > 0 && cart.lines[i].mirror !== true) {
-				lines.push({ id: cart.lines[i].rowid, qty: cart.lines[i].qty });
-			}
-		}
-		console.log('FluxPos offline: instant synchronization of the cart of place ' + cart.place + ' (' + reason + ', mode ' + (setmode ? 'set' : 'merge') + ')');
-		var url = this.fluxposbaseurl + 'ajax/ajax.php?action=syncOfflineOrder&token=' + this.fluxposnewtoken;
-		return jQuery.ajax(url, {
-			method: 'POST',
-			contentType: 'application/json; charset=utf-8',
-			data: JSON.stringify({
-				place: cart.place,
-				thirdpartyid: cart.socid,
-				lines: lines,
-				set: setmode ? 1 : 0
-			}),
-			dataType: 'json',
-			timeout: this.requestTimeout,
-			global: false
-		}).then(function (data) {
-			self.markServerUp();
-			if (data && data.error) {
-				console.log('FluxPos offline: synchronization of the cart of place ' + cart.place + ' failed: ' + data.error);
-				if (String(data.error).indexOf('not a draft anymore') >= 0) {
-					// The sale was paid or the order deleted from somewhere else:
-					// the local cart of the place is obsolete, drop it
-					self.forgetCart(cart.place).then(function () {
-						if (typeof Refresh == 'function') {
-							Refresh();
-						}
-					});
-				}
-				return false;
-			}
-			if (!data || !data.placeid) {
-				console.log('FluxPos offline: unexpected answer for the synchronization of place ' + cart.place);
-				return false;
-			}
-			return self.mirrorServerLines(cart, data);
-		}, function (jqxhr, textStatus) {
-			// Network failure: the change stays in the cart, the background
-			// synchronization owns it from here (ordinary offline flow)
-			self.handleFailure(jqxhr, textStatus);
-			return false;
-		});
+		this._seq = Math.max((this._seq || 0) + 1, Date.now());
+		return this._seq;
 	},
 
 	/**
-	 * Mirror the lines of the server draft (answer of syncOfflineOrder) into the
-	 * local cart: the line ids and the exact prices of the server, so the display
-	 * and the payment screens act on the same lines. The cart is then flagged as
-	 * synchronized: the next synchronizations send the quantities in set mode.
-	 * The server lines the capture does not hold itself (the deposit lines of the
-	 * Deposito module, added by the triggers of that module) are mirrored as extra
-	 * rows marked mirror: true: they are displayed in the ticket but never sent
-	 * back (their quantity is owned by the server). Mirror rows that the server
-	 * no longer returns are dropped.
+	 * Read the ticket of the current place from the server (changes made on another
+	 * device or by a screen of the server: payment, discount, free line, line pad) and
+	 * show it.
 	 *
-	 * @param  {Object} cart Local cart of the place
-	 * @param  {Object} data Answer of the server (placeid, socid, lines)
-	 * @returns {Promise<bool>} Promise of the save
+	 * @param  {boolean} [force] Ask the full state even when the version did not change
+	 * @returns {Promise<bool>} Promise of true when the state was read
 	 */
-	mirrorServerLines: function (cart, data) {
+	refreshTicket: function (force) {
 		'use strict';
 
 		var self = this;
-		var serverlines = (data && data.lines) ? data.lines : [];
-		var byproduct = {};
-		for (var i = 0; i < serverlines.length; i++) {
-			byproduct[serverlines[i].id] = serverlines[i];
+		if (this.isOffline() || !window.indexedDB) {
+			return Promise.resolve(false);
 		}
-		for (i = 0; i < cart.lines.length; i++) {
-			var serverline = byproduct[cart.lines[i].rowid];
-			if (serverline) {
-				if (serverline.lineid) {
-					cart.lines[i].lineid = parseInt(serverline.lineid, 10) || 0;
+		var plc = this.currentPlace();
+		var seq = this.nextSeq();
+		return this.getTicket(plc).then(function (ticket) {
+			var version = (!force && ticket.server && ticket.server.version) ? ticket.server.version : '';
+			return jQuery.ajax(self.fluxposbaseurl + 'ajax/ajax.php?action=getTicket&token=' + self.fluxposnewtoken + '&place=' + encodeURIComponent(plc) + '&version=' + encodeURIComponent(version), {
+				dataType: 'json',
+				timeout: self.requestTimeout,
+				cache: false,
+				global: false
+			}).then(function (data) {
+				self.markServerUp();
+				if (!data || data.error || data.unchanged) {
+					return false;
 				}
-				if (cart.lines[i].qty > 0 && serverline.qty > 0 && typeof serverline.total_ttc != 'undefined') {
-					// The server is authoritative on the price per unit of the line
-					cart.lines[i].price_ttc = Math.round((parseFloat(serverline.total_ttc) / serverline.qty) * 1000000) / 1000000;
-				}
-				// After the mirror, the quantities can be lowered and lines removed:
-				// the raise-only rule of a line not yet mirrored is obsolete
-				delete cart.lines[i].adopted;
-			}
-		}
-		// Mirrored server lines: drop the ones the server does not hold anymore,
-		// then add (or refresh) one mirror row for every server line the capture
-		// does not hold itself. A server line with a non-positive quantity (a
-		// returned empty booked as a refund) is not displayed, like before.
-		for (i = 0; i < cart.lines.length; i++) {
-			if (cart.lines[i].mirror === true && !byproduct[cart.lines[i].rowid]) {
-				cart.lines.splice(i, 1);
-				i--;
-			}
-		}
-		for (i = 0; i < serverlines.length; i++) {
-			serverline = serverlines[i];
-			var ownlineidx = -1;
-			var mirroridx = -1;
-			for (var j = 0; j < cart.lines.length; j++) {
-				if (cart.lines[j].rowid != serverline.id) {
-					continue;
-				}
-				if (cart.lines[j].mirror === true) {
-					mirroridx = j;
-				} else {
-					ownlineidx = j;
-					break;
-				}
-			}
-			if (ownlineidx >= 0 || (parseFloat(serverline.qty) || 0) <= 0) {
-				// The capture holds this product itself (its line follows the capture)
-				// or the server line is not displayable: drop a stale mirror row
-				if (mirroridx >= 0) {
-					cart.lines.splice(mirroridx, 1);
-				}
-				continue;
-			}
-			var mirrorqty = parseFloat(serverline.qty) || 0;
-			var mirrorrow = {
-				rowid: serverline.id,
-				ref: '',
-				label: (serverline.label != null && String(serverline.label) != '') ? serverline.label : ('Product ' + serverline.id),
-				price_ttc: (mirrorqty > 0 && typeof serverline.total_ttc != 'undefined') ? Math.round((parseFloat(serverline.total_ttc) / mirrorqty) * 1000000) / 1000000 : 0,
-				qty: mirrorqty,
-				lineid: parseInt(serverline.lineid, 10) || 0,
-				mirror: true	// Never sent back to the server (its triggers own it)
-			};
-			if (mirroridx >= 0) {
-				cart.lines[mirroridx] = mirrorrow;
-			} else {
-				cart.lines.push(mirrorrow);
-			}
-		}
-		cart.invoiceid = parseInt(data.placeid, 10) || cart.invoiceid || 0;
-		cart.socid = parseInt(data.socid, 10) || cart.socid;
-		cart.synced = true;
-		// The order of the place is registered on the server: it keeps being paid
-		// there (an offline payment would book a second sale), hence adopted: true
-		cart.adopted = true;
-		if (typeof place != 'undefined' && String(cart.place) === String(place)) {
-			jQuery('#invoiceid').val(cart.invoiceid > 0 ? String(cart.invoiceid) : '');
-			jQuery('#thirdpartyid').val(String(cart.socid));
-			return this.saveCart(cart).then(function () {
-				return self.renderCart();
+				return self.storeServerState(plc, data, seq).then(function () {
+					return self.renderCart(true);
+				}).then(function () {
+					return true;
+				});
+			}, function (jqxhr, textStatus) {
+				self.handleFailure(jqxhr, textStatus);
+				return false;
 			});
-		}
-		return this.saveCart(cart);
+		});
 	},
 
 	/**
-	 * Wait until the local cart of the current place is synchronized to the draft
-	 * of the place on the server (the payment screens read the draft of the
-	 * server: a capture of products still waiting would be paid incomplete).
+	 * Kept for index.php (1.7 names): the screen of the server changed the ticket, read
+	 * it again.
 	 *
-	 * @returns {Promise<bool|string>} Promise of true when the server holds the cart, 'offline' when the terminal works offline
+	 * @returns {Promise<bool>} See refreshTicket()
+	 */
+	replaceCartFromScreen: function () {
+		'use strict';
+
+		return this.refreshTicket(true);
+	},
+
+	/**
+	 * Kept for index.php (1.7 names): see refreshTicket().
+	 *
+	 * @returns {Promise<bool>} See refreshTicket()
+	 */
+	cacheServerOrder: function () {
+		'use strict';
+
+		return this.refreshTicket(true);
+	},
+
+	/**
+	 * Wait until the ticket of the current place holds every change of this terminal
+	 * (the payment screens of the server read the ticket there), and put its id in the
+	 * screen.
+	 *
+	 * @returns {Promise<bool|string>} Promise of true when the server holds it, 'offline' when the terminal works offline
 	 */
 	ensureSynced: function () {
 		'use strict';
@@ -1188,344 +1325,154 @@ var FluxPosOffline = {
 			return Promise.resolve('offline');
 		}
 		if (!window.indexedDB) {
-			return Promise.resolve(false);
+			return Promise.resolve(true);
 		}
-		return this.getCart().then(function (cart) {
-			if (cart == null || !cart.lines || !cart.lines.length) {
-				return true;	// Nothing captured locally: the draft is already the truth
+		return this.flush().then(function () {
+			return self.getTicket();
+		}).then(function (ticket) {
+			if (ticket.ops.length) {
+				return false;
 			}
-			var pending = self._cartSyncPromise ? self._cartSyncPromise : self.syncCartNow('before the payment');
-			return pending.then(function (ok) {
-				return ok === true;
-			});
+			if (ticket.server && ticket.server.placeid) {
+				jQuery('#invoiceid').val(String(ticket.server.placeid));
+				if (typeof invoiceid != 'undefined') {
+					invoiceid = String(ticket.server.placeid);
+				}
+			}
+			return true;
 		});
 	},
 
 	/**
-	 * Adopt the order lines currently displayed on the screen (a fragment of
-	 * invoice.php) as the local cart of the place, after an operation the server
-	 * applied by a fragment (edit of a line, payment...). The unified flow renders
-	 * the ticket from the terminal, so it has to follow every change of the order
-	 * that did not go through the cart itself.
+	 * Pay the ticket of the current place while offline. It becomes a SALE with its own
+	 * unique id, stored on this terminal until the server books it exactly once. The sale
+	 * tells which lines of the open ticket on the server it covers, so the server takes
+	 * them off (what another device added meanwhile stays open there). The ticket is
+	 * emptied on this terminal at once so the next customer can be served.
 	 *
-	 * @returns {Promise<bool>} Promise of true when the cart has been refreshed
+	 * @param  {Array} payments Payments captured: [{pay: 'LIQ'|'CB'|'CHQ'|..., amount, excess}]
+	 * @returns {Promise<bool>} Promise of true when the sale has been stored
 	 */
-	replaceCartFromScreen: function () {
+	validateCart: function (payments) {
 		'use strict';
 
 		var self = this;
-		if (typeof jQuery == 'undefined' || typeof place == 'undefined') {
-			return Promise.resolve(false);
-		}
-		return this.getCart().then(function (cart) {
-			if (cart != null && cart.validated === true) {
-				return false;	// A validated sale never goes back to a cart
-			}
-			if (!jQuery('#poslines tr.posinvoiceline').length) {
-				// The order is empty on the screen: the cart of the place is empty too.
-				// A capture in progress is never dropped silently: a cart that the
-				// terminal captures while the draft is not known stays as it is
-				if (!cart || (jQuery('#invoiceid').val() || '') == '') {
-					return takePOSOfflineStoreDelete('cart:' + place);
-				}
-				return false;
-			}
-			var invoiceid = parseInt(jQuery('#invoiceid').val(), 10) || 0;
-			if (!invoiceid) {
-				return false;	// Lines without a known draft id: not adoptable
-			}
-			var socid = parseInt(jQuery('#thirdpartyid').val(), 10) || 0;
+		var plc = this.currentPlace();
+		// Never wait for a sending in progress: offline it can hang. The sale carries the
+		// operations not confirmed yet; the server applies the ones it did not apply yet
+		// (once, by their ids) before taking the sold quantities off the ticket.
+		return this.getTicket(plc).then(function (ticket) {
+			var view = self.computeView(ticket);
 			var lines = [];
-			jQuery('#poslines tr.posinvoiceline').each(function () {
-				var row = jQuery(this);
-				var src = row.find('img.cartthumb').attr('src') || '';
-				var match = src.match(/[?&]id=(\d+)/);
-				var rowid = match ? parseInt(match[1], 10) : 0;
-				var qty = parseFloat(row.find('.fluxposqtyvalue').first().text()) || 0;
-				if (rowid <= 0 || qty <= 0) {
-					return;	// No product thumbnail (free line, discount, ...): not a product line
+			var hasother = false;
+			for (var i = 0; i < view.lines.length; i++) {
+				var line = view.lines[i];
+				if (line.kind == 'product' && line.count > 0) {
+					lines.push({ rowid: line.product, label: line.label, price_ttc: line.unit, qty: line.count });
+				} else if (line.kind == 'other') {
+					hasother = true;
 				}
-				var price = 0;
-				// The total of the line is the last numeric cell of the row (never the stock span)
-				row.find('td.right').each(function () {
-					price = self.parseAmountText(jQuery(this).text());
-				});
-				lines.push({
-					rowid: rowid,
-					ref: '',
-					label: jQuery.trim(row.children('td.left').first().clone().children('img').remove().end().text()) || ('Product ' + rowid),
-					price_ttc: price,
-					qty: qty,
-					lineid: parseInt(row.attr('id'), 10) || 0
-				});
-			});
+			}
 			if (!lines.length) {
-				return false;	// Keep the current cart instead of replacing it with nothing
-			}
-			var refreshed = {
-				place: String(place),
-				socid: socid,
-				created: (cart && cart.created) ? cart.created : Math.floor(Date.now() / 1000),
-				invoiceid: invoiceid,
-				synced: true,	// The screen IS the state of the server right now
-				adopted: true,	// The order is registered on the server: it is paid there
-				lines: lines
-			};
-			return self.saveCart(refreshed);
-		});
-	},
-
-	clearCart: function (plc) {
-		'use strict';
-
-		var self = this;
-		if (typeof plc == 'undefined') {
-			plc = (typeof place != 'undefined') ? place : 0;
-		}
-		return takePOSOfflineStoreDelete('cart:' + plc).then(function () {
-			self.updateOfflineStatus();
-			return self.renderCart();
-		});
-	},
-
-	/**
-	 * Keep a snapshot of the order currently displayed for a place (the draft invoice
-	 * registered on the server), taken while the connection is up. It is the baseline
-	 * used when the terminal has to capture on a place with a server order: the first
-	 * product tap adopts the order into the local cart (see captureOnServerOrder()),
-	 * so the cashier can keep capturing and the merge into the server order is exact.
-	 * Called after every load of the order fragment from the server (index.php Refresh
-	 * and addline) and when the POS screen is opened.
-	 *
-	 * @returns {Promise<bool>} Promise of true when the order is cached
-	 */
-	cacheServerOrder: function () {
-		'use strict';
-
-		var invoiceid = parseInt(jQuery('#invoiceid').val(), 10) || 0;
-		var plc = (typeof place != 'undefined') ? place : 0;
-		if (invoiceid <= 0 || !window.indexedDB) {
-			// No order on the server for this place: its snapshot is not needed anymore
-			return takePOSOfflineStoreDelete('order:' + plc).then(function () {
-				return true;
-			}).catch(function () {
-				return false;
-			});
-		}
-		var self = this;
-		var url = this.fluxposbaseurl + 'ajax/ajax.php?action=getInvoice&token=' + this.fluxposnewtoken + '&id=' + invoiceid;
-		return jQuery.ajax(url, { dataType: 'json', timeout: this.requestTimeout, global: false }).then(function (data) {
-			if (!data || !data.lines || !jQuery.isArray(data.lines)) {
+				window.alert(self.t('FluxPosOfflineNoOrderCaptured', 'There is no order captured on this place.'));
 				return false;
 			}
-			var order = {
-				invoiceid: invoiceid,
-				socid: parseInt(data.socid, 10) || 0,
+			if (hasother && !window.confirm(self.t('FluxPosOfflineOtherLines', 'This ticket has lines that are not products (free text, discount): they cannot be booked offline and will stay on the ticket. Pay the products now?'))) {
+				return false;
+			}
+			var sale = {
+				uid: self.newSaleUid(),
+				place: plc,
+				socid: view.socid || 0,
+				lines: lines,
+				payments: payments || [],
+				total_ttc: view.chargeable,
+				ticket: {
+					id: (ticket.server && ticket.server.placeid) ? ticket.server.placeid : 0,
+					ops: (ticket.ops || []).map(function (op) {
+						return { uid: op.uid, type: op.type, product: op.product, lineid: op.lineid, qty: op.qty };
+					})
+				},
 				created: Math.floor(Date.now() / 1000),
-				lines: []
+				error: ''
 			};
-			for (var i = 0; i < data.lines.length; i++) {
-				var srcline = data.lines[i];
-				var lineid = parseInt(srcline.id || srcline.rowid, 10) || 0;
-				var fwproduct = parseInt(srcline.fk_product, 10) || 0;
-				var lineqty = parseFloat(srcline.qty) || 0;
-				if (lineid <= 0 || fwproduct <= 0 || parseInt(srcline.fk_parent_line, 10) > 0 || parseInt(srcline.special_code, 10) == 4) {
-					continue;	// Free lines, sub-lines and discounts are not merged by product (same rule as the server merge)
-				}
-				order.lines.push({
-					rowid: fwproduct,
-					ref: srcline.product_ref || '',
-					label: srcline.label || srcline.product_label || srcline.product_ref || ('Product ' + fwproduct),
-					price_ttc: (lineqty > 0) ? Math.round((parseFloat(srcline.total_ttc) / lineqty) * 1000000) / 1000000 : 0,
-					qty: lineqty,
-					lineid: lineid
-				});
-			}
-			return takePOSOfflineStorePut('order:' + plc, order).then(function () {
-				console.log('FluxPos offline: order ' + invoiceid + ' of place ' + plc + ' cached for offline use (' + order.lines.length + ' product lines)');
+			return takePOSOfflineStorePutAndDelete('sale:' + sale.uid, sale, 'ticket:' + plc).then(function () {
+				self._lastSaleNotice = self.t('FluxPosOfflineSaleStored', 'Sale of %s stored on this terminal. Its invoice number is given by the server when the connection is back.').replace('%s', self.formatAmount(sale.total_ttc));
+				self.updateOfflineStatus();
+				self.scheduleSync();
+				return self.renderCart(true);
+			}).then(function () {
 				return true;
 			});
-		}, function (jqxhr, textStatus) {
-			self.handleFailure(jqxhr, textStatus);
-			return false;
-		}).catch(function (error) {
-			console.log('FluxPos offline: caching of the order of place ' + plc + ' failed', error);
-			return false;
 		});
 	},
 
 	/**
-	 * Build the adopted local cart from a snapshot of the order of the place cached
-	 * while online (see cacheServerOrder()).
+	 * Turn what older versions stored on this terminal into the 1.8 storage: a cart
+	 * validated offline becomes a sale; the products of a cart never confirmed by the
+	 * server become 'add' operations of the ticket of its place; a cart the server
+	 * already holds is dropped (the server has it).
 	 *
-	 * @param  {Object} order Snapshot of the order of the place
-	 * @returns {Object} The adopted cart (with the lines of the order)
+	 * @returns {Promise<bool>} Promise resolved when done
 	 */
-	adoptedCartFromOrder: function (order) {
-		'use strict';
-
-		var plc = (typeof place != 'undefined') ? place : 0;
-		var adopted = {
-			place: String(plc),
-			socid: parseInt(order.socid, 10) || 0,
-			created: Math.floor(Date.now() / 1000),
-			invoiceid: parseInt(order.invoiceid, 10) || 0,
-			adopted: true,
-			lines: []
-		};
-		for (var i = 0; i < order.lines.length; i++) {
-			adopted.lines.push({
-				rowid: order.lines[i].rowid,
-				ref: order.lines[i].ref,
-				label: order.lines[i].label,
-				price_ttc: parseFloat(order.lines[i].price_ttc) || 0,
-				qty: parseFloat(order.lines[i].qty) || 0,
-				lineid: parseInt(order.lines[i].lineid, 10) || 0,
-				adopted: true
-			});
-		}
-		return adopted;
-	},
-
-	/**
-	 * Build the adopted local cart from the lines of the order of the place currently
-	 * shown on the screen, when no snapshot of that order was cached while online
-	 * (the snapshot always misses when the order was never displayed on this screen
-	 * before the connection was lost). The product id, quantity and total of each line
-	 * are read from the same markup invoice.php prints for the online cart; the exact
-	 * prices and discounts then still live on the server: the background merge only
-	 * sends product ids and quantities, and the server recalculates its own lines.
-	 *
-	 * @returns {Promise<Object|null>} Promise of the adopted cart, null when the screen shows no parsable lines
-	 */
-	adoptFromScreen: function () {
+	migrateLegacyCarts: function () {
 		'use strict';
 
 		var self = this;
-		var invoiceid = parseInt(jQuery('#invoiceid').val(), 10) || 0;
-		var socid = parseInt(jQuery('#thirdpartyid').val(), 10) || 0;
-		var adopted = {
-			place: (typeof place != 'undefined') ? String(place) : '0',
-			socid: socid,
-			created: Math.floor(Date.now() / 1000),
-			invoiceid: invoiceid,
-			adopted: true,
-			lines: []
-		};
-		// Note: the discount (dark product) lines printed by a special module cannot be
-		// told apart in the markup: like the server merge itself, only product lines are
-		// adopted (see the same rule in cacheServerOrder()).
-		jQuery('#poslines tr.posinvoiceline').each(function () {
-			var row = jQuery(this);
-			var src = row.find('img.cartthumb').attr('src') || '';
-			var match = src.match(/[?&]id=(\d+)/);
-			var rowid = match ? parseInt(match[1], 10) : 0;
-			var qty = parseFloat(row.find('.fluxposqtyvalue').first().text()) || 0;
-			if (rowid <= 0 || qty <= 0) {
-				return;			// No product thumbnail (free line, discount, ...): nothing to adopt
-			}
-			var price = 0;
-			// The total of the line is the last numeric cell of the row (never the stock span)
-			row.find('td.right').each(function () {
-				price = self.parseAmountText(jQuery(this).text());
-			});
-			adopted.lines.push({
-				rowid: rowid,
-				ref: '',
-				label: jQuery.trim(row.children('td.left').first().clone().children('img').remove().end().text()) || ('Product ' + rowid),
-				price_ttc: price,
-				qty: qty,
-				lineid: parseInt(row.attr('id'), 10) || 0,
-				adopted: true
-			});
-		});
-		if (!adopted.lines.length) {
-			return Promise.resolve(null);
-		}
-		return this.saveCart(adopted).then(function () {
-			return adopted;
-		}).catch(function (error) {
-			console.log('FluxPos offline: adoption of the order shown on the screen failed', error);
-			return null;
-		});
-	},
-
-	/**
-	 * Capture a product tap while offline on a place whose order exists on the server.
-	 * On the first tap, the order of the place is adopted into the local cart (from the
-	 * last snapshot cached while online, see cacheServerOrder(), or, when none was
-	 * cached, from the lines currently displayed on the screen): its lines are shown
-	 * again and the new products can be added; the background synchronization merges
-	 * the cart into the draft invoice of the place (same endpoint and rules as for an
-	 * order started offline: quantities raised to the captured ones, never doubled).
-	 * When nothing can be adopted, the capture is refused with a notice.
-	 *
-	 * @param  {number} idproduct ID of product
-	 * @param  {number} qty       Quantity to add
-	 * @param  {Object} [info]    Data read from the tapped tile (see addProduct())
-	 * @returns {Promise<bool>} Promise of true when the product is added to the cart
-	 */
-	captureOnServerOrder: function (idproduct, qty, info) {
-		'use strict';
-
-		var self = this;
-		return this.getCart().then(function (cart) {
-			var invoiceid = 0;
-			if (cart != null) {
-				return self.addProduct(idproduct, qty, info);
-			}
-			if (typeof jQuery != 'undefined') {
-				invoiceid = parseInt(jQuery('#invoiceid').val(), 10) || 0;
-			}
-			var plc = (typeof place != 'undefined') ? place : 0;
-			if (invoiceid > 0 && typeof jQuery != 'undefined' && jQuery('#poslines tr.posinvoiceline').length) {
-				// Adopt the lines currently displayed on the screen first: the screen is the
-				// freshest image of the order (a cached snapshot can be stale). A cart adopted
-				// here first merges additive too (set mode only comes after the server has
-				// confirmed its content), so a stale image can never erase the real lines of
-				// the order on the server
-				return self.adoptFromScreen().then(function (adopted) {
-					if (!adopted) {
-						self.notifyBlockedCapture();
-						return false;
-					}
-					return self.renderCart(true).then(function () {
-						return self.addProduct(idproduct, qty, info);
+		return takePOSOfflineStoreKeys('cart:').then(function (keys) {
+			var promise = Promise.resolve(true);
+			jQuery.each(keys, function (index, key) {
+				promise = promise.then(function () {
+					return takePOSOfflineStoreGet(key).then(function (cart) {
+						var plc = String(key.substring('cart:'.length));
+						if (!cart || !cart.lines) {
+							return takePOSOfflineStoreDelete(key);
+						}
+						if (cart.validated === true) {
+							var total = 0;
+							cart.lines.forEach(function (l) {
+								total += (parseFloat(l.price_ttc) || 0) * (parseFloat(l.qty) || 0);
+							});
+							var sale = { uid: self.newSaleUid(), place: plc, socid: cart.socid || 0, lines: cart.lines.filter(function (l) {
+								return l.mirror !== true;
+							}), payments: cart.payments || [], total_ttc: Math.round(total * 100) / 100, ticket: null, created: Math.floor(Date.now() / 1000), error: '' };
+							return takePOSOfflineStorePutAndDelete('sale:' + sale.uid, sale, key);
+						}
+						// A line the server already held (cart confirmed by the server, or a line
+						// taken over from the order of the server) becomes a 'set' to the quantity
+						// of the cart: changes not sent yet are kept, nothing is counted twice.
+						// A line only captured on this terminal becomes an 'add'.
+						var mirrored = (cart.synced === true || cart.adopted === true);
+						return self.updateTicket(plc, function (ticket) {
+							cart.lines.forEach(function (l) {
+								var productid = parseInt(l.rowid, 10) || 0;
+								var q = parseFloat(l.qty) || 0;
+								if (l.mirror === true || q <= 0 || productid <= 0) {
+									return;
+								}
+								var known = mirrored || l.adopted === true;
+								ticket.ops.push({ uid: self.newSaleUid(), created: Date.now(), type: known ? 'set' : 'add', product: productid, lineid: known ? (parseInt(l.lineid, 10) || 0) : 0, qty: q, label: l.label, unit: parseFloat(l.price_ttc) || 0, ret: false, dep: null });
+							});
+						}).then(function () {
+							return takePOSOfflineStoreDelete(key);
+						});
 					});
 				});
-			}
-			return takePOSOfflineStoreGet('order:' + plc).then(function (order) {
-				if (order && order.invoiceid) {
-					return self.saveCart(self.adoptedCartFromOrder(order)).then(function () {
-						// Show the adopted order (its lines, then the added product) at once:
-						// the screen still displays the fragment of the server order, which must
-						// be replaced even though #invoiceid still holds its id
-						return self.renderCart(true);
-					}).then(function () {
-						return self.addProduct(idproduct, qty, info);
-					});
-				}
-				if (invoiceid > 0) {
-					// An order is on the server but displayed nowhere and not cached: it
-					// cannot be captured safely while offline
-					self.notifyBlockedCapture();
-					return false;
-				}
-				// No order on the server for this place: the tap just starts a local order
-				return self.addProduct(idproduct, qty, info);
 			});
+			return promise;
+		}).catch(function (error) {
+			console.log('FluxPos offline: migration of the carts of an older version failed', error);
+			return false;
 		});
 	},
 
 	/**
-	 * Render the local cart of the current place into #poslines, with the same markup
-	 * as the #poslines fragment of invoice.php (same hidden fields, same line classes),
-	 * so the POS interface keeps working exactly like when the order is on the server.
-	 * 1.7 unified flow: this is the only renderer of the ticket, online and offline
-	 * alike; the force parameter is kept for the callers and for parity.
+	 * Render the ticket of the current place into #poslines with the same markup as the
+	 * fragment of invoice.php. An empty ticket leaves the screen as it is (the receipt
+	 * screen shown after a payment, for example) unless force is set.
 	 *
-	 * @param  {boolean} [force] Kept for compatibility, has no effect anymore
-	 * @returns {Promise<bool>} Promise of true when the cart has been rendered
+	 * @param  {boolean} [force] Render even an empty ticket over the screen
+	 * @returns {Promise<bool>} Promise of true when the ticket has been rendered
 	 */
 	renderCart: function (force) {
 		'use strict';
@@ -1534,107 +1481,70 @@ var FluxPosOffline = {
 		if (typeof jQuery == 'undefined' || typeof place == 'undefined') {
 			return Promise.resolve(false);
 		}
-		// 1.7 unified flow: the local cart of the place is the ticket on the screen,
-		// online and offline alike (only the timing of the synchronization differs).
-		// It is rendered whenever it exists; without one, the fragment of the server
-		// currently displayed just stays (an empty cart never hides an order).
-		return this.getCart().then(function (cart) {
-			if (cart == null || !cart.lines || !cart.lines.length) {
-				return Promise.resolve(false);
+		return this.getTicket().then(function (ticket) {
+			var view = self.computeView(ticket);
+			if (!view.lines.length) {
+				if (!force || jQuery('#offlinecart').val() != '1') {
+					return false;	// Nothing on the ticket: the screen of the server stays
+				}
 			}
-			var lines = (cart && cart.lines) ? cart.lines : [];
-			var payments = (cart && cart.payments) ? cart.payments : [];
-			var validated = (cart != null && cart.validated === true);
+			var canedit = (typeof fluxposdisplaynumberpad == 'undefined' || fluxposdisplaynumberpad != 'never');
 			var html = '';
-			var i, line, posnochange, total = 0;
+			var i, line;
 
-			for (i = 0; i < lines.length; i++) {
-				total += lines[i].price_ttc * lines[i].qty;
-			}
-
-			// Same markup as the #poslines fragment of invoice.php: same wrapper, same
-			// table id and classes, same hidden fields in the first header cell, same
-			// header columns (Disc / Qty / Total) and same line classes, so the offline
-			// cart looks and behaves exactly like the order of the server once displayed
-			// (1.6: this used to be a foreign table)
 			html += '<div class="div-table-responsive-no-min invoice">';
 			html += '<table id="tablelines" class="noborder noshadow postablelines centpercent">';
 			html += '<tr class="liste_titre nodrag nodrop">';
 			html += '<td class="linecoldescription">';
-			// 1.7: the cart mirrors the draft of the place off the server, so the id
-			// of that draft is preserved (the payment screens act on it), not cleared
-			html += '<input type="hidden" name="invoiceid" id="invoiceid" value="' + self.escapeHtml((jQuery('#invoiceid').val() || '')) + '">';
-			html += '<input type="hidden" name="thirdpartyid" id="thirdpartyid" value="' + ((cart && cart.socid) ? parseInt(cart.socid, 10) : 0) + '">';
+			html += '<input type="hidden" name="invoiceid" id="invoiceid" value="' + (view.placeid > 0 ? view.placeid : '') + '">';
+			html += '<input type="hidden" name="thirdpartyid" id="thirdpartyid" value="' + (parseInt(view.socid, 10) || 0) + '">';
 			html += '<input type="hidden" name="offlinecart" id="offlinecart" value="1">';
 			html += '</td>';
 			html += '<td class="linecolqty right">' + self.escapeHtml(self.t('ReductionShort', 'Disc.')) + '</td>';
 			html += '<td class="linecolqty right">' + self.escapeHtml(self.t('Qty', 'Qty')) + '</td>';
-			html += '<td class="linecolht right nowraponall"><span class="opacitymedium small">' + self.escapeHtml(self.t('TotalTTCShort', 'Total')) + '</span><br><span id="linecolht-span-total" style="font-size:1.3em; font-weight: bold;">' + self.formatAmount(total) + '</span></td>';
+			html += '<td class="linecolht right nowraponall"><span class="opacitymedium small">' + self.escapeHtml(self.t('TotalTTCShort', 'Total')) + '</span><br><span id="linecolht-span-total" style="font-size:1.3em; font-weight: bold;">' + self.formatAmount(view.total) + '</span></td>';
 			html += '</tr>';
-			if (!lines.length) {
-				html += '<tr class="drag drop oddeven"><td class="left"><span class="opacitymedium">' + self.escapeHtml(self.t('Empty', 'Empty')) + '</span></td><td></td><td></td></tr>';
+			if (!view.lines.length) {
+				html += '<tr class="drag drop oddeven"><td class="left"><span class="opacitymedium">' + self.escapeHtml(self._lastSaleNotice || self.t('Empty', 'Empty')) + '</span></td><td></td><td></td><td></td></tr>';
 			}
-			for (i = lines.length - 1; i >= 0; i--) {
-				line = lines[i];
-				// Like on the server: the row id is the invoice line id when the line was
-				// adopted from the order of the place, a pseudo id otherwise
-				html += '<tr class="drag drop oddeven posinvoiceline" id="' + (line.lineid > 0 ? parseInt(line.lineid, 10) : 'offline' + parseInt(line.rowid, 10)) + '">';
+			for (i = view.lines.length - 1; i >= 0; i--) {
+				line = view.lines[i];
+				var rowid = line.lineid > 0 ? String(line.lineid) : ('pending' + line.product);
+				var isproduct = (line.kind == 'product');
+				html += '<tr class="drag drop oddeven posinvoiceline' + (line.pending ? ' fluxpospending' : '') + '" id="' + self.escapeHtml(rowid) + '">';
 				html += '<td class="left">';
-				// Same thumbnail as the server cart lines (line.rowid holds the product id,
-				// also for the lines adopted from the order of the place on the server)
-				if (line.rowid > 0 && !window.fluxposhideproductimages) {
-					html += '<img class="cartthumb" loading="lazy" alt="" onerror="this.style.display=\'none\';" src="' + self.fluxposbaseurl + 'genimg/index.php?query=pro&id=' + parseInt(line.rowid, 10) + '">';
+				if (line.product > 0 && !window.fluxposhideproductimages) {
+					html += '<img class="cartthumb" loading="lazy" alt="" onerror="this.style.display=\'none\';" src="' + self.fluxposbaseurl + 'genimg/index.php?query=pro&id=' + parseInt(line.product, 10) + '">';
 				}
 				html += self.escapeHtml(line.label) + '</td>';
-				// The offline cart has no per-line discount (it lives on the lines of the
-				// server): the Disc column is only there for the identical column layout
-				html += '<td class="right"></td>';
+				html += '<td class="right"' + (isproduct && canedit && line.lineid > 0 ? ' onclick="event.stopPropagation(); FluxPosTapLine(this, \'r\');"' : '') + '>' + (line.remise ? self.escapeHtml(line.remise) + '%' : '') + '</td>';
 				html += '<td class="right nowraponall">';
-				if (!validated && line.mirror !== true) {
-					html += '<button type="button" class="fluxposqtybtn" onclick="event.stopPropagation(); FluxPosOffline.changeQty(' + line.rowid + ', -1);">-</button>';
+				if (isproduct) {
+					html += '<button type="button" class="fluxposqtybtn" onclick="event.stopPropagation(); FluxPosOffline.changeQty(\'' + line.key + '\', -1);">-</button>';
 				}
-				html += '<span class="fluxposqtyvalue">' + self.escapeHtml(line.qty) + '</span>';
-				if (!validated && line.mirror !== true) {
-					html += '<button type="button" class="fluxposqtybtn" onclick="event.stopPropagation(); FluxPosOffline.changeQty(' + line.rowid + ', 1);">+</button>';
+				html += '<span class="fluxposqtyvalue"' + (isproduct && canedit ? ' onclick="event.stopPropagation(); FluxPosTapLine(this, \'qty\');"' : '') + '>' + self.escapeHtml(Math.round(line.count * 1000) / 1000) + '</span>';
+				if (isproduct) {
+					html += '<button type="button" class="fluxposqtybtn" onclick="event.stopPropagation(); FluxPosOffline.changeQty(\'' + line.key + '\', 1);">+</button>';
 				}
 				html += '</td>';
-				html += '<td class="right classfortooltip">' + self.formatAmount(line.price_ttc * line.qty) + '</td>';
+				html += '<td class="right classfortooltip"' + (isproduct && canedit && line.lineid > 0 ? ' onclick="event.stopPropagation(); FluxPosTapLine(this, \'p\');"' : '') + '>' + self.formatAmount(line.unit * line.count) + '</td>';
 				html += '</tr>';
 			}
 			html += '</table></div>';
-
-			// Payments validated on the terminal
-			if (validated) {
-				var paid = 0;
-				html += '<div class="fluxposofflinepayments">';
-				for (i = 0; i < payments.length; i++) {
-					posnochange = (payments[i].pay == 'LIQ' && payments[i].excess) ? ' - ' + self.escapeHtml(self.t('Change', 'Change')) + ' ' + self.formatAmount(payments[i].excess) : '';
-					html += '<div class="fluxposofflinepayment">' + self.escapeHtml(self.t('PaymentTypeShort' + payments[i].pay, payments[i].pay)) + ' : <span class="fluxposofflinepaymentamount">' + self.formatAmount(payments[i].amount) + posnochange + '</span></div>';
-					paid += parseFloat(payments[i].amount) || 0;
-				}
-				html += '</div>';
-				if (Math.round(total * 100) / 100 > Math.round(paid * 100) / 100) {
-					html += '<div class="fluxposofflinepayments remaining">' + self.escapeHtml(self.t('RemainToPay', 'Remain to pay')) + ' : <span class="fluxposofflinepaymentamount">' + self.formatAmount(total - paid) + '</span></div>';
-				}
-			}
-
-			// 1.7.1: the cart shows only the ticket itself, no per-state notices: the
-			// synchronization status is visible in the status pill of the top bar
-			if (validated && self.isOffline()) {
-				html += '<div class="fluxposofflinenotice">' + self.escapeHtml(self.t('FluxPosOfflineSaleStoredNotice', 'This sale is validated. It has been safely stored with its payments: its invoice number and its receipt will be issued by the server as soon as the synchronization can be done.')) + '</div>';
-			}
 			jQuery('#poslines').html(html);
-			// The sticky total of the cart footer of the 1.1 layout follows the local cart
+			if (typeof invoiceid != 'undefined') {
+				invoiceid = (view.placeid > 0 ? String(view.placeid) : '');
+			}
 			if (typeof fluxposUpdateCartTotal == 'function') {
-				fluxposUpdateCartTotal(self.formatAmount(total));
+				fluxposUpdateCartTotal(view.lines.length ? self.formatAmount(view.total) : '');
 			}
 			return true;
 		});
 	},
 
 	/**
-	 * Count what waits on this terminal: orders not paid yet (carts), paid sales not
-	 * booked yet, and among those the sales the server refused (with an error).
+	 * Count what waits on this terminal: tickets with operations not sent yet, paid
+	 * sales not booked yet, and among those the sales the server refused (with an error).
 	 *
 	 * @returns {Promise<Object>} Promise of {orders, sales, failed}
 	 */
@@ -1642,8 +1552,16 @@ var FluxPosOffline = {
 		'use strict';
 
 		var res = { orders: 0, sales: 0, failed: 0 };
-		return takePOSOfflineStoreKeys('cart:').then(function (keys) {
-			res.orders = keys.length;
+		return takePOSOfflineStoreKeys('ticket:').then(function (keys) {
+			return Promise.all(keys.map(function (key) {
+				return takePOSOfflineStoreGet(key);
+			}));
+		}).then(function (tickets) {
+			for (var i = 0; i < tickets.length; i++) {
+				if (tickets[i] && tickets[i].ops && tickets[i].ops.length) {
+					res.orders++;
+				}
+			}
 			return takePOSOfflineStoreKeys('sale:');
 		}).then(function (keys) {
 			res.sales = keys.length;
@@ -1663,9 +1581,9 @@ var FluxPosOffline = {
 	},
 
 	/**
-	 * Count the local orders and sales not yet synchronized to the server.
+	 * Count the tickets and sales not yet synchronized to the server.
 	 *
-	 * @returns {Promise<number>} Promise of the number of pending orders and sales
+	 * @returns {Promise<number>} Promise of the number of pending tickets and sales
 	 */
 	countPendingOrders: function () {
 		'use strict';
@@ -1790,7 +1708,9 @@ var FluxPosOffline = {
 	},
 
 	/**
-	 * Init the online/offline status indicator and its listeners.
+	 * Init the online/offline status indicator, its listeners, the reading of the ticket
+	 * every few seconds (changes made on another device) and the migration of what an
+	 * older version stored on this terminal.
 	 */
 	initOfflineStatus: function () {
 		'use strict';
@@ -1811,10 +1731,6 @@ var FluxPosOffline = {
 			if (url.indexOf('/ajax/ajax.php') >= 0) {
 				options.timeout = self.serverDown ? 3000 : 30000;
 			} else if ((options.type || 'GET') == 'GET' && /(^|\/)invoice\.php(\?|$)/.test(url) && url.indexOf('action=') < 0) {
-				// Read-only load of an order fragment (Refresh): it must end in an error
-				// quickly so the terminal falls back on the data of the terminal instead of
-				// waiting forever. The write loads of invoice.php (action=addline, valid,
-				// delete) are never cut off by the terminal.
 				options.timeout = self.serverDown ? 3000 : 30000;
 			}
 		});
@@ -1841,41 +1757,71 @@ var FluxPosOffline = {
 				self.markServerDown();
 			}
 		});
+		// A screen of the server changed the ticket (line pad, discount, free line,
+		// customer, payment, split...): it loads a fragment of invoice.php, also from the
+		// popups through parent.$. Read the ticket again afterwards.
+		jQuery(document).ajaxComplete(function (event, jqxhr, settings) {
+			if (jqxhr && jqxhr.status == 200 && self.isDolibarrUrl(settings.url) && /(^|\/)invoice\.php(\?|$)/.test(String(settings.url))) {
+				if (self._fragmentTimer) {
+					clearTimeout(self._fragmentTimer);
+				}
+				self._fragmentTimer = setTimeout(function () {
+					self._fragmentTimer = null;
+					self.refreshTicket(true);
+				}, 100);
+			}
+		});
 
 		window.addEventListener('online', function () {
 			self.updateOfflineStatus();
 			self.syncCatalog();
-			// Replay the orders captured while offline. The ticket stays displayed until
-			// the server has verifiably taken it (an unconditional reload of the server
-			// fragment here used to make lines captured offline disappear from the view)
-			self.afterSyncDisplay();
+			self.syncOutbox().then(function () {
+				return self.refreshTicket(true);
+			});
 		});
 		window.addEventListener('offline', function () {
 			self.updateOfflineStatus();
-			if (jQuery('#offlinecart').val() == '1') {
-				self.renderCart();	// Refresh the notice of the local cart currently displayed
-			}
+			self.renderCart();
 		});
 
-		// Retry what is still waiting (a sale refused by the server, a failed sync)
+		// Changes made on another device: read the ticket of the place every few seconds
+		// (a cheap call: the server answers "unchanged" while the version is the same)
+		setInterval(function () {
+			// Not while sales or operations are being sent: a read before they are booked
+			// would show their lines again for a moment
+			if (self.isOffline() || self._flushing || self._syncing || (document.visibilityState && document.visibilityState != 'visible')) {
+				return;
+			}
+			self.getTicket().then(function (ticket) {
+				if (ticket.ops.length) {
+					self.flush();
+				} else {
+					self.refreshTicket(false);
+				}
+			});
+		}, 4000);
+
+		// Retry what is still waiting (a sale refused by the server, a failed sending)
 		setInterval(function () {
 			if (!self.isOffline()) {
 				self.syncOutbox();
 			}
 		}, 60000);
 
-		// Keep a snapshot of the order of the place while the connection is up (baseline
-		// for the capture of new lines while offline on a place with a server order)
-		this.cacheServerOrder();
 		this.migrateLegacyCarts().then(function () {
 			self.updateOfflineStatus();
+			return self.syncOutbox();
+		}).then(function () {
+			return self.refreshTicket(true);
+		}).then(function (read) {
+			if (!read) {
+				return self.renderCart();	// Offline at start: show the ticket stored on this terminal
+			}
 		});
 	},
 
 	/**
-	 * Plan the background synchronization of the local orders some seconds after the
-	 * last modification: this lets the cashier continue to enter products without
-	 * being interrupted by the synchronization.
+	 * Plan the background synchronization some seconds after the last modification.
 	 */
 	scheduleSync: function () {
 		'use strict';
@@ -1940,10 +1886,12 @@ var FluxPosOffline = {
 							thirdpartyid: sale.socid,
 							lines: lines,
 							payments: sale.payments,
-							created: sale.created
+							created: sale.created,
+							ticket: sale.ticket || null,
+							total: sale.total_ttc
 						}),
 						dataType: 'json',
-						timeout: self.requestTimeout,
+						timeout: 0,		// Never give up while the server books the sale
 						global: false
 					}).then(function (data) {
 						self.markServerUp();
@@ -1955,7 +1903,7 @@ var FluxPosOffline = {
 								return true;
 							});
 						}
-						console.log('FluxPos offline: sale ' + sale.uid + ' booked as invoice ' + data.ref + (data.duplicate ? ' (already booked before)' : ''));
+						console.log('FluxPos offline: sale ' + sale.uid + ' booked as invoice ' + data.ref + (data.duplicate ? ' (already booked before)' : '') + (data.check ? ' - marked to check' : ''));
 						return takePOSOfflineStoreDelete('sale:' + sale.uid).then(function () {
 							return true;
 						});
@@ -1972,14 +1920,10 @@ var FluxPosOffline = {
 	},
 
 	/**
-	 * Synchronize what was captured on this terminal: first the paid sales (see
-	 * syncSales()), then the orders not paid yet, one place after the other: each
-	 * place is sent to the idempotent syncOfflineOrder endpoint which creates or
-	 * completes the draft invoice of the place. The cart of a place is removed as soon
-	 * as its synchronization succeeds. A failure stops the replay: it is retried on the
-	 * next trigger (new change, back online, page load, every minute).
+	 * Send everything that waits on this terminal: the paid sales first, then the
+	 * operations of the open tickets.
 	 *
-	 * @returns {Promise<bool>} Promise of true when all the pending orders are synchronized
+	 * @returns {Promise<bool>} Promise of true when everything was sent
 	 */
 	syncOutbox: function () {
 		'use strict';
@@ -1989,84 +1933,12 @@ var FluxPosOffline = {
 			return Promise.resolve(false);
 		}
 		this._syncing = true;
-		var currentplace = (typeof place != 'undefined') ? String(place) : null;
 		this._syncPromise = this.syncSales().then(function (salesok) {
-			if (!salesok) {
-				return false;	// Server not reached: keep the orders for later too
-			}
-			return takePOSOfflineStoreKeys('cart:');
-		}).then(function (keys) {
-			if (keys === false) {
-				return false;
-			}
-			var promise = Promise.resolve(true);
-			jQuery.each(keys, function (index, key) {
-				promise = promise.then(function (ok) {
-					if (!ok) {
-						return false;
-					}
-					var plc = String(key.substring('cart:'.length));
-					return takePOSOfflineStoreGet(key).then(function (cart) {
-						if (cart == null || !cart.lines || !cart.lines.length) {
-							// Discard an empty cart (nothing was captured)
-							return takePOSOfflineStoreDelete(key).then(function () {
-								return true;
-							});
-						}
-						var lines = [];
-						for (var i = 0; i < cart.lines.length; i++) {
-							// Mirrored server lines (deposit lines) are never sent back
-							if (cart.lines[i].qty > 0 && cart.lines[i].mirror !== true) {
-								lines.push({ id: cart.lines[i].rowid, qty: cart.lines[i].qty });
-							}
-						}
-						var url = self.fluxposbaseurl + 'ajax/ajax.php?action=syncOfflineOrder&token=' + self.fluxposnewtoken;
-						return jQuery.ajax(url, {
-							method: 'POST',
-							contentType: 'application/json; charset=utf-8',
-							data: JSON.stringify({
-								place: cart.place,
-								thirdpartyid: cart.socid,
-								lines: lines,
-								// Set mode (removed products are removed on the draft too)
-								// only for a cart whose content the server already confirmed
-								// by a previous answer; anything else merges additive
-								set: (cart.synced === true) ? 1 : 0
-							}),
-							dataType: 'json',
-							timeout: 0,		// No timeout: giving up while the server still adds the lines would leave them on the server AND on the terminal
-							global: false
-						}).then(function (data) {
-							self.markServerUp();
-							if (data && data.error) {
-								console.log('FluxPos offline: synchronization of the order of place ' + cart.place + ' failed: ' + data.error);
-								return false;
-							}
-							if (cart.synced === true) {
-								// 1.7 unified flow: the cart is the ticket of the place, not a
-								// one-shot outbox entry: keep it and mirror the exact state of
-								// the server draft into it instead of deleting it
-								console.log('FluxPos offline: order of place ' + cart.place + ' synchronized to the server');
-								return self.mirrorServerLines(cart, data);
-							}
-							console.log('FluxPos offline: order of place ' + cart.place + ' synchronized to the server');
-							return takePOSOfflineStoreDelete(key).then(function () {
-								if (plc === currentplace && typeof Refresh == 'function') {
-									// Reload the order of the current place from the server
-									Refresh();
-								}
-								return true;
-							});
-						}, function (jqxhr, textStatus) {
-							self.handleFailure(jqxhr, textStatus);
-							return false;
-						});
-					});
-				});
+			return self.flush().then(function (opsok) {
+				return salesok && opsok;
 			});
-			return promise;
 		}).catch(function (error) {
-			console.log('FluxPos offline: background order synchronization failed', error);
+			console.log('FluxPos offline: background synchronization failed', error);
 			return false;
 		}).then(function (result) {
 			self._syncing = false;

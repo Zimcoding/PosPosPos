@@ -1,5 +1,26 @@
 # CHANGELOG FLUXPOS FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.8.0
+
+- New (**shared open tickets, two-way synchronization by operations**): the open ticket of a place can be handled from several devices (devices that share tickets use the same terminal number). The terminal no longer sends copies of its cart: every tap, +/-, quantity pad or removal is an **operation** with a unique id, kept in an outbox per ticket and applied **once** by the new endpoint `applyOps`, which answers the full ticket. Operations are changes, so the changes of several devices on one ticket add up instead of overwriting each other. The screen always shows the last state of the server with the operations not confirmed yet on top of it, so a tap made while a request is on its way can no longer disappear. Other devices read the ticket every 4 seconds through the new endpoint `getTicket` (it answers "unchanged" while nothing changed). Changes made by the screens of the server (payment popup, discount, free line, price or discount pad, customer) are read back after every fragment of invoice.php.
+- New (**pay offline, also a ticket that is on the server**): offline, the ticket becomes a sale with its own id (booked exactly once, as before). The sale carries the operations the server had not confirmed yet: at booking, the server applies the ones it had not applied (once, by their ids), then takes the sold quantities off the ticket product by product - what another device added meanwhile stays open. A ticket left empty is removed. The till is no longer blocked when the connection drops before the customer pays, and an offline payment never waits for a sending in progress.
+- Lines already sent to the kitchen or bar printer are ordinary lines of the ticket (charged and booked offline too); a new tap of that product starts a new line, as on the server.
+- The offline payment asks and books the products and their deposits; free lines and discount lines stay on the ticket (the cashier is asked first).
+- New (**sales to check**): an offline sale is marked to check (`llx_fluxpos_sale.status` = 1 with a note) when its ticket was already closed elsewhere (possibly paid twice) or when the booked total differs from the total the terminal charged.
+- Change (**Deposito**): the automatic deposit lines (`deposito_auto` > 0) are written by the Deposito triggers on the server only; the catalog carries the deposit data of every drink, so the terminal shows the deposit lines of the operations not confirmed yet. A deposit product sold by hand (a crate, a deposit alone) is an ordinary line. Returned empties are counted as a positive number on the terminal and kept negative by Deposito.
+- A change of a line that is gone on the server (removed or paid on another device) never reopens the ticket; a direct payment no longer draws the old ticket over the receipt; changes made by version 1.7 and not sent yet are kept at the upgrade.
+- Removed: the set mode, sending the whole cart, reading the cart back from the screen (adoption, snapshots) and the mirror rows for deposit lines.
+- Fix: a terminal without tables (place "0") was refused by the synchronization ("Bad request").
+- Fix (security): the place sent by a terminal is cleaned before it is used in a reference or in SQL.
+- Fix: when a ticket has the same product on two lines, a change goes to one line and never doubles the other.
+- New tables `llx_fluxpos_op`; new columns `status` and `note` on `llx_fluxpos_sale` (update_1.8.0.sql).
+
+**After updating:** disable and enable the module once, so the new table and columns are created. Until then the changes of the terminals stay in their outbox.
+
+**Known limits:** offline, the price or discount of a line cannot be changed (the quantity can); free lines and discount lines of a ticket cannot be booked by an offline sale (they stay on the ticket, the cashier is asked first); invoice date, payment date and the cash closing check use the moment of synchronization.
+
+- Module version 1.8.0.
+
 ## 1.7.1
 
 - Fix (**products captured offline disappeared from the view when the connection came back**): the `online` event reloaded the order fragment of the server after every recovery attempt, even when the local cart had just been re-sent and the server did not hold it yet (or the send failed) - the ticket on the screen was replaced by the stale order of the server, then the captured products "reappeared" when a payment forced their synchronization again. Worse, after that reload every new product disappeared a second later and the cart cleared: the refresh was followed by a new render cycle whose push erased the lines. Both are gone: after a recovery the terminal now only reloads the server fragment when its own cart is empty, and the set semantics are **stricter** - set mode (lines removed, quantities lowered) is only used once the server has answered the exact content of the cart (its answer mirrors the line ids and prices back); a cart adopted from a screen or from a snapshot of the order merges additively first, so a stale image of the order can never erase the lines on the server. The order of the capture is also corrected: the lines currently displayed on the screen (their freshest image) are adopted before the cached snapshot.

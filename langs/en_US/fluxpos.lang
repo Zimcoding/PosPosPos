@@ -249,8 +249,10 @@ PaymentTypeShortCHQ=Check
 #
 FluxPosOfflineNoIndexedDB=IndexedDB is not supported by this browser
 FluxPosOfflineBlockedNotice=This place has an order registered on the server, which cannot be modified while the terminal is offline and could not be captured on this terminal. Its lines can be edited again as soon as the connection is back.
-FluxPosOfflineNewConfirm=The order of this place is registered on the server and cannot be emptied while the terminal is offline: it stays intact and the products captured while offline will be merged into it when the connection is back. Empty the order captured on this terminal instead?
+FluxPosOfflineNewConfirm=The ticket of this place is on the server and cannot be emptied while the terminal is offline: it stays as it is. Drop the changes made on this terminal that are not sent yet?
 FluxPosSyncBeforePay=The sale on the screen could not be synchronized to the server. Check the connection of the terminal and try again.
+FluxPosLineNotOnServer=The price and the discount of this line can be changed once it is on the server (the connection is needed).
+FluxPosOfflineOtherLines=This ticket has lines that are not products (free text, discount): they cannot be booked offline and stay on the ticket. Pay the products now?
 FluxPosOfflineSaleLocked=This sale has been validated on this terminal and is waiting for its synchronization to the server. It cannot be modified anymore.
 FluxPosOfflineNotInCachedCatalog=This product is not into the catalog cached on this terminal. It cannot be sold while the terminal is offline.
 FluxPosOfflineAdoptedLineRaiseOnly=A line of the order of this place on the server can only be raised while the terminal is offline. The quantity is changed on the server when the connection is back.

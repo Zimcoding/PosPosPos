@@ -23,5 +23,7 @@ CREATE TABLE llx_fluxpos_sale(
     fk_facture integer,
     date_sale datetime,
     date_creation datetime NOT NULL,
-    fk_user_creat integer
+    fk_user_creat integer,
+    status smallint DEFAULT 0 NOT NULL,
+    note varchar(255)
 ) ENGINE=innodb;
