@@ -592,19 +592,38 @@ var FluxPosOffline = {
 	},
 
 	/**
-	 * Format an amount with the currency of the Dolibarr installation.
+	 * Format an amount exactly like the price() function of the server: the symbol of
+	 * the currency sits before or after the value depending on the language and the
+	 * currency of the Dolibarr installation (index.php sends the position and the
+	 * separators it uses), never on the locale of the browser. The cart then shows the
+	 * euro sign on the same side while the lines come from this terminal (offline) and
+	 * while they come from the server: earlier the locale of the browser put the
+	 * symbol in front while the server put it behind, which made the amounts of the
+	 * cart jump from one side to the other on every re-render.
 	 *
 	 * @param  {number} amount Amount to format
-	 * @returns {string} Formatted amount
+	 * @returns {string} Formatted amount (for example "1 234,56 €" or "€ 1 234,56")
 	 */
 	formatAmount: function (amount) {
 		'use strict';
 
-		try {
-			return new Intl.NumberFormat(undefined, { style: 'currency', currency: this.fluxposcurrency, minimumFractionDigits: 2 }).format(amount);
-		} catch (error) {
-			return (Math.round(amount * 100) / 100).toFixed(2) + ' ' + this.fluxposcurrency;
+		var num = parseFloat(amount);
+		if (isNaN(num)) {
+			num = 0;
 		}
+		var sign = (num < 0) ? '-' : '';
+		var text = (Math.round(Math.abs(num) * 100) / 100).toFixed(2);
+		var dec = (typeof window.fluxposseparatordecimal == 'string' && window.fluxposseparatordecimal) ? window.fluxposseparatordecimal : ',';
+		var th = (typeof window.fluxposseparatorthousand == 'string') ? window.fluxposseparatorthousand : ' ';
+		if (th == 'None') {
+			th = '';
+		}
+		var out = sign + text.substring(0, text.length - 3).replace(/\B(?=(\d{3})+(?!\d))/g, th) + dec + text.substring(text.length - 2);
+		var symbol = (typeof window.fluxposcurrencysymbol == 'string' && window.fluxposcurrencysymbol) ? window.fluxposcurrencysymbol : this.fluxposcurrency;
+		if (window.fluxposmoneysymbolposition == 'before') {
+			return symbol + out;	// price() of the server prints no space between a symbol in front and the value
+		}
+		return out + ' ' + symbol;
 	},
 
 	/**

@@ -184,7 +184,7 @@ print '.posmain .div4{flex:0 0 48px;height:48px;width:100%;box-sizing:border-box
 print '.mobilenav{display:none;}'."\n";
 // Mobile step-through (1.2, breakpoint raised to 1023px in 1.4): below 1024px only one
 // pane shows at a time, with the running total always visible in the step navigation
-print '@media screen and (max-width: 1023px){.posmain{flex-direction:column;}.posmain .mobilenav{display:flex;flex:0 0 auto;}.posmain .cartcolumn{flex:0 0 45%;max-width:none;border-left:none;border-top:1px solid #DDD;}body.fluxposview-products .posmain .cartcolumn{display:none;}body.fluxposview-cart .posmain .posleft{display:none;}body.fluxposview-cart .posmain .cartcolumn{flex:1 1 auto;max-width:none;}}'."\n";
+print '@media screen and (max-width: 1023px){.posmain{flex-direction:column;}.posmain .mobilenav{display:flex;flex:0 0 auto;}.posmain .cartcolumn{flex:0 0 45%;max-width:none;border-left:none;border-top:1px solid #DDD;}body.fluxposview-products .posmain .cartcolumn{display:none;}body.fluxposview-cart .posmain .posleft{display:none;}body.fluxposview-cart .posmain .cartcolumn{flex:1 1 auto;max-width:none;}.posmain .mobilenav .mobilenavtab{color:#333;}.posmain .mobilenav .mobilenavtab.clicked{background-color:#d9d9d9;color:#111;}body.fluxposview-cart .posmain .cartcolumn span[id="linecolht-span-total"]{display:none;}body.fluxposview-cart .posmain .mobilenavtab .mobilenavtotal{display:none;}}'."\n";
 print '</style>'."\n";
 
 
@@ -224,6 +224,26 @@ $keyCodeForEnter = '';
 if (!empty($_SESSION['fluxposterminal'])) {
 	$keyCodeForEnter = getDolGlobalInt('FLUXPOS_READER_KEYCODE_FOR_ENTER'.$_SESSION['fluxposterminal']) > 0 ? getDolGlobalString('FLUXPOS_READER_KEYCODE_FOR_ENTER'.$_SESSION['fluxposterminal']) : '';
 }
+
+// 1.8.2: the amounts on the terminal must look exactly like the amounts rendered by
+// the server (the price() function of Dolibarr): the symbol of the currency sits
+// before or after the value depending on the language and the currency of the
+// installation - never on the locale of the browser - with the same separators.
+$fluxposmoneyprobe = price(1234.56, 0, '', 1, 2, 2, $conf->currency);
+$fluxposmoneysymbolposition = ctype_digit(substr($fluxposmoneyprobe, 0, 1)) ? 'after' : 'before';
+$fluxpossepdecimal = ',';
+$fluxpossepthousand = ' ';
+if ($langs->transnoentitiesnoconv("SeparatorDecimal") != "SeparatorDecimal") {
+	$fluxpossepdecimal = $langs->transnoentitiesnoconv("SeparatorDecimal");
+}
+if ($langs->transnoentitiesnoconv("SeparatorThousand") != "SeparatorThousand") {
+	$fluxpossepthousand = $langs->transnoentitiesnoconv("SeparatorThousand");
+}
+if ($fluxpossepthousand == 'None') {
+	$fluxpossepthousand = '';
+} elseif ($fluxpossepthousand == 'Space') {
+	$fluxpossepthousand = ' ';
+}
 ?>
 
 <body class="bodyfluxpos fluxpos-tile-<?php echo $fluxposTileSize; ?>" style="overflow: hidden;">
@@ -241,6 +261,10 @@ var place="<?php echo $place; ?>";
 var fluxposbaseuri = '<?php echo fluxposUrlRoot(); ?>';
 var fluxposnewtoken = '<?php echo newToken(); ?>';
 var fluxposcurrency = '<?php echo $conf->currency; ?>';
+var fluxposcurrencysymbol = '<?php echo dol_escape_js($langs->getCurrencySymbol($conf->currency)); ?>';
+var fluxposmoneysymbolposition = '<?php echo $fluxposmoneysymbolposition; ?>';	// like price() of the server: 'before' or 'after'
+var fluxposseparatordecimal = '<?php echo dol_escape_js($fluxpossepdecimal); ?>';
+var fluxposseparatorthousand = '<?php echo dol_escape_js($fluxpossepthousand); ?>';
 var fluxposhideproductimages = <?php echo getDolGlobalString('FLUXPOS_HIDE_PRODUCT_IMAGES') ? 'true' : 'false'; ?>;
 // Deposito module (deposit on returnable packaging): the server adds the deposit
 // lines itself, but the offline cart is computed on the terminal without them

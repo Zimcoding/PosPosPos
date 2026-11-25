@@ -1,5 +1,13 @@
 # CHANGELOG FLUXPOS FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.8.2
+
+- Fix (**in mobile mode the text of the not-selected tab was not visible**): the step navigation took the text color of the theme header ("text of the header menu" - white on a dark header). On the light background of the step navigation that white label disappeared, only the selected tab stayed readable. The step tabs now use fixed readable colors (dark text, the selected tab on a light grey background), independent of the theme; the same colors are also in the critical inline layout, so an old stylesheet copy cannot bring the problem back.
+- Fix (**the amount of the cart was shown several times, with the euro sign alternately in front and behind**): on the cart step of the mobile layout the total existed three times (in the step navigation, in the header of the cart table and in the sticky footer), and the local renderer and the server fragment disagreed about the position of the currency symbol - the locale of the browser (via `Intl.NumberFormat`) puts `€` in front for some languages while the server puts it behind for others, so the amounts jumped from side to side on every re-render. Now:
+  - the offline renderer formats amounts exactly like the `price()` function of the server (same symbol position, same decimal and thousand separators; index.php sends them from the language of the Dolibarr installation);
+  - on the mobile cart step, the amount shows **once**, in the sticky footer of the cart - the copies in the step navigation and in the header of the cart table are hidden there (the summary in the step navigation keeps showing on the products step).
+- Module version 1.8.2.
+
 ## 1.8.1
 
 - Fix (**the cart shifted up and down on every product added**): the synchronization status pill above the cart existed only while it had a message ("1 order waiting" while a tap was being confirmed, gone again a second later) - its appearance and disappearance moved the whole cart. The pill now exists always with its height reserved: idle it is invisible, offline red, pending orange, and the cart no longer moves.

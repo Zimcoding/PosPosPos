@@ -890,19 +890,36 @@ div#moreinfo, div#infowarehouse {
 		border: none;
 		border-radius: 0;
 		background-color: transparent;
-		color: var(--colortextbackhmenu, #333);
+		/* 1.8.2: readable in every theme. The header-menu colors of the theme (white text
+		   of the dark header) made the label of the not-selected tab disappear on the
+		   light background of the step navigation. */
+		color: #333;
 		font-size: 1.1em;
 		min-height: 52px;
 		cursor: pointer;
 	}
 
 	.mobilenavtab.clicked {
-		background-color: var(--colorbackhmenu1, #eee);
+		background-color: #d9d9d9;
+		color: #111;
 		font-weight: bold;
 	}
 
 	.mobilenavtab .mobilenavtotal span {
 		font-weight: bold;
+	}
+
+	/* 1.8.2: on the cart step the amount shows once, in the sticky footer of the cart.
+	   The copy in the step navigation and the copy in the header of the cart table are
+	   hidden there (with the offline renderer and the server renderer using different
+	   positions of the currency symbol, those copies also disagreed about the position
+	   of the euro sign). */
+	body.fluxposview-cart .mobilenavtab .mobilenavtotal {
+		display: none;
+	}
+
+	body.fluxposview-cart .cartcolumn table.postablelines span[id="linecolht-span-total"] {
+		display: none;
 	}
 
 	/* One step visible at a time */
@@ -976,19 +993,36 @@ div#moreinfo, div#infowarehouse {
 		border: none;
 		border-radius: 0;
 		background-color: transparent;
-		color: var(--colortextbackhmenu, #333);
+		/* 1.8.2: readable in every theme. The header-menu colors of the theme (white text
+		   of the dark header) made the label of the not-selected tab disappear on the
+		   light background of the step navigation. */
+		color: #333;
 		font-size: 1.1em;
 		min-height: 52px;
 		cursor: pointer;
 	}
 
 	.mobilenavtab.clicked {
-		background-color: var(--colorbackhmenu1, #eee);
+		background-color: #d9d9d9;
+		color: #111;
 		font-weight: bold;
 	}
 
 	.mobilenavtab .mobilenavtotal span {
 		font-weight: bold;
+	}
+
+	/* 1.8.2: on the cart step the amount shows once, in the sticky footer of the cart.
+	   The copy in the step navigation and the copy in the header of the cart table are
+	   hidden there (with the offline renderer and the server renderer using different
+	   positions of the currency symbol, those copies also disagreed about the position
+	   of the euro sign). */
+	body.fluxposview-cart .mobilenavtab .mobilenavtotal {
+		display: none;
+	}
+
+	body.fluxposview-cart .cartcolumn table.postablelines span[id="linecolht-span-total"] {
+		display: none;
 	}
 
 	body.fluxposview-products .posmain .cartcolumn {
