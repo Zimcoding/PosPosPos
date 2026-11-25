@@ -1142,9 +1142,11 @@ div#moreinfo, div#infowarehouse {
 }
 
 /* Offline / synchronization status pill: docked at the top of the cart column, above the
-   cart lines, so it never covers the tabs, the product tiles or the payment buttons. */
+   cart lines, so it never covers the tabs, the product tiles or the payment buttons.
+   1.8.1: its height is reserved while idle (invisible), so the confirmation of a
+   synchronized product no longer shifts the cart up and down on every tap. */
 .fluxposofflinestatus {
-	display: none;
+	display: block;
 	position: static;
 	flex: 0 0 auto;
 	width: 100%;
@@ -1152,19 +1154,23 @@ div#moreinfo, div#infowarehouse {
 	z-index: 1100;
 	padding: 4px 10px;
 	border-radius: 0;
-	background-color: #e0533d;
+	min-height: 29px;   /* one text line (21px) + the vertical paddings */
+	visibility: hidden;
+	background-color: transparent;
 	color: #fff;
 	font-size: 13px;
 	font-weight: bold;
+	line-height: 21px;
 	text-align: center;
 }
 
 .fluxposofflinestatus.offline {
-	display: block;
+	visibility: visible;
+	background-color: #e0533d;
 }
 
 .fluxposofflinestatus.pending {
-	display: block;
+	visibility: visible;
 	background-color: #e8a33d;
 	cursor: pointer;
 }

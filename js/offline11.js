@@ -756,6 +756,43 @@ var FluxPosOffline = {
 	},
 
 	/**
+	 * A product without an image is remembered in the session (tab): its genimg request
+	 * is not repeated on every render of the cart (every product added re-rendered the
+	 * ticket and re-requested the missing image of every line).
+	 *
+	 * @param  {number} idproduct Product id
+	 * @returns {boolean} True when the earlier request for that image failed
+	 */
+	hasNoImage: function (idproduct) {
+		'use strict';
+
+		if (typeof sessionStorage == 'undefined') {
+			return false;
+		}
+		try {
+			return sessionStorage.getItem('fluxposimgmissing' + idproduct) === '1';
+		} catch (e) {
+			return false;
+		}
+	},
+
+	/**
+	 * Remember that the product has no image (called by the onerror of the thumbnails).
+	 *
+	 * @param  {number} idproduct Product id
+	 */
+	rememberNoImage: function (idproduct) {
+		'use strict';
+
+		if (typeof sessionStorage == 'undefined') {
+			return;
+		}
+		try {
+			sessionStorage.setItem('fluxposimgmissing' + (parseInt(idproduct, 10) || 0), '1');
+		} catch (e) {}
+	},
+
+	/**
 	 * Compute what the screen shows for a ticket: the lines of the last server state,
 	 * with the operations not confirmed yet applied on top, and the deposit lines those
 	 * operations will bring (predicted from the catalog until the server answers).
@@ -849,16 +886,25 @@ var FluxPosOffline = {
 		// total: the whole ticket; chargeable: what an offline sale books (products, and the
 		// deposits Deposito adds to them) - free lines and discount lines stay on the ticket
 		var view = { lines: [], total: 0, chargeable: 0, placeid: server ? (parseInt(server.placeid, 10) || 0) : 0, socid: (server && server.socid) ? server.socid : ((ticket && ticket.socid) || 0) };
+		var viewdeps = [];
+		var viewothers = [];
 		for (i = 0; i < lines.length; i++) {
 			if (lines[i].kind != 'other' && lines[i].count <= 0.0001) {
 				continue;
 			}
-			view.lines.push(lines[i]);
+			// The deposit lines are shown at the bottom of the ticket, under the
+			// products (like a deposit receipt), not in the middle between the drinks
+			if (lines[i].kind == 'deposit') {
+				viewdeps.push(lines[i]);
+			} else {
+				viewothers.push(lines[i]);
+			}
 			view.total += lines[i].unit * lines[i].count;
 			if (lines[i].kind != 'other') {
 				view.chargeable += lines[i].unit * lines[i].count;
 			}
 		}
+		view.lines = viewdeps.concat(viewothers);
 		view.total = Math.round(view.total * 100) / 100;
 		view.chargeable = Math.round(view.chargeable * 100) / 100;
 		return view;
@@ -1513,8 +1559,8 @@ var FluxPosOffline = {
 				var isproduct = (line.kind == 'product');
 				html += '<tr class="drag drop oddeven posinvoiceline' + (line.pending ? ' fluxpospending' : '') + '" id="' + self.escapeHtml(rowid) + '">';
 				html += '<td class="left">';
-				if (line.product > 0 && !window.fluxposhideproductimages) {
-					html += '<img class="cartthumb" loading="lazy" alt="" onerror="this.style.display=\'none\';" src="' + self.fluxposbaseurl + 'genimg/index.php?query=pro&id=' + parseInt(line.product, 10) + '">';
+				if (line.product > 0 && !window.fluxposhideproductimages && !self.hasNoImage(line.product)) {
+					html += '<img class="cartthumb" loading="lazy" alt="" onerror="FluxPosOffline.rememberNoImage(' + parseInt(line.product, 10) + '); this.style.display=\'none\';" src="' + self.fluxposbaseurl + 'genimg/index.php?query=pro&id=' + parseInt(line.product, 10) + '">';
 				}
 				html += self.escapeHtml(line.label) + '</td>';
 				html += '<td class="right"' + (isproduct && canedit && line.lineid > 0 ? ' onclick="event.stopPropagation(); FluxPosTapLine(this, \'r\');"' : '') + '>' + (line.remise ? self.escapeHtml(line.remise) + '%' : '') + '</td>';

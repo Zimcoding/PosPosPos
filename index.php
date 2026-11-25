@@ -2597,26 +2597,55 @@ if ($reshook == 0) {  //add buttons
 					}
 				}
 				if (!empty($fluxposPaymentItems)) {
-					// ONE footer row, rendered in the order configured for this terminal
-					print '<div class="paymentblock cartquick">';
-					foreach ($fluxposPaymentItems as $fluxposPBItem) {
-						if ($fluxposPBItem == 'new') {
-							print $fluxposMenuNewHtml;
-						} elseif ($fluxposPBItem == 'print') {
-							print $fluxposMenuPrintHtml;
-						} elseif ($fluxposPBItem == 'direct') {
-							print $fluxposMenuDirectHtml;
-						} elseif ($fluxposPBItem == 'freezone') {
-							print $fluxposMenuFreezoneHtml;
-						} elseif ($fluxposPBItem == 'paymodes') {
+					// 1.8.1: like the default mode, the payment items (pay, paymodes) render
+					// as the large payment grid (.paymentblock) and the other items as the
+					// small row below it (.cartquick). The configured order is kept: items
+					// are grouped into consecutive runs of payment and non-payment items.
+					$renderPaymentItem = function ($item) use ($fluxposPaymentModesHtml, $fluxposPayPadHtml) {
+						if ($item == 'paymodes') {
 							print $fluxposPaymentModesHtml;
-						} elseif ($fluxposPBItem == 'pay') {
+						} elseif ($item == 'pay') {
 							print $fluxposPayPadHtml;
-						} elseif ($fluxposPBItem == 'actions') {
+						}
+					};
+					$renderQuickItem = function ($item) use ($fluxposMenuNewHtml, $fluxposMenuPrintHtml, $fluxposMenuDirectHtml, $fluxposMenuFreezoneHtml, $fluxposCartMoreHtml) {
+						if ($item == 'new') {
+							print $fluxposMenuNewHtml;
+						} elseif ($item == 'print') {
+							print $fluxposMenuPrintHtml;
+						} elseif ($item == 'direct') {
+							print $fluxposMenuDirectHtml;
+						} elseif ($item == 'freezone') {
+							print $fluxposMenuFreezoneHtml;
+						} elseif ($item == 'actions') {
 							print $fluxposCartMoreHtml;
 						}
+					};
+					$paymentsegments = array();
+					foreach ($fluxposPaymentItems as $fluxposPBItem) {
+						$isPay = ($fluxposPBItem == 'pay' || $fluxposPBItem == 'paymodes');
+						$last = count($paymentsegments) - 1;
+						if ($last >= 0 && $paymentsegments[$last]['pay'] == $isPay) {
+							$paymentsegments[$last]['items'][] = $fluxposPBItem;
+						} else {
+							$paymentsegments[] = array('pay' => $isPay, 'items' => array($fluxposPBItem));
+						}
 					}
-					print '</div>';
+					foreach ($paymentsegments as $segment) {
+						if ($segment['pay']) {
+							print '<div class="paymentblock">';
+						} else {
+							print '<div class="cartquick">';
+						}
+						foreach ($segment['items'] as $item) {
+							if ($segment['pay']) {
+								$renderPaymentItem($item);
+							} else {
+								$renderQuickItem($item);
+							}
+						}
+						print '</div>';
+					}
 				} else {
 					// Default (option empty): the two rows of today, with the freezone quick
 					// button and the direct payment mode of the buttons
